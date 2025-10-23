@@ -124,6 +124,7 @@ const SistemaGestion = () => {
       cargarHorasTrabajadas();
       cargarPagos();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
 
   const cargarCitas = async () => {
@@ -469,6 +470,8 @@ const SistemaGestion = () => {
             estado: item.estado
           });
           break;
+        default:
+          break;
       }
     }
   };
@@ -691,8 +694,8 @@ const SistemaGestion = () => {
   }
 
   const { totalHoras, totalPagos } = getTotales();
-  const citasFiltradas = filtrarCitas();
-  const filtrosActivos = contarFiltrosActivos();
+  // const citasFiltradas = filtrarCitas(); // No usado directamente
+  // const filtrosActivos = contarFiltrosActivos(); // No usado directamente
   const horasDesdeCitas = calcularHorasDesdeCitas();
 
   return (
