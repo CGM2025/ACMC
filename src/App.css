@@ -1,3 +1,32 @@
+/* Estilos para react-big-calendar */
+@import 'react-big-calendar/lib/css/react-big-calendar.css';
+
+/* Personalización del calendario */
+.rbc-calendar {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+}
+
+.rbc-event {
+  padding: 2px 5px;
+  font-size: 0.85em;
+}
+
+.rbc-header {
+  padding: 10px 3px;
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.rbc-today {
+  background-color: #f0f9ff;
+}
+
+.rbc-off-range-bg {
+  background-color: #f9fafb;
+}
+
 .App {
   text-align: center;
 }
@@ -36,3 +65,5 @@
     transform: rotate(360deg);
   }
 }
+
+
