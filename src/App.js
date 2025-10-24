@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download } from 'lucide-react';
+import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Menu } from 'lucide-react';
 import { db, auth } from './firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, writeBatch, query, orderBy, where, getDoc, setDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
@@ -46,7 +46,7 @@ const SistemaGestion = () => {
   // Estados para el calendario
   const [currentDate, setCurrentDate] = useState(new Date());
   const [vistaCalendario, setVistaCalendario] = useState('lista');
-  const [vistaHoras, setVistaHoras] = useState('manual');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Estado para sidebar colapsado
 
   // Estados para reportes
   const [mesReporte, setMesReporte] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
@@ -217,17 +217,19 @@ const SistemaGestion = () => {
       return cumpleMes;
     });
 
-    // Agrupar por terapeuta
-    const reportePorTerapeuta = {};
+    // Agrupar por cliente para generar recibos individuales
+    const reportePorCliente = {};
     
     citasDelMes.forEach(cita => {
-      if (!reportePorTerapeuta[cita.terapeuta]) {
-        reportePorTerapeuta[cita.terapeuta] = {
-          nombre: cita.terapeuta,
+      if (!reportePorCliente[cita.cliente]) {
+        // Buscar código del cliente
+        const clienteObj = clientes.find(c => c.nombre === cita.cliente);
+        reportePorCliente[cita.cliente] = {
+          nombre: cita.cliente,
+          codigo: clienteObj?.codigo || 'N/A',
+          citas: [],
           totalHoras: 0,
-          totalCitas: 0,
-          detallesPorDia: {},
-          clientes: new Set()
+          totalCitas: 0
         };
       }
       
@@ -235,45 +237,53 @@ const SistemaGestion = () => {
       const fin = new Date(`2000-01-01T${cita.horaFin}`);
       const duracionHoras = (fin - inicio) / (1000 * 60 * 60);
       
-      reportePorTerapeuta[cita.terapeuta].totalHoras += duracionHoras;
-      reportePorTerapeuta[cita.terapeuta].totalCitas += 1;
-      reportePorTerapeuta[cita.terapeuta].clientes.add(cita.cliente);
+      // Precio fijo por sesión (puedes hacer esto configurable más adelante)
+      const precioPorSesion = 450;
+      const iva = precioPorSesion * 0.16;
+      const totalConIva = precioPorSesion + iva;
       
-      if (!reportePorTerapeuta[cita.terapeuta].detallesPorDia[cita.fecha]) {
-        reportePorTerapeuta[cita.terapeuta].detallesPorDia[cita.fecha] = {
-          fecha: cita.fecha,
-          horas: 0,
-          citas: []
-        };
-      }
-      
-      reportePorTerapeuta[cita.terapeuta].detallesPorDia[cita.fecha].horas += duracionHoras;
-      reportePorTerapeuta[cita.terapeuta].detallesPorDia[cita.fecha].citas.push({
-        cliente: cita.cliente,
+      reportePorCliente[cita.cliente].citas.push({
+        fecha: cita.fecha,
+        terapeuta: cita.terapeuta,
         horaInicio: cita.horaInicio,
         horaFin: cita.horaFin,
-        duracion: duracionHoras
+        duracion: duracionHoras,
+        precio: precioPorSesion,
+        iva: iva,
+        total: totalConIva
       });
+      
+      reportePorCliente[cita.cliente].totalHoras += duracionHoras;
+      reportePorCliente[cita.cliente].totalCitas += 1;
     });
 
-    // Convertir a array y calcular estadísticas
-    const reporte = Object.values(reportePorTerapeuta).map(terapeuta => ({
-      ...terapeuta,
-      clientes: Array.from(terapeuta.clientes),
-      totalClientes: terapeuta.clientes.size,
-      detallesPorDia: Object.values(terapeuta.detallesPorDia).sort((a, b) => 
+    // Convertir a array y ordenar citas por fecha
+    const recibos = Object.values(reportePorCliente).map(cliente => {
+      const citasOrdenadas = cliente.citas.sort((a, b) => 
         new Date(a.fecha) - new Date(b.fecha)
-      ),
-      promedioDiario: terapeuta.totalHoras / Object.keys(terapeuta.detallesPorDia).length || 0
-    }));
+      );
+      
+      const totalPrecio = citasOrdenadas.reduce((sum, c) => sum + c.precio, 0);
+      const totalIva = citasOrdenadas.reduce((sum, c) => sum + c.iva, 0);
+      const totalGeneral = citasOrdenadas.reduce((sum, c) => sum + c.total, 0);
+      
+      return {
+        ...cliente,
+        citas: citasOrdenadas,
+        totalPrecio,
+        totalIva,
+        totalGeneral
+      };
+    });
 
     setReporteGenerado({
       mes: mesReporte,
       nombreMes: `${meses[parseInt(month) - 1]} ${year}`,
-      terapeutas: reporte,
+      recibos: recibos,
       terapeutaFiltrada: terapeutaReporte,
-      totalGeneral: reporte.reduce((sum, t) => sum + t.totalHoras, 0),
-      totalCitasGeneral: reporte.reduce((sum, t) => sum + t.totalCitas, 0)
+      totalCitasGeneral: citasDelMes.length,
+      totalHorasGeneral: recibos.reduce((sum, r) => sum + r.totalHoras, 0),
+      totalIngresos: recibos.reduce((sum, r) => sum + r.totalGeneral, 0)
     });
   };
 
@@ -539,13 +549,6 @@ const SistemaGestion = () => {
     }
   };
 
-  const eliminarHoras = async (id) => {
-    if (window.confirm('¿Eliminar este registro?')) {
-      await deleteDoc(doc(db, 'horasTrabajadas', id));
-      cargarHorasTrabajadas();
-    }
-  };
-
   const eliminarTerapeuta = async (id) => {
     if (window.confirm('¿Eliminar terapeuta?')) {
       await deleteDoc(doc(db, 'terapeutas', id));
@@ -699,33 +702,168 @@ const SistemaGestion = () => {
   const horasDesdeCitas = calcularHorasDesdeCitas();
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-800">Sistema de Gestión</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{currentUser.nombre} ({currentUser.rol})</span>
-            <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"><LogOut className="w-4 h-4" />Salir</button>
+    <div className="min-h-screen bg-gray-100 flex">
+      {/* Sidebar Colapsable */}
+      <aside className={`${sidebarCollapsed ? 'w-20' : 'w-64'} bg-white shadow-lg fixed h-full transition-all duration-300 ease-in-out flex flex-col`}>
+        {/* Logo/Header del Sidebar */}
+        <div className="p-6 border-b flex-shrink-0">
+          <div className="flex items-center justify-between">
+            {!sidebarCollapsed && (
+              <div className="flex-1">
+                <h1 className="text-xl font-bold text-gray-800">Sistema de Gestión</h1>
+                <p className="text-sm text-gray-500 mt-1">{currentUser.nombre}</p>
+                <p className="text-xs text-gray-400">{currentUser.rol}</p>
+              </div>
+            )}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-all"
+            >
+              {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            </button>
           </div>
         </div>
-      </header>
 
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex space-x-8">
-            {hasPermission('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`py-4 px-2 border-b-2 font-medium ${activeTab === 'dashboard' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>}
-            {hasPermission('horas') && <button onClick={() => setActiveTab('horas')} className={`py-4 px-2 border-b-2 font-medium ${activeTab === 'horas' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Horas</button>}
-            {hasPermission('reportes') && <button onClick={() => setActiveTab('reportes')} className={`py-4 px-2 border-b-2 font-medium ${activeTab === 'reportes' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Reportes</button>}
-            {hasPermission('terapeutas') && <button onClick={() => setActiveTab('terapeutas')} className={`py-4 px-2 border-b-2 font-medium ${activeTab === 'terapeutas' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Terapeutas</button>}
-            {hasPermission('bloques') && <button onClick={() => setActiveTab('bloques')} className={`py-4 px-2 border-b-2 font-medium ${activeTab === 'bloques' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Bloques de Citas</button>}
-            {hasPermission('citas') && <button onClick={() => setActiveTab('citas')} className={`py-4 px-2 border-b-2 font-medium ${activeTab === 'citas' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Citas</button>}
-            {hasPermission('clientes') && <button onClick={() => setActiveTab('clientes')} className={`py-4 px-2 border-b-2 font-medium ${activeTab === 'clientes' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Clientes</button>}
-            {hasPermission('pagos') && <button onClick={() => setActiveTab('pagos')} className={`py-4 px-2 border-b-2 font-medium ${activeTab === 'pagos' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pagos</button>}
+        {/* Menú de Navegación con Scroll */}
+        <nav className="p-4 flex-1 overflow-y-auto">
+          <div className="space-y-2">
+            {hasPermission('dashboard') && (
+              <button 
+                onClick={() => setActiveTab('dashboard')} 
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                  activeTab === 'dashboard' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                title={sidebarCollapsed ? 'Dashboard' : ''}
+              >
+                <DollarSign size={20} />
+                {!sidebarCollapsed && <span>Dashboard</span>}
+              </button>
+            )}
+            
+            {hasPermission('horas') && (
+              <button 
+                onClick={() => setActiveTab('horas')} 
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                  activeTab === 'horas' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                title={sidebarCollapsed ? 'Horas' : ''}
+              >
+                <Clock size={20} />
+                {!sidebarCollapsed && <span>Horas</span>}
+              </button>
+            )}
+            
+            {hasPermission('reportes') && (
+              <button 
+                onClick={() => setActiveTab('reportes')} 
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                  activeTab === 'reportes' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                title={sidebarCollapsed ? 'Reportes' : ''}
+              >
+                <FileText size={20} />
+                {!sidebarCollapsed && <span>Reportes</span>}
+              </button>
+            )}
+            
+            {hasPermission('terapeutas') && (
+              <button 
+                onClick={() => setActiveTab('terapeutas')} 
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                  activeTab === 'terapeutas' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                title={sidebarCollapsed ? 'Terapeutas' : ''}
+              >
+                <Users size={20} />
+                {!sidebarCollapsed && <span>Terapeutas</span>}
+              </button>
+            )}
+            
+            {hasPermission('bloques') && (
+              <button 
+                onClick={() => setActiveTab('bloques')} 
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                  activeTab === 'bloques' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                title={sidebarCollapsed ? 'Bloques de Citas' : ''}
+              >
+                <Calendar size={20} />
+                {!sidebarCollapsed && <span>Bloques de Citas</span>}
+              </button>
+            )}
+            
+            {hasPermission('citas') && (
+              <button 
+                onClick={() => setActiveTab('citas')} 
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                  activeTab === 'citas' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                title={sidebarCollapsed ? 'Citas' : ''}
+              >
+                <Calendar size={20} />
+                {!sidebarCollapsed && <span>Citas</span>}
+              </button>
+            )}
+            
+            {hasPermission('clientes') && (
+              <button 
+                onClick={() => setActiveTab('clientes')} 
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                  activeTab === 'clientes' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                title={sidebarCollapsed ? 'Clientes' : ''}
+              >
+                <Users size={20} />
+                {!sidebarCollapsed && <span>Clientes</span>}
+              </button>
+            )}
+            
+            {hasPermission('pagos') && (
+              <button 
+                onClick={() => setActiveTab('pagos')} 
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                  activeTab === 'pagos' 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                title={sidebarCollapsed ? 'Pagos' : ''}
+              >
+                <DollarSign size={20} />
+                {!sidebarCollapsed && <span>Pagos</span>}
+              </button>
+            )}
           </div>
-        </div>
-      </nav>
+        </nav>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* Botón de Logout - Ahora dentro del flujo normal, no absolute */}
+        <div className="p-4 border-t bg-white flex-shrink-0">
+          <button 
+            onClick={handleLogout} 
+            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all font-medium`}
+            title={sidebarCollapsed ? 'Cerrar Sesión' : ''}
+          >
+            <LogOut size={18} />
+            {!sidebarCollapsed && <span>Cerrar Sesión</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Contenido Principal - Se ajusta según el sidebar */}
+      <main className={`${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex-1 p-8 transition-all duration-300`}>
         {activeTab === 'dashboard' && hasPermission('dashboard') && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-lg shadow"><div className="flex items-center justify-between"><div><p className="text-gray-600 text-sm">Total Horas</p><p className="text-3xl font-bold">{totalHoras.toFixed(1)}</p></div><Clock className="w-12 h-12 text-blue-500" /></div></div>
@@ -739,105 +877,58 @@ const SistemaGestion = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Horas Trabajadas</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setVistaHoras('citas')}
-                  className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${vistaHoras === 'citas' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-                >
-                  <CheckCircle size={18} />
-                  Desde Citas
-                </button>
-                <button
-                  onClick={() => setVistaHoras('manual')}
-                  className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${vistaHoras === 'manual' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-                >
-                  <Edit size={18} />
-                  Manual
-                </button>
-                {vistaHoras === 'manual' && (
-                  <button onClick={() => openModal('horas')} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center">
-                    <Plus className="w-4 h-4 mr-2" />Nueva
-                  </button>
-                )}
-              </div>
             </div>
 
-            {vistaHoras === 'citas' ? (
-              <div className="bg-white shadow rounded-md">
-                {horasDesdeCitas.length > 0 ? (
-                  <>
-                    <div className="px-6 py-4 bg-green-50 border-b">
-                      <p className="text-sm text-green-800">
-                        <CheckCircle className="inline w-4 h-4 mr-2" />
-                        Mostrando horas calculadas desde {horasDesdeCitas.length} días con citas completadas
-                      </p>
-                    </div>
-                    <ul className="divide-y">
-                      {horasDesdeCitas.map((registro, index) => (
-                        <li key={index} className="px-6 py-4 hover:bg-gray-50">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <p className="font-medium text-lg">{registro.terapeuta}</p>
-                              <p className="text-sm text-gray-600">{registro.fecha}</p>
-                              <div className="mt-2 space-y-1">
-                                {registro.citas.map((cita, idx) => (
-                                  <div key={idx} className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
-                                    <span className="font-medium">{cita.cliente}</span>
-                                    <span className="text-gray-500 ml-2">
-                                      {cita.horaInicio} - {cita.horaFin} ({cita.duracion.toFixed(1)}h)
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="ml-4 text-right">
-                              <p className="text-2xl font-bold text-green-600">
-                                {registro.horasTotal.toFixed(1)}h
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {registro.citas.length} {registro.citas.length === 1 ? 'cita' : 'citas'}
-                              </p>
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <div className="px-6 py-12 text-center">
-                    <CheckCircle className="mx-auto text-gray-300 mb-4" size={64} />
-                    <p className="text-gray-500 text-lg">No hay citas completadas aún</p>
-                    <p className="text-gray-400 mt-2">
-                      Las citas con estado "Completada" aparecerán aquí automáticamente
+            <div className="bg-white shadow rounded-md">
+              {horasDesdeCitas.length > 0 ? (
+                <>
+                  <div className="px-6 py-4 bg-green-50 border-b">
+                    <p className="text-sm text-green-800">
+                      <CheckCircle className="inline w-4 h-4 mr-2" />
+                      Mostrando horas calculadas desde {horasDesdeCitas.length} días con citas completadas
                     </p>
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="bg-white shadow rounded-md">
-                <ul className="divide-y">
-                  {horasTrabajadas.map(h => (
-                    <li key={h.id} className="px-6 py-4">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="font-medium">{getNombre(h.clienteId, clientes)} ({h.codigoCliente})</p>
-                          <p className="text-sm text-gray-600">{h.fecha} - {h.horas}h</p>
-                          {h.notas && <p className="text-sm text-gray-500 italic">{h.notas}</p>}
+                  <ul className="divide-y">
+                    {horasDesdeCitas.map((registro, index) => (
+                      <li key={index} className="px-6 py-4 hover:bg-gray-50">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="font-medium text-lg">{registro.terapeuta}</p>
+                            <p className="text-sm text-gray-600">{registro.fecha}</p>
+                            <div className="mt-2 space-y-1">
+                              {registro.citas.map((cita, idx) => (
+                                <div key={idx} className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
+                                  <span className="font-medium">{cita.cliente}</span>
+                                  <span className="text-gray-500 ml-2">
+                                    {cita.horaInicio} - {cita.horaFin} ({cita.duracion.toFixed(1)}h)
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="ml-4 text-right">
+                            <p className="text-2xl font-bold text-green-600">
+                              {registro.horasTotal.toFixed(1)}h
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {registro.citas.length} {registro.citas.length === 1 ? 'cita' : 'citas'}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => openModal('horas', h)} className="text-blue-600 hover:text-blue-800">
-                            <Edit className="w-5 h-5" />
-                          </button>
-                          <button onClick={() => eliminarHoras(h.id)} className="text-red-600 hover:text-red-800">
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <div className="px-6 py-12 text-center">
+                  <CheckCircle className="mx-auto text-gray-300 mb-4" size={64} />
+                  <p className="text-gray-500 text-lg">No hay citas completadas aún</p>
+                  <p className="text-gray-400 mt-2">
+                    Las citas con estado "Completada" aparecerán aquí automáticamente
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -890,82 +981,126 @@ const SistemaGestion = () => {
             </div>
 
             {/* Reporte generado */}
-            {reporteGenerado && (
-              <div className="bg-white rounded-lg shadow">
-                <div className="px-6 py-4 border-b bg-blue-50 flex justify-between items-center">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-800">
-                      Reporte: {reporteGenerado.nombreMes}
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      {reporteGenerado.terapeutaFiltrada !== 'todas' ? (
-                        <>Terapeuta: <span className="font-semibold">{reporteGenerado.terapeutaFiltrada}</span> | </>
-                      ) : (
-                        <>Todas las terapeutas | </>
-                      )}
-                      Total: {reporteGenerado.totalGeneral.toFixed(2)} horas | {reporteGenerado.totalCitasGeneral} citas
-                    </p>
-                  </div>
-                  <button
-                    onClick={descargarReporte}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
-                  >
-                    <Download size={18} />
-                    Descargar
-                  </button>
-                </div>
-
-                <div className="p-6 space-y-6">
-                  {reporteGenerado.terapeutas.map((terapeuta, index) => (
-                    <div key={index} className="border rounded-lg p-4 bg-gray-50">
-                      <div className="flex justify-between items-start mb-4">
+            {reporteGenerado && reporteGenerado.recibos && reporteGenerado.recibos.length > 0 && (
+              <div className="space-y-6">
+                {reporteGenerado.recibos.map((recibo, reciboIdx) => (
+                  <div key={reciboIdx} className="bg-white rounded-lg shadow">
+                    {/* Encabezado del Recibo */}
+                    <div className="px-6 py-4 border-b bg-gray-50">
+                      <div className="grid grid-cols-2 gap-4 mb-4">
                         <div>
-                          <h4 className="text-lg font-bold text-gray-800">{terapeuta.nombre}</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
-                            <div>
-                              <p className="text-xs text-gray-500">Total Horas</p>
-                              <p className="text-xl font-bold text-blue-600">{terapeuta.totalHoras.toFixed(2)}h</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500">Total Citas</p>
-                              <p className="text-xl font-bold text-green-600">{terapeuta.totalCitas}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500">Clientes</p>
-                              <p className="text-xl font-bold text-purple-600">{terapeuta.totalClientes}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500">Promedio/Día</p>
-                              <p className="text-xl font-bold text-orange-600">{terapeuta.promedioDiario.toFixed(2)}h</p>
-                            </div>
-                          </div>
+                          <p className="text-sm text-gray-500">Client Name</p>
+                          <p className="text-lg font-bold text-gray-800">{recibo.nombre}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500">Client ID</p>
+                          <p className="text-lg font-bold text-gray-800">{recibo.codigo}</p>
                         </div>
                       </div>
-
-                      {/* Desglose por día */}
-                      <div className="mt-4">
-                        <h5 className="font-semibold text-gray-700 mb-2">Desglose Diario:</h5>
-                        <div className="space-y-2 max-h-96 overflow-y-auto">
-                          {terapeuta.detallesPorDia.map((dia, idx) => (
-                            <div key={idx} className="bg-white p-3 rounded border">
-                              <div className="flex justify-between items-center mb-2">
-                                <span className="font-medium text-gray-800">{dia.fecha}</span>
-                                <span className="text-blue-600 font-bold">{dia.horas.toFixed(2)}h</span>
-                              </div>
-                              <div className="space-y-1">
-                                {dia.citas.map((cita, citaIdx) => (
-                                  <div key={citaIdx} className="text-sm text-gray-600 pl-4">
-                                    • {cita.cliente}: {cita.horaInicio} - {cita.horaFin} ({cita.duracion.toFixed(2)}h)
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Mes para Recibo</p>
+                        <p className="text-md font-semibold text-gray-700">{reporteGenerado.nombreMes}</p>
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    {/* Título del Recibo */}
+                    <div className="px-6 py-3 bg-white border-b">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-xl font-bold text-gray-800">Recibo</h3>
+                        <button
+                          onClick={descargarReporte}
+                          className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 flex items-center gap-2 text-sm"
+                        >
+                          <Download size={16} />
+                          Descargar
+                        </button>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">Terapias ABA ACMC</p>
+                    </div>
+
+                    {/* Tabla de Citas */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-100 border-b-2 border-gray-300">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">#</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Fecha de sesión</th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Duración</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Terapeuta</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Precio de la sesión</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">IVA</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {recibo.citas.map((cita, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-gray-900">{idx + 1}</td>
+                              <td className="px-4 py-3 text-sm text-gray-900">{cita.fecha}</td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-900">{cita.duracion.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-sm text-gray-900">{cita.terapeuta}</td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-900">{cita.precio}</td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-900">{Math.round(cita.iva)}</td>
+                              <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{Math.round(cita.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                          <tr>
+                            <td colSpan="2" className="px-4 py-3 text-sm font-bold text-gray-900">
+                              {recibo.totalCitas} citas
+                            </td>
+                            <td className="px-4 py-3 text-sm text-center font-semibold text-gray-900">
+                              Suma {recibo.totalHoras.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3"></td>
+                            <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">
+                              Suma {recibo.totalPrecio}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">
+                              Suma {Math.round(recibo.totalIva)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">
+                              Suma {Math.round(recibo.totalGeneral)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Resumen General */}
+                {reporteGenerado.recibos.length > 1 && (
+                  <div className="bg-blue-50 rounded-lg shadow p-6">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">Resumen General</h3>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <p className="text-sm text-gray-600">Total Citas</p>
+                        <p className="text-2xl font-bold text-blue-600">{reporteGenerado.totalCitasGeneral}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Total Horas</p>
+                        <p className="text-2xl font-bold text-green-600">{reporteGenerado.totalHorasGeneral.toFixed(2)}h</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Total Ingresos</p>
+                        <p className="text-2xl font-bold text-purple-600">${Math.round(reporteGenerado.totalIngresos).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mensaje cuando no hay datos */}
+            {reporteGenerado && reporteGenerado.recibos && reporteGenerado.recibos.length === 0 && (
+              <div className="bg-white rounded-lg shadow p-12 text-center">
+                <FileText className="mx-auto text-gray-300 mb-4" size={64} />
+                <p className="text-gray-500 text-lg">No hay citas completadas en este período</p>
+                <p className="text-gray-400 mt-2">
+                  Asegúrate de que las citas tengan el estado "Completada" para que aparezcan en el reporte
+                </p>
               </div>
             )}
 
@@ -974,7 +1109,7 @@ const SistemaGestion = () => {
                 <FileText className="mx-auto text-gray-300 mb-4" size={64} />
                 <p className="text-gray-500 text-lg">Selecciona un mes y genera el reporte</p>
                 <p className="text-gray-400 mt-2">
-                  El reporte mostrará las horas trabajadas por cada terapeuta basado en citas completadas
+                  El reporte mostrará los recibos por cliente basado en citas completadas
                 </p>
               </div>
             )}
