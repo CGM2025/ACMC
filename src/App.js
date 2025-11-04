@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download } from 'lucide-react';
+import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
 import { db, auth } from './firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, writeBatch, query, orderBy, where, getDoc, setDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import mammoth from 'mammoth';
 
 const SistemaGestion = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -26,7 +27,7 @@ const SistemaGestion = () => {
   const [terapeutaForm, setTerapeutaForm] = useState({ nombre: '', especialidad: '', telefono: '', email: '' });
   const [clienteForm, setClienteForm] = useState({ nombre: '', email: '', telefono: '', empresa: '', codigo: '' });
   const [pagoForm, setPagoForm] = useState({ clienteId: '', monto: '', concepto: '', metodo: 'efectivo', fecha: '' });
-  const [citaForm, setCitaForm] = useState({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente' });
+  const [citaForm, setCitaForm] = useState({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0 });
 
   const [horarios, setHorarios] = useState([]);
   const [nuevoHorario, setNuevoHorario] = useState({ terapeuta: '', cliente: '', diasSemana: [], horaInicio: '08:00', horaFin: '12:00' });
@@ -47,6 +48,11 @@ const SistemaGestion = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [vistaCalendario, setVistaCalendario] = useState('lista');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Estado para sidebar colapsado
+  
+  // Estados para drag and drop
+  const [draggedCita, setDraggedCita] = useState(null);
+  const [dragOverDay, setDragOverDay] = useState(null);
+  const [importandoWord, setImportandoWord] = useState(false);
 
   // Estados para reportes
   const [mesReporte, setMesReporte] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
@@ -368,6 +374,200 @@ const SistemaGestion = () => {
            fecha.getFullYear() === hoy.getFullYear();
   };
 
+  // Funciones de Drag & Drop para el calendario
+  const handleDragStart = (e, cita) => {
+    setDraggedCita(cita);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, fecha) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (fecha) {
+      setDragOverDay(fecha.toISOString().split('T')[0]);
+    }
+  };
+
+  const handleDrop = async (e, nuevaFecha) => {
+    e.preventDefault();
+    
+    if (!draggedCita || !nuevaFecha) {
+      setDraggedCita(null);
+      setDragOverDay(null);
+      return;
+    }
+
+    const nuevaFechaStr = nuevaFecha.toISOString().split('T')[0];
+    
+    if (draggedCita.fecha === nuevaFechaStr) {
+      setDraggedCita(null);
+      setDragOverDay(null);
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'citas', draggedCita.id), {
+        fecha: nuevaFechaStr
+      });
+      
+      await cargarCitas();
+      alert(`✅ Cita movida al ${nuevaFechaStr}`);
+    } catch (error) {
+      console.error('Error al mover cita:', error);
+      alert('❌ Error al mover la cita');
+    }
+    
+    setDraggedCita(null);
+    setDragOverDay(null);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverDay(null);
+  };
+
+  // Función para parsear fechas del Word
+  const parsearFechaWord = (fechaStr) => {
+    try {
+      if (!fechaStr || fechaStr === '----------') return null;
+      
+      const partes = fechaStr.trim().split('-');
+      if (partes.length !== 3) return null;
+      
+      const dia = partes[0].padStart(2, '0');
+      const mes = partes[1].padStart(2, '0');
+      const anioCorto = partes[2];
+      
+      const anioCompleto = anioCorto.length === 2 ? `20${anioCorto}` : anioCorto;
+      
+      return `${anioCompleto}-${mes}-${dia}`;
+    } catch (error) {
+      console.error('Error parseando fecha:', fechaStr, error);
+      return null;
+    }
+  };
+
+  // Función para parsear horas del Word
+  const parsearHoraWord = (horaStr) => {
+    try {
+      if (!horaStr || horaStr === '----------') return null;
+      
+      const hora = horaStr.trim().toLowerCase();
+      const partes = hora.split(':');
+      if (partes.length !== 2) return null;
+      
+      let horas = parseInt(partes[0]);
+      const minutosMatch = partes[1].match(/\d+/);
+      if (!minutosMatch) return null;
+      const minutos = minutosMatch[0].padStart(2, '0');
+      
+      const ampm = hora.includes('pm') ? 'pm' : 'am';
+      
+      if (ampm === 'pm' && horas !== 12) {
+        horas += 12;
+      } else if (ampm === 'am' && horas === 12) {
+        horas = 0;
+      }
+      
+      return `${horas.toString().padStart(2, '0')}:${minutos}`;
+    } catch (error) {
+      console.error('Error parseando hora:', horaStr, error);
+      return null;
+    }
+  };
+
+  // Función principal de importación
+  const importarDesdeWord = async (file) => {
+    if (!file) {
+      alert('Por favor selecciona un archivo');
+      return;
+    }
+
+    setImportandoWord(true);
+    
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      const texto = result.value;
+      
+      let nombreTerapeuta = '';
+      const lineas = texto.split('\n');
+      
+      for (const linea of lineas) {
+        if (linea.includes('Nombre de Terapeuta:')) {
+          nombreTerapeuta = linea.split(':')[1].trim();
+          break;
+        }
+      }
+      
+      if (!nombreTerapeuta) {
+        alert('No se pudo extraer el nombre de la terapeuta del documento');
+        setImportandoWord(false);
+        return;
+      }
+      
+      const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
+      const parser = new DOMParser();
+      const docHtml = parser.parseFromString(htmlResult.value, 'text/html');
+      const tabla = docHtml.querySelector('table');
+      
+      if (!tabla) {
+        alert('No se encontró una tabla en el documento');
+        setImportandoWord(false);
+        return;
+      }
+      
+      const filas = Array.from(tabla.querySelectorAll('tr'));
+      const citasNuevas = [];
+      
+      for (let i = 1; i < filas.length; i++) {
+        const celdas = Array.from(filas[i].querySelectorAll('td, th')).map(c => c.textContent.trim());
+        
+        if (celdas[0] === 'TOTAL' || celdas[0] === '----------') continue;
+        
+        const fecha = parsearFechaWord(celdas[0]);
+        const horaInicio = parsearHoraWord(celdas[1]);
+        const horaFin = parsearHoraWord(celdas[2]);
+        const costoPorHora = parseFloat(celdas[4]?.replace(',', '')) || 300;
+        const costoTotal = parseFloat(celdas[5]?.replace(',', '')) || 0;
+        const paciente = celdas[6];
+        
+        if (fecha && horaInicio && horaFin && paciente) {
+          citasNuevas.push({
+            terapeuta: nombreTerapeuta,
+            cliente: paciente,
+            fecha: fecha,
+            horaInicio: horaInicio,
+            horaFin: horaFin,
+            estado: 'completada',
+            costoPorHora: costoPorHora,
+            costoTotal: costoTotal
+          });
+        }
+      }
+      
+      if (citasNuevas.length > 0) {
+        const batch = writeBatch(db);
+        citasNuevas.forEach(cita => {
+          const docRef = doc(collection(db, 'citas'));
+          batch.set(docRef, cita);
+        });
+        
+        await batch.commit();
+        await cargarCitas();
+        
+        alert(`✅ Se importaron ${citasNuevas.length} citas de ${nombreTerapeuta}`);
+      } else {
+        alert('⚠️ No se encontraron citas válidas en el documento');
+      }
+      
+    } catch (error) {
+      console.error('Error importando archivo:', error);
+      alert('❌ Error al importar el archivo. Verifica que sea un documento Word válido.\n\nDetalle: ' + error.message);
+    }
+    
+    setImportandoWord(false);
+  };
+
   const filtrarCitas = () => {
     return citas.filter(cita => {
       const matchSearch = searchTerm === '' || 
@@ -477,7 +677,9 @@ const SistemaGestion = () => {
             fecha: item.fecha,
             horaInicio: item.horaInicio,
             horaFin: item.horaFin,
-            estado: item.estado
+            estado: item.estado,
+            costoPorHora: item.costoPorHora || 300,
+            costoTotal: item.costoTotal || 0
           });
           break;
         default:
@@ -493,7 +695,7 @@ const SistemaGestion = () => {
     setTerapeutaForm({ nombre: '', especialidad: '', telefono: '', email: '' });
     setClienteForm({ nombre: '', email: '', telefono: '', empresa: '', codigo: '' });
     setPagoForm({ clienteId: '', monto: '', concepto: '', metodo: 'efectivo', fecha: '' });
-    setCitaForm({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente' });
+    setCitaForm({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0 });
   };
 
   const save = async (type) => {
@@ -1236,23 +1438,55 @@ const SistemaGestion = () => {
 
           {activeTab === 'citas' && hasPermission('citas') && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center">
+              {<div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold">Citas Programadas</h2>
                 <div className="flex gap-2">
+                  {/* Botón de Importar Word */}
+                  <label className={`px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-all ${
+                    importandoWord 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}>
+                    <Upload size={18} />
+                    {importandoWord ? 'Importando...' : 'Importar Word'}
+                    <input
+                      type="file"
+                      accept=".docx"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          importarDesdeWord(file);
+                        }
+                        e.target.value = '';
+                      }}
+                      disabled={importandoWord}
+                    />
+                  </label>
+                  
+                  {/* Botones existentes de Lista/Calendario */}
                   <button
                     onClick={() => setVistaCalendario('lista')}
-                    className={`px-4 py-2 rounded-lg transition-all ${vistaCalendario === 'lista' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                    className={`px-4 py-2 rounded-lg transition-all ${
+                      vistaCalendario === 'lista' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
                   >
                     Lista
                   </button>
                   <button
                     onClick={() => setVistaCalendario('calendario')}
-                    className={`px-4 py-2 rounded-lg transition-all ${vistaCalendario === 'calendario' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                    className={`px-4 py-2 rounded-lg transition-all ${
+                      vistaCalendario === 'calendario' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
                   >
                     Calendario
                   </button>
                 </div>
-              </div>
+              </div>}
 
               <div className="bg-white rounded-lg shadow p-6 space-y-4">
                 <div className="flex gap-3">
@@ -1384,15 +1618,20 @@ const SistemaGestion = () => {
                     {getDaysInMonth(currentDate).map((fecha, index) => {
                       const citasDelDia = getCitasDelDia(fecha);
                       const isToday = esHoy(fecha);
+                      const isDragOver = dragOverDay === fecha?.toISOString().split('T')[0];
                       
                       return (
                         <div
                           key={index}
-                          className={`min-h-24 p-2 border rounded-lg ${
+                          className={`min-h-24 p-2 border rounded-lg transition-all ${
                             !fecha ? 'bg-gray-50' : 
                             isToday ? 'bg-blue-50 border-blue-500' : 
+                            isDragOver ? 'bg-green-100 border-green-500 border-2' :
                             'bg-white hover:bg-gray-50'
-                          } transition-all`}
+                          }`}
+                          onDragOver={(e) => handleDragOver(e, fecha)}
+                          onDrop={(e) => handleDrop(e, fecha)}
+                          onDragLeave={handleDragLeave}
                         >
                           {fecha && (
                             <>
@@ -1403,13 +1642,19 @@ const SistemaGestion = () => {
                                 {citasDelDia.slice(0, 2).map((cita) => (
                                   <div
                                     key={cita.id}
-                                    className={`text-xs p-1 rounded cursor-pointer ${
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, cita)}
+                                    className={`text-xs p-1 rounded cursor-move ${
                                       cita.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
                                       cita.estado === 'confirmada' ? 'bg-green-100 text-green-800' :
                                       cita.estado === 'cancelada' ? 'bg-red-100 text-red-800' :
                                       'bg-blue-100 text-blue-800'
-                                    }`}
-                                    onClick={() => openModal('cita', cita)}
+                                    } hover:opacity-75 transition-opacity`}
+                                    onClick={(e) => {
+                                      if (!draggedCita) {
+                                        openModal('cita', cita);
+                                      }
+                                    }}
                                   >
                                     <div className="font-medium truncate">{cita.terapeuta}</div>
                                     <div className="truncate">{cita.horaInicio}</div>
@@ -1444,6 +1689,12 @@ const SistemaGestion = () => {
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
                       <span className="text-sm">Completada</span>
+                    </div>
+                    {/* Instrucción de uso */}
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        💡 <strong>Tip:</strong> Arrastra las citas con el mouse para moverlas a otro día
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1595,6 +1846,40 @@ const SistemaGestion = () => {
                 </div>
               </div>
 
+              {/* Campos de Costo */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Costo por hora ($)
+                  </label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                    value={citaForm.costoPorHora} 
+                    onChange={(e) => setCitaForm({
+                      ...citaForm, 
+                      costoPorHora: parseFloat(e.target.value) || 0
+                    })} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Costo total ($)
+                  </label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                    value={citaForm.costoTotal} 
+                    onChange={(e) => setCitaForm({
+                      ...citaForm, 
+                      costoTotal: parseFloat(e.target.value) || 0
+                    })} 
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
                 <select 
@@ -1612,6 +1897,176 @@ const SistemaGestion = () => {
             <div className="flex justify-end space-x-2 mt-6">
               <button onClick={() => closeModal('cita')} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Cancelar</button>
               <button onClick={() => save('cita')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">{editingId ? 'Actualizar' : 'Crear'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE TERAPEUTA */}
+      {modals.terapeuta && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 max-h-screen overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">
+              {editingId ? 'Editar Terapeuta' : 'Nueva Terapeuta'}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nombre completo
+                </label>
+                <input 
+                  type="text"
+                  placeholder="Nombre completo"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={terapeutaForm.nombre} 
+                  onChange={(e) => setTerapeutaForm({...terapeutaForm, nombre: e.target.value})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Especialidad
+                </label>
+                <input 
+                  type="text"
+                  placeholder="Ej: Terapia ABA"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={terapeutaForm.especialidad} 
+                  onChange={(e) => setTerapeutaForm({...terapeutaForm, especialidad: e.target.value})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Teléfono
+                </label>
+                <input 
+                  type="tel"
+                  placeholder="5512345678"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={terapeutaForm.telefono} 
+                  onChange={(e) => setTerapeutaForm({...terapeutaForm, telefono: e.target.value})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email
+                </label>
+                <input 
+                  type="email"
+                  placeholder="terapeuta@ejemplo.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={terapeutaForm.email} 
+                  onChange={(e) => setTerapeutaForm({...terapeutaForm, email: e.target.value})} 
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-2 mt-6">
+              <button 
+                onClick={() => closeModal('terapeuta')} 
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => save('terapeuta')} 
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                {editingId ? 'Actualizar' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CLIENTE */}
+      {modals.cliente && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 max-h-screen overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">
+              {editingId ? 'Editar Cliente' : 'Nuevo Cliente'}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nombre del paciente
+                </label>
+                <input 
+                  type="text"
+                  placeholder="Nombre del paciente"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={clienteForm.nombre} 
+                  onChange={(e) => setClienteForm({...clienteForm, nombre: e.target.value})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Código del cliente
+                </label>
+                <input 
+                  type="text"
+                  placeholder="Ej: CLI001"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={clienteForm.codigo} 
+                  onChange={(e) => setClienteForm({...clienteForm, codigo: e.target.value})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email de contacto
+                </label>
+                <input 
+                  type="email"
+                  placeholder="contacto@ejemplo.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={clienteForm.email} 
+                  onChange={(e) => setClienteForm({...clienteForm, email: e.target.value})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Teléfono
+                </label>
+                <input 
+                  type="tel"
+                  placeholder="5512345678"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={clienteForm.telefono} 
+                  onChange={(e) => setClienteForm({...clienteForm, telefono: e.target.value})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Empresa/Institución (opcional)
+                </label>
+                <input 
+                  type="text"
+                  placeholder="Nombre de la empresa"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={clienteForm.empresa} 
+                  onChange={(e) => setClienteForm({...clienteForm, empresa: e.target.value})} 
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-2 mt-6">
+              <button 
+                onClick={() => closeModal('cliente')} 
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => save('cliente')} 
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                {editingId ? 'Actualizar' : 'Guardar'}
+              </button>
             </div>
           </div>
         </div>
