@@ -71,6 +71,29 @@ const SistemaGestion = () => {
 
   const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
+  // NUEVA FUNCIÓN: Abrir modal de edición de cita desde el reporte
+  const abrirCitaDesdeReporte = (fecha, terapeuta, cliente, horaInicio, horaFin) => {
+    // Buscar la cita original en el arreglo de citas
+    const citaOriginal = citas.find(c => 
+      c.fecha === fecha && 
+      c.terapeuta === terapeuta && 
+      c.cliente === cliente &&
+      c.horaInicio === horaInicio &&
+      c.horaFin === horaFin
+    );
+
+    if (citaOriginal) {
+      // Cargar los datos de la cita en el formulario
+      setCitaForm(citaOriginal);
+      setEditingId(citaOriginal.id);
+      setModals({ ...modals, cita: true });
+      // Cambiar a la pestaña de citas para mejor UX
+      // setActiveTab('citas');
+    } else {
+      alert('No se pudo encontrar la cita original');
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -243,18 +266,18 @@ const SistemaGestion = () => {
       const fin = new Date(`2000-01-01T${cita.horaFin}`);
       const duracionHoras = (fin - inicio) / (1000 * 60 * 60);
       
-      // Precio fijo por sesión (puedes hacer esto configurable más adelante)
-      const precioPorSesion = 450;
-      const iva = precioPorSesion * 0.16;
-      const totalConIva = precioPorSesion + iva;
-      
+      // Usar el costo real de la cita
+      const costoReal = cita.costoTotal || (cita.costoPorHora * duracionHoras) || 0;
+      const iva = costoReal * 0.16;
+      const totalConIva = costoReal + iva;
+
       reportePorCliente[cita.cliente].citas.push({
         fecha: cita.fecha,
         terapeuta: cita.terapeuta,
         horaInicio: cita.horaInicio,
         horaFin: cita.horaFin,
         duracion: duracionHoras,
-        precio: precioPorSesion,
+        precio: costoReal,
         iva: iva,
         total: totalConIva
       });
@@ -1236,14 +1259,20 @@ const SistemaGestion = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                           {recibo.citas.map((cita, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50">
+                            // <tr key={idx} className="hover:bg-gray-50">
+                            <tr 
+                              key={idx} 
+                              onClick={() => abrirCitaDesdeReporte(cita.fecha, cita.terapeuta, recibo.nombre, cita.horaInicio, cita.horaFin)}
+                              className="hover:bg-blue-50 cursor-pointer transition-colors"
+                              title="Click para ver/editar esta cita"
+                            >
                               <td className="px-4 py-3 text-sm text-gray-900">{idx + 1}</td>
                               <td className="px-4 py-3 text-sm text-gray-900">{cita.fecha}</td>
                               <td className="px-4 py-3 text-sm text-center text-gray-900">{cita.duracion.toFixed(2)}</td>
                               <td className="px-4 py-3 text-sm text-gray-900">{cita.terapeuta}</td>
-                              <td className="px-4 py-3 text-sm text-right text-gray-900">{cita.precio}</td>
-                              <td className="px-4 py-3 text-sm text-right text-gray-900">{Math.round(cita.iva)}</td>
-                              <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{Math.round(cita.total)}</td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-900">{cita.precio.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-900">{cita.iva.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{cita.total.toFixed(2)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1257,13 +1286,13 @@ const SistemaGestion = () => {
                             </td>
                             <td className="px-4 py-3"></td>
                             <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">
-                              Suma {recibo.totalPrecio}
+                              Suma {recibo.totalPrecio.toFixed(2)}
                             </td>
                             <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">
-                              Suma {Math.round(recibo.totalIva)}
+                              Suma {Math.round(recibo.totalIva.toFixed(2))}
                             </td>
                             <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">
-                              Suma {Math.round(recibo.totalGeneral)}
+                              Suma {Math.round(recibo.totalGeneral.toFixed(2))}
                             </td>
                           </tr>
                         </tfoot>
@@ -1287,7 +1316,7 @@ const SistemaGestion = () => {
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Total Ingresos</p>
-                        <p className="text-2xl font-bold text-purple-600">${Math.round(reporteGenerado.totalIngresos).toLocaleString()}</p>
+                        <p className="text-2xl font-bold text-purple-600">${reporteGenerado.totalIngresos.toFixed(2)}</p>
                       </div>
                     </div>
                   </div>
