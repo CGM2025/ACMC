@@ -25,9 +25,9 @@ const SistemaGestion = () => {
   
   const [horasForm, setHorasForm] = useState({ terapeutaId: '', clienteId: '', fecha: '', horas: '', codigoCliente: '', notas: '' });
   const [terapeutaForm, setTerapeutaForm] = useState({ nombre: '', especialidad: '', telefono: '', email: '' });
-  const [clienteForm, setClienteForm] = useState({ nombre: '', email: '', telefono: '', empresa: '', codigo: '' });
+  const [clienteForm, setClienteForm] = useState({ nombre: '', email: '', telefono: '', empresa: '', codigo: '', preciosPersonalizados: {} });
   const [pagoForm, setPagoForm] = useState({ clienteId: '', monto: '', concepto: '', metodo: 'efectivo', fecha: '' });
-  const [citaForm, setCitaForm] = useState({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0 });
+  const [citaForm, setCitaForm] = useState({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0, tipoTerapia: 'Sesión de ABA estándar' });
 
   const [horarios, setHorarios] = useState([]);
   const [nuevoHorario, setNuevoHorario] = useState({ terapeuta: '', cliente: '', diasSemana: [], horaInicio: '08:00', horaFin: '12:00' });
@@ -58,6 +58,10 @@ const SistemaGestion = () => {
   const [mesReporte, setMesReporte] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [reporteGenerado, setReporteGenerado] = useState(null);
   const [terapeutaReporte, setTerapeutaReporte] = useState('todas'); // Nuevo: filtro de terapeuta
+  
+  // Estados para gestión de precios por cliente
+  const [pestanaCliente, setPestanaCliente] = useState('datos'); // 'datos' o 'precios'
+  const [nuevoPrecio, setNuevoPrecio] = useState({ tipoTerapia: 'Sesión de ABA estándar', precio: 450 });
 
   const diasSemanaOptions = [
     { value: 1, label: 'Lunes' }, { value: 2, label: 'Martes' }, { value: 3, label: 'Miércoles' },
@@ -70,6 +74,106 @@ const SistemaGestion = () => {
   ];
 
   const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  // Precios base por tipo de terapia (fallback si el cliente no tiene precio personalizado)
+  const preciosBasePorTerapia = {
+    'Terapia Ocupacional': 950,
+    'Servicios de Sombra': 150,
+    'Sesión de ABA estándar': 450,
+    'Sesión de ABA precio especial': 900,
+    'Servicios Administrativos y Reportes': 1200,
+    'Servicios de Apoyo y Entrenamiento': 1200,
+    'Paquete 4hr/semana': 274,
+    'Sesión en casa': 640,
+    'Otro': 450
+  };
+  
+  // Precios personalizados por cliente (extraídos de la lista de servicios)
+  const preciosInicializacionClientes = {
+    'Ana Paulina Plata Luna': {
+      'Sesión de ABA estándar': 450
+    },
+    'Anna Janet Catherman': {
+      'Servicios de Sombra': 155
+    },
+    'Daniel Luna': {
+      'Servicios de Sombra': 140,
+      'Sesión en casa': 560,
+      'Servicios Administrativos y Reportes': 1200
+    },
+    'Ethan Bronson': {
+      'Sesión de ABA estándar': 450,
+      'Servicios Administrativos y Reportes': 1200
+    },
+    'Eva Ferreira': {
+      'Servicios de Sombra': 265,
+      'Sesión de ABA estándar': 757
+    },
+    'Gabriel Christian Paredes': {
+      'Terapia Ocupacional': 950
+    },
+    'Helene Stana': {
+      'Terapia Ocupacional': 950
+    },
+    'Isabella Eunsung Cho Kim': {
+      'Servicios de Sombra': 150,
+      'Sesión de ABA estándar': 450,
+      'Servicios de Apoyo y Entrenamiento': 1200
+    },
+    'Isaiah Bronson': {
+      'Sesión de ABA estándar': 450,
+      'Sesión de ABA precio especial': 900,
+      'Servicios de Apoyo y Entrenamiento': 1200,
+      'Servicios Administrativos y Reportes': 1200
+    },
+    'Luca Pacheco Rozas': {
+      'Sesión de ABA estándar': 450,
+      'Servicios Administrativos y Reportes': 1200
+    },
+    'Maite y Luis Robles Gonzáles': {
+      'Sesión de ABA estándar': 400,
+      'Sesión de ABA precio especial': 900,
+      'Servicios de Apoyo y Entrenamiento': 1200,
+      'Servicios Administrativos y Reportes': 1200
+    },
+    'Madelyn Campbell Evans': {
+      'Terapia Ocupacional': 950,
+      'Servicios Administrativos y Reportes': 1200
+    },
+    'Matías Santiago Ramírez Reyes': {
+      'Paquete 4hr/semana': 274,
+      'Sesión en casa': 640,
+      'Servicios Administrativos y Reportes': 1200
+    },
+    'Miguel Ferreira': {
+      'Sesión de ABA precio especial': 1200
+    },
+    'Myra Mestas': {
+      'Sesión de ABA precio especial': 900,
+      'Servicios de Apoyo y Entrenamiento': 1200
+    },
+    'Nicolas Yslas Obieta': {
+      'Sesión de ABA estándar': 450,
+      'Servicios de Apoyo y Entrenamiento': 1200
+    },
+    'Quinn': {
+      'Terapia Ocupacional': 950
+    },
+    'Río Hardman-Lau': {
+      'Sesión de ABA precio especial': 950,
+      'Sesión de ABA estándar': 560,
+      'Servicios de Apoyo y Entrenamiento': 1200,
+      'Servicios Administrativos y Reportes': 1200
+    },
+    'Roman Lopez Ruzleva': {
+      'Servicios de Apoyo y Entrenamiento': 1200
+    },
+    'Santiago Buerba': {
+      'Sesión de ABA precio especial': 900,
+      'Sesión de ABA estándar': 450,
+      'Servicios de Apoyo y Entrenamiento': 1200
+    }
+  };
 
   // NUEVA FUNCIÓN: Abrir modal de edición de cita desde el reporte
   const abrirCitaDesdeReporte = (fecha, terapeuta, cliente, horaInicio, horaFin) => {
@@ -155,6 +259,28 @@ const SistemaGestion = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
+
+  // useEffect para autocompletar precio cuando cambia el cliente o tipo de terapia
+  useEffect(() => {
+    if (citaForm.cliente && citaForm.tipoTerapia) {
+      const precioInfo = obtenerPrecioCliente(citaForm.cliente, citaForm.tipoTerapia);
+      setCitaForm(prev => ({
+        ...prev,
+        costoPorHora: precioInfo.precio
+      }));
+    }
+  }, [citaForm.cliente, citaForm.tipoTerapia, clientes]);
+
+  // useEffect para recalcular costo total cuando cambian horas o precio
+  useEffect(() => {
+    if (citaForm.horaInicio && citaForm.horaFin && citaForm.costoPorHora) {
+      const inicio = new Date(`2000-01-01T${citaForm.horaInicio}`);
+      const fin = new Date(`2000-01-01T${citaForm.horaFin}`);
+      const duracionHoras = (fin - inicio) / (1000 * 60 * 60);
+      const costoTotal = duracionHoras * parseFloat(citaForm.costoPorHora);
+      setCitaForm(prev => ({ ...prev, costoTotal: isNaN(costoTotal) ? 0 : costoTotal }));
+    }
+  }, [citaForm.horaInicio, citaForm.horaFin, citaForm.costoPorHora]);
 
   const cargarCitas = async () => {
     try {
@@ -274,6 +400,7 @@ const SistemaGestion = () => {
       reportePorCliente[cita.cliente].citas.push({
         fecha: cita.fecha,
         terapeuta: cita.terapeuta,
+        tipoTerapia: cita.tipoTerapia || 'N/A',
         horaInicio: cita.horaInicio,
         horaFin: cita.horaFin,
         duracion: duracionHoras,
@@ -688,7 +815,10 @@ const SistemaGestion = () => {
           setTerapeutaForm(item);
           break;
         case 'cliente':
-          setClienteForm(item);
+          setClienteForm({
+            ...item,
+            preciosPersonalizados: item.preciosPersonalizados || {}
+          });
           break;
         case 'pago':
           setPagoForm(item);
@@ -716,9 +846,119 @@ const SistemaGestion = () => {
     setEditingId(null);
     setHorasForm({ terapeutaId: '', clienteId: '', fecha: '', horas: '', codigoCliente: '', notas: '' });
     setTerapeutaForm({ nombre: '', especialidad: '', telefono: '', email: '' });
-    setClienteForm({ nombre: '', email: '', telefono: '', empresa: '', codigo: '' });
+    setClienteForm({ nombre: '', email: '', telefono: '', empresa: '', codigo: '', preciosPersonalizados: {}  });
     setPagoForm({ clienteId: '', monto: '', concepto: '', metodo: 'efectivo', fecha: '' });
-    setCitaForm({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0 });
+    setCitaForm({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0, tipoTerapia: 'Sesión de ABA estándar' });
+
+    // Resetear estados de precios
+    setPestanaCliente('datos');
+    setNuevoPrecio({ tipoTerapia: 'Sesión de ABA estándar', precio: 450 });
+  };
+
+  // Función para agregar precio personalizado al cliente
+  const agregarPrecioPersonalizado = () => {
+    if (!nuevoPrecio.tipoTerapia || !nuevoPrecio.precio) {
+      alert('Por favor completa todos los campos');
+      return;
+    }
+
+    const preciosActualizados = {
+      ...clienteForm.preciosPersonalizados,
+      [nuevoPrecio.tipoTerapia]: parseFloat(nuevoPrecio.precio)
+    };
+
+    setClienteForm({
+      ...clienteForm,
+      preciosPersonalizados: preciosActualizados
+    });
+
+    // Resetear el formulario de nuevo precio
+    setNuevoPrecio({ tipoTerapia: 'Sesión de ABA estándar', precio: 450 });
+  };
+
+  // Función para eliminar precio personalizado
+  const eliminarPrecioPersonalizado = (tipoTerapia) => {
+    const preciosActualizados = { ...clienteForm.preciosPersonalizados };
+    delete preciosActualizados[tipoTerapia];
+    
+    setClienteForm({
+      ...clienteForm,
+      preciosPersonalizados: preciosActualizados
+    });
+  };
+
+  // Función para obtener precio de un cliente para un tipo de terapia
+  const obtenerPrecioCliente = (nombreCliente, tipoTerapia) => {
+    const cliente = clientes.find(c => c.nombre === nombreCliente);
+    
+    if (cliente && cliente.preciosPersonalizados && cliente.preciosPersonalizados[tipoTerapia]) {
+      return {
+        precio: cliente.preciosPersonalizados[tipoTerapia],
+        esPersonalizado: true
+      };
+    }
+    
+    // Si no tiene precio personalizado, usar precio base
+    return {
+      precio: preciosBasePorTerapia[tipoTerapia] || 450,
+      esPersonalizado: false
+    };
+  };
+
+  // Función para importar precios automáticamente a clientes existentes
+  const importarPreciosAutomaticamente = async () => {
+    const confirmacion = window.confirm(
+      '¿Estás seguro de que deseas importar los precios automáticamente?\n\n' +
+      'Esto agregará precios personalizados a los clientes que coincidan con la lista.\n' +
+      'Los precios existentes no se sobrescribirán, solo se agregarán nuevos.'
+    );
+
+    if (!confirmacion) return;
+
+    try {
+      let clientesActualizados = 0;
+      let preciosAgregados = 0;
+
+      for (const cliente of clientes) {
+        const preciosParaCliente = preciosInicializacionClientes[cliente.nombre];
+        
+        if (preciosParaCliente) {
+          // Combinar precios existentes con nuevos (sin sobrescribir)
+          const preciosActuales = cliente.preciosPersonalizados || {};
+          const preciosNuevos = { ...preciosParaCliente };
+          
+          // Solo agregar precios que no existan
+          let hayNuevos = false;
+          Object.keys(preciosNuevos).forEach(tipo => {
+            if (!preciosActuales[tipo]) {
+              preciosActuales[tipo] = preciosNuevos[tipo];
+              preciosAgregados++;
+              hayNuevos = true;
+            }
+          });
+
+          if (hayNuevos) {
+            // Actualizar en Firebase
+            await updateDoc(doc(db, 'clientes', cliente.id), {
+              preciosPersonalizados: preciosActuales
+            });
+            clientesActualizados++;
+          }
+        }
+      }
+
+      // Recargar clientes
+      await cargarClientes();
+
+      alert(
+        `✅ Importación completada!\n\n` +
+        `Clientes actualizados: ${clientesActualizados}\n` +
+        `Precios agregados: ${preciosAgregados}`
+      );
+    } catch (error) {
+      console.error('Error al importar precios:', error);
+      alert('❌ Error al importar precios. Revisa la consola para más detalles.');
+    }
   };
 
   const save = async (type) => {
@@ -1251,6 +1491,7 @@ const SistemaGestion = () => {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">#</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Fecha de sesión</th>
                             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Duración</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Tipo de Terapia</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Terapeuta</th>
                             <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Precio de la sesión</th>
                             <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">IVA</th>
@@ -1269,6 +1510,7 @@ const SistemaGestion = () => {
                               <td className="px-4 py-3 text-sm text-gray-900">{idx + 1}</td>
                               <td className="px-4 py-3 text-sm text-gray-900">{cita.fecha}</td>
                               <td className="px-4 py-3 text-sm text-center text-gray-900">{cita.duracion.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-sm text-gray-900">{cita.tipoTerapia}</td>
                               <td className="px-4 py-3 text-sm text-gray-900">{cita.terapeuta}</td>
                               <td className="px-4 py-3 text-sm text-right text-gray-900">{cita.precio.toFixed(2)}</td>
                               <td className="px-4 py-3 text-sm text-right text-gray-900">{cita.iva.toFixed(2)}</td>
@@ -1284,6 +1526,7 @@ const SistemaGestion = () => {
                             <td className="px-4 py-3 text-sm text-center font-semibold text-gray-900">
                               Suma {recibo.totalHoras.toFixed(2)}
                             </td>
+                            <td className="px-4 py-3"></td>
                             <td className="px-4 py-3"></td>
                             <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">
                               Suma {recibo.totalPrecio.toFixed(2)}
@@ -1738,6 +1981,7 @@ const SistemaGestion = () => {
                             <div className="flex-1">
                               <p className="font-medium text-gray-800">{cita.terapeuta} con {cita.cliente}</p>
                               <p className="text-sm text-gray-600">{cita.fecha} | {cita.horaInicio} - {cita.horaFin}</p>
+                              <p className="text-sm text-gray-600 mt-1">📋 {cita.tipoTerapia || 'No especificado'}</p>
                               <span className={`inline-block mt-1 px-2 py-1 text-xs rounded-full font-medium ${
                                 cita.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
                                 cita.estado === 'confirmada' ? 'bg-green-100 text-green-800' :
@@ -1797,7 +2041,22 @@ const SistemaGestion = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Clientes</h2>
-              <button onClick={() => openModal('cliente')} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"><Plus className="w-4 h-4 mr-2" />Nuevo</button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={importarPreciosAutomaticamente} 
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Importar Precios
+                </button>
+                <button 
+                  onClick={() => openModal('cliente')} 
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nuevo
+                </button>
+              </div>
             </div>
             <div className="bg-white shadow rounded-md"><ul className="divide-y">{clientes.map(c => (<li key={c.id} className="px-6 py-4"><div className="flex justify-between items-center"><div><p className="font-medium">{c.nombre}</p><p className="text-sm text-gray-600">{c.email}</p><p className="text-sm text-blue-600">Código: {c.codigo}</p></div><div className="flex gap-2"><button onClick={() => openModal('cliente', c)} className="text-blue-600 hover:text-blue-800"><Edit className="w-5 h-5" /></button><button onClick={() => eliminarCliente(c.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-5 h-5" /></button></div></div></li>))}</ul></div>
           </div>
@@ -1875,6 +2134,27 @@ const SistemaGestion = () => {
                 </div>
               </div>
 
+              {/* Nuevo campo: Tipo de Terapia */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Terapia</label>
+                <select
+                  value={citaForm.tipoTerapia || 'Sesión de ABA estándar'}
+                  onChange={(e) => setCitaForm({ ...citaForm, tipoTerapia: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                  <option value="Servicios de Sombra">Servicios de Sombra</option>
+                  <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
+                  <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
+                  <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
+                  <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
+                  <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
+                  <option value="Sesión en casa">Sesión en casa</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+
               {/* Campos de Costo */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1891,6 +2171,19 @@ const SistemaGestion = () => {
                       costoPorHora: parseFloat(e.target.value) || 0
                     })} 
                   />
+                  {/* Indicador de precio personalizado */}
+                  {citaForm.cliente && citaForm.tipoTerapia && (() => {
+                    const precioInfo = obtenerPrecioCliente(citaForm.cliente, citaForm.tipoTerapia);
+                    return (
+                      <p className={`text-xs mt-1 ${precioInfo.esPersonalizado ? 'text-green-600' : 'text-gray-500'}`}>
+                        {precioInfo.esPersonalizado ? (
+                          <>✅ Precio personalizado del cliente</>
+                        ) : (
+                          <>💡 Usando precio base</>
+                        )}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2012,77 +2305,208 @@ const SistemaGestion = () => {
       {/* MODAL DE CLIENTE */}
       {modals.cliente && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-h-screen overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            
+            {/* Pestañas */}
+            <div className="flex border-b mb-6">
+              <button
+                onClick={() => setPestanaCliente('datos')}
+                className={`px-6 py-3 font-medium transition-colors ${
+                  pestanaCliente === 'datos'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Datos Básicos
+              </button>
+              <button
+                onClick={() => setPestanaCliente('precios')}
+                className={`px-6 py-3 font-medium transition-colors ${
+                  pestanaCliente === 'precios'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Precios Personalizados
+              </button>
+            </div>
+
             <h3 className="text-lg font-bold mb-4">
               {editingId ? 'Editar Cliente' : 'Nuevo Cliente'}
             </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre del paciente
-                </label>
-                <input 
-                  type="text"
-                  placeholder="Nombre del paciente"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
-                  value={clienteForm.nombre} 
-                  onChange={(e) => setClienteForm({...clienteForm, nombre: e.target.value})} 
-                />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Código del cliente
-                </label>
-                <input 
-                  type="text"
-                  placeholder="Ej: CLI001"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
-                  value={clienteForm.codigo} 
-                  onChange={(e) => setClienteForm({...clienteForm, codigo: e.target.value})} 
-                />
-              </div>
+            {/* Pestaña de Datos Básicos */}
+            {pestanaCliente === 'datos' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nombre del paciente
+                  </label>
+                  <input 
+                    type="text"
+                    placeholder="Nombre del paciente"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                    value={clienteForm.nombre} 
+                    onChange={(e) => setClienteForm({...clienteForm, nombre: e.target.value})} 
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email de contacto
-                </label>
-                <input 
-                  type="email"
-                  placeholder="contacto@ejemplo.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
-                  value={clienteForm.email} 
-                  onChange={(e) => setClienteForm({...clienteForm, email: e.target.value})} 
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Código del cliente
+                  </label>
+                  <input 
+                    type="text"
+                    placeholder="Ej: CLI001"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                    value={clienteForm.codigo} 
+                    onChange={(e) => setClienteForm({...clienteForm, codigo: e.target.value})} 
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Teléfono
-                </label>
-                <input 
-                  type="tel"
-                  placeholder="5512345678"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
-                  value={clienteForm.telefono} 
-                  onChange={(e) => setClienteForm({...clienteForm, telefono: e.target.value})} 
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email de contacto
+                  </label>
+                  <input 
+                    type="email"
+                    placeholder="contacto@ejemplo.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                    value={clienteForm.email} 
+                    onChange={(e) => setClienteForm({...clienteForm, email: e.target.value})} 
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Empresa/Institución (opcional)
-                </label>
-                <input 
-                  type="text"
-                  placeholder="Nombre de la empresa"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
-                  value={clienteForm.empresa} 
-                  onChange={(e) => setClienteForm({...clienteForm, empresa: e.target.value})} 
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Teléfono
+                  </label>
+                  <input 
+                    type="tel"
+                    placeholder="5512345678"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                    value={clienteForm.telefono} 
+                    onChange={(e) => setClienteForm({...clienteForm, telefono: e.target.value})} 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Empresa/Institución (opcional)
+                  </label>
+                  <input 
+                    type="text"
+                    placeholder="Nombre de la empresa"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                    value={clienteForm.empresa} 
+                    onChange={(e) => setClienteForm({...clienteForm, empresa: e.target.value})} 
+                  />
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Pestaña de Precios Personalizados */}
+            {pestanaCliente === 'precios' && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Precios Personalizados para {clienteForm.nombre || 'este cliente'}
+                </h3>
+
+                {/* Lista de precios actuales */}
+                {Object.keys(clienteForm.preciosPersonalizados || {}).length > 0 ? (
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-2 text-sm font-semibold text-gray-700">Tipo de Terapia</th>
+                          <th className="text-right py-2 text-sm font-semibold text-gray-700">Precio/Hora</th>
+                          <th className="text-center py-2 text-sm font-semibold text-gray-700">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(clienteForm.preciosPersonalizados || {}).map(([tipo, precio]) => (
+                          <tr key={tipo} className="border-b last:border-0">
+                            <td className="py-3 text-sm text-gray-900">{tipo}</td>
+                            <td className="py-3 text-sm text-right text-gray-900 font-medium">${precio}</td>
+                            <td className="py-3 text-center">
+                              <button
+                                onClick={() => eliminarPrecioPersonalizado(tipo)}
+                                className="text-red-600 hover:text-red-800 text-sm"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                    <p className="text-sm text-yellow-800">
+                      ⚠️ Este cliente no tiene precios personalizados. Se usarán los precios base por defecto.
+                    </p>
+                  </div>
+                )}
+
+                {/* Formulario para agregar nuevo precio */}
+                <div className="border-t pt-4">
+                  <h4 className="text-md font-medium text-gray-700 mb-3">Agregar Precio Personalizado</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Terapia</label>
+                      <select
+                        value={nuevoPrecio.tipoTerapia}
+                        onChange={(e) => setNuevoPrecio({ ...nuevoPrecio, tipoTerapia: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                        <option value="Servicios de Sombra">Servicios de Sombra</option>
+                        <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
+                        <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
+                        <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
+                        <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
+                        <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
+                        <option value="Sesión en casa">Sesión en casa</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Precio por Hora ($)</label>
+                      <input
+                        type="number"
+                        value={nuevoPrecio.precio}
+                        onChange={(e) => setNuevoPrecio({ ...nuevoPrecio, precio: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="450"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={agregarPrecioPersonalizado}
+                    className="mt-3 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                  >
+                    <Plus size={16} />
+                    Agregar Precio
+                  </button>
+                </div>
+
+                {/* Referencia de precios base */}
+                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-2">📋 Precios Base (por defecto)</h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-blue-800">
+                    {Object.entries(preciosBasePorTerapia).map(([tipo, precio]) => (
+                      <div key={tipo} className="flex justify-between">
+                        <span>{tipo}:</span>
+                        <span className="font-medium">${precio}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             
+            {/* Botones de acción */}
             <div className="flex justify-end space-x-2 mt-6">
               <button 
                 onClick={() => closeModal('cliente')} 
