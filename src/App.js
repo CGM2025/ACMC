@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
 import { db, auth } from './firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, writeBatch, query, orderBy, where, getDoc, setDoc } from 'firebase/firestore';
@@ -269,7 +269,7 @@ const SistemaGestion = () => {
         costoPorHora: precioInfo.precio
       }));
     }
-  }, [citaForm.cliente, citaForm.tipoTerapia, clientes]);
+  }, [citaForm.cliente, citaForm.tipoTerapia, clientes, obtenerPrecioCliente]);
 
   // useEffect para recalcular costo total cuando cambian horas o precio
   useEffect(() => {
@@ -888,7 +888,7 @@ const SistemaGestion = () => {
   };
 
   // Función para obtener precio de un cliente para un tipo de terapia
-  const obtenerPrecioCliente = (nombreCliente, tipoTerapia) => {
+  const obtenerPrecioCliente = useCallback((nombreCliente, tipoTerapia) => {
     const cliente = clientes.find(c => c.nombre === nombreCliente);
     
     if (cliente && cliente.preciosPersonalizados && cliente.preciosPersonalizados[tipoTerapia]) {
@@ -903,7 +903,7 @@ const SistemaGestion = () => {
       precio: preciosBasePorTerapia[tipoTerapia] || 450,
       esPersonalizado: false
     };
-  };
+  }, [clientes, preciosBasePorTerapia]);
 
   // Función para importar precios automáticamente a clientes existentes
   const importarPreciosAutomaticamente = async () => {
@@ -919,33 +919,42 @@ const SistemaGestion = () => {
       let clientesActualizados = 0;
       let preciosAgregados = 0;
 
-      for (const cliente of clientes) {
-        const preciosParaCliente = preciosInicializacionClientes[cliente.nombre];
-        
-        if (preciosParaCliente) {
+      const actualizaciones = await Promise.all(
+        clientes.map(async (cliente) => {
+          const preciosParaCliente = preciosInicializacionClientes[cliente.nombre];
+          
+          if (!preciosParaCliente) {
+            return { actualizado: false, preciosNuevos: 0 };
+          }
+
           // Combinar precios existentes con nuevos (sin sobrescribir)
           const preciosActuales = cliente.preciosPersonalizados || {};
           const preciosNuevos = { ...preciosParaCliente };
           
           // Solo agregar precios que no existan
-          let hayNuevos = false;
+          let contadorNuevos = 0;
           Object.keys(preciosNuevos).forEach(tipo => {
             if (!preciosActuales[tipo]) {
               preciosActuales[tipo] = preciosNuevos[tipo];
-              preciosAgregados++;
-              hayNuevos = true;
+              contadorNuevos++;
             }
           });
 
-          if (hayNuevos) {
+          if (contadorNuevos > 0) {
             // Actualizar en Firebase
             await updateDoc(doc(db, 'clientes', cliente.id), {
               preciosPersonalizados: preciosActuales
             });
-            clientesActualizados++;
+            return { actualizado: true, preciosNuevos: contadorNuevos };
           }
-        }
-      }
+
+          return { actualizado: false, preciosNuevos: 0 };
+        })
+      );
+
+      // Contar resultados
+      clientesActualizados = actualizaciones.filter(r => r.actualizado).length;
+      preciosAgregados = actualizaciones.reduce((sum, r) => sum + r.preciosNuevos, 0);
 
       // Recargar clientes
       await cargarClientes();
