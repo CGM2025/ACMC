@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { db, auth } from './firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, writeBatch, query, orderBy, where, getDoc, setDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
@@ -334,6 +335,52 @@ const SistemaGestion = () => {
       }
     }
   }, [citaForm.terapeuta, citaForm.tipoTerapia, terapeutas, obtenerCostoTerapeuta]);
+
+  // Función para calcular contribución de ganancias por terapeuta
+  const calcularContribucionPorTerapeuta = () => {
+    const contribucionPorTerapeuta = {};
+    
+    // Filtrar solo citas completadas
+    const citasCompletadas = citas.filter(c => c.estado === 'completada');
+    
+    citasCompletadas.forEach(cita => {
+      if (!contribucionPorTerapeuta[cita.terapeuta]) {
+        contribucionPorTerapeuta[cita.terapeuta] = {
+          nombre: cita.terapeuta,
+          totalIngresos: 0,
+          totalCostos: 0,
+          ganancia: 0
+        };
+      }
+      
+      // Calcular duración
+      const inicio = new Date(`2000-01-01T${cita.horaInicio}`);
+      const fin = new Date(`2000-01-01T${cita.horaFin}`);
+      const duracionHoras = (fin - inicio) / (1000 * 60 * 60);
+      
+      // Calcular ingresos (precio al cliente)
+      const ingresos = cita.costoTotal || (cita.costoPorHora * duracionHoras) || 0;
+      
+      // Calcular costos (lo que se paga a la terapeuta)
+      const costos = cita.costoTerapeutaTotal || 0;
+      
+      contribucionPorTerapeuta[cita.terapeuta].totalIngresos += ingresos;
+      contribucionPorTerapeuta[cita.terapeuta].totalCostos += costos;
+      contribucionPorTerapeuta[cita.terapeuta].ganancia += (ingresos - costos);
+    });
+    
+    // Calcular total de ganancias para sacar porcentajes
+    const gananciaTotal = Object.values(contribucionPorTerapeuta).reduce((sum, t) => sum + t.ganancia, 0);
+    
+    // Convertir a array y agregar porcentajes
+    const arrayContribucion = Object.values(contribucionPorTerapeuta).map(t => ({
+      ...t,
+      porcentaje: gananciaTotal > 0 ? (t.ganancia / gananciaTotal) * 100 : 0
+    }));
+    
+    // Ordenar de mayor a menor porcentaje
+    return arrayContribucion.sort((a, b) => b.porcentaje - a.porcentaje);
+  };
 
   const cargarCitas = async () => {
     try {
@@ -1421,10 +1468,130 @@ const SistemaGestion = () => {
       {/* Contenido Principal - Se ajusta según el sidebar */}
       <main className={`${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex-1 p-8 transition-all duration-300`}>
         {activeTab === 'dashboard' && hasPermission('dashboard') && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-lg shadow"><div className="flex items-center justify-between"><div><p className="text-gray-600 text-sm">Total Horas</p><p className="text-3xl font-bold">{totalHoras.toFixed(1)}</p></div><Clock className="w-12 h-12 text-blue-500" /></div></div>
-            <div className="bg-white p-6 rounded-lg shadow"><div className="flex items-center justify-between"><div><p className="text-gray-600 text-sm">Total Pagos</p><p className="text-3xl font-bold">${totalPagos.toLocaleString()}</p></div><DollarSign className="w-12 h-12 text-green-500" /></div></div>
-            <div className="bg-white p-6 rounded-lg shadow"><div className="flex items-center justify-between"><div><p className="text-gray-600 text-sm">Clientes</p><p className="text-3xl font-bold">{clientes.length}</p></div><Users className="w-12 h-12 text-purple-500" /></div></div>
+          <div className="space-y-6">
+            {/* KPIs */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Total Horas</p>
+                    <p className="text-3xl font-bold">{totalHoras.toFixed(1)}</p>
+                  </div>
+                  <Clock className="w-12 h-12 text-blue-500" />
+                </div>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Total Pagos</p>
+                    <p className="text-3xl font-bold">${totalPagos.toLocaleString()}</p>
+                  </div>
+                  <DollarSign className="w-12 h-12 text-green-500" />
+                </div>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Clientes</p>
+                    <p className="text-3xl font-bold">{clientes.length}</p>
+                  </div>
+                  <Users className="w-12 h-12 text-purple-500" />
+                </div>
+              </div>
+            </div>
+
+            {/* Gráfica de Contribución por Terapeuta */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-xl font-bold text-gray-800 mb-6">
+                💰 Contribución de Ganancias por Terapeuta
+              </h3>
+              
+              {(() => {
+                const contribuciones = calcularContribucionPorTerapeuta();
+                const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+                
+                if (contribuciones.length === 0) {
+                  return (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500">No hay citas completadas aún para mostrar contribuciones</p>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Gráfica de Pie */}
+                    <div className="flex items-center justify-center">
+                      <PieChart width={400} height={400}>
+                        <Pie
+                          data={contribuciones}
+                          cx={200}
+                          cy={200}
+                          labelLine={true}
+                          label={({ porcentaje }) => `${porcentaje.toFixed(1)}%`}
+                          outerRadius={120}
+                          fill="#8884d8"
+                          dataKey="ganancia"
+                        >
+                          {contribuciones.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value, name, props) => [
+                            `$${Math.round(value).toLocaleString()}`,
+                            props.payload.nombre
+                          ]}
+                        />
+                      </PieChart>
+                    </div>
+
+                    {/* Tabla de detalles */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Terapeuta</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Ganancia</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">%</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {contribuciones.map((t, index) => (
+                            <tr key={t.nombre} className="hover:bg-gray-50">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="w-3 h-3 rounded-full" 
+                                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                                  ></div>
+                                  <span className="text-sm font-medium text-gray-900">{t.nombre}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right text-sm font-semibold text-green-600">
+                                ${Math.round(t.ganancia).toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                                {t.porcentaje.toFixed(1)}%
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-gray-50 border-t-2">
+                          <tr>
+                            <td className="px-4 py-3 text-sm font-bold text-gray-900">TOTAL</td>
+                            <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
+                              ${Math.round(contribuciones.reduce((sum, t) => sum + t.ganancia, 0)).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">100%</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         )}
 
