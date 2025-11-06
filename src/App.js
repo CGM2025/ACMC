@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
 import { db, auth } from './firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, writeBatch, query, orderBy, where, getDoc, setDoc } from 'firebase/firestore';
@@ -76,7 +76,7 @@ const SistemaGestion = () => {
   const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
   // Precios base por tipo de terapia (fallback si el cliente no tiene precio personalizado)
-  const preciosBasePorTerapia = {
+  const preciosBasePorTerapia = useMemo(() => ({
     'Terapia Ocupacional': 950,
     'Servicios de Sombra': 150,
     'Sesión de ABA estándar': 450,
@@ -86,7 +86,7 @@ const SistemaGestion = () => {
     'Paquete 4hr/semana': 274,
     'Sesión en casa': 640,
     'Otro': 450
-  };
+  }), []);
   
   // Precios personalizados por cliente (extraídos de la lista de servicios)
   const preciosInicializacionClientes = {
@@ -259,6 +259,24 @@ const SistemaGestion = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
+
+    // Función para obtener precio de un cliente para un tipo de terapia
+  const obtenerPrecioCliente = useCallback((nombreCliente, tipoTerapia) => {
+    const cliente = clientes.find(c => c.nombre === nombreCliente);
+    
+    if (cliente && cliente.preciosPersonalizados && cliente.preciosPersonalizados[tipoTerapia]) {
+      return {
+        precio: cliente.preciosPersonalizados[tipoTerapia],
+        esPersonalizado: true
+      };
+    }
+    
+    // Si no tiene precio personalizado, usar precio base
+    return {
+      precio: preciosBasePorTerapia[tipoTerapia] || 450,
+      esPersonalizado: false
+    };
+  }, [clientes, preciosBasePorTerapia]);
 
   // useEffect para autocompletar precio cuando cambia el cliente o tipo de terapia
   useEffect(() => {
@@ -887,23 +905,6 @@ const SistemaGestion = () => {
     });
   };
 
-  // Función para obtener precio de un cliente para un tipo de terapia
-  const obtenerPrecioCliente = useCallback((nombreCliente, tipoTerapia) => {
-    const cliente = clientes.find(c => c.nombre === nombreCliente);
-    
-    if (cliente && cliente.preciosPersonalizados && cliente.preciosPersonalizados[tipoTerapia]) {
-      return {
-        precio: cliente.preciosPersonalizados[tipoTerapia],
-        esPersonalizado: true
-      };
-    }
-    
-    // Si no tiene precio personalizado, usar precio base
-    return {
-      precio: preciosBasePorTerapia[tipoTerapia] || 450,
-      esPersonalizado: false
-    };
-  }, [clientes, preciosBasePorTerapia]);
 
   // Función para importar precios automáticamente a clientes existentes
   const importarPreciosAutomaticamente = async () => {
