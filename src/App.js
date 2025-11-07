@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { db, auth } from './firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, writeBatch, query, orderBy, where, getDoc, setDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
@@ -20,6 +20,8 @@ const SistemaGestion = () => {
   const [pagos, setPagos] = useState([]);
   const [citas, setCitas] = useState([]);
   const [loadingCitas, setLoadingCitas] = useState(false);
+  const [utilidadHistorica, setUtilidadHistorica] = useState([]);
+  const [rangoMeses, setRangoMeses] = useState(12); // 6, 12, 24, o 'todo'
 
   const [modals, setModals] = useState({ horas: false, terapeuta: false, cliente: false, pago: false, cita: false });
   const [editingId, setEditingId] = useState(null);
@@ -261,6 +263,7 @@ const SistemaGestion = () => {
       cargarClientes();
       cargarHorasTrabajadas();
       cargarPagos();
+      cargarUtilidadHistorica();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
@@ -380,6 +383,156 @@ const SistemaGestion = () => {
     
     // Ordenar de mayor a menor porcentaje
     return arrayContribucion.sort((a, b) => b.porcentaje - a.porcentaje);
+  };
+
+  // Función para importar datos históricos de utilidad
+  const importarUtilidadHistorica = async (datosHistoricos) => {
+    try {
+      const batch = writeBatch(db);
+      
+      datosHistoricos.forEach(dato => {
+        const docRef = doc(collection(db, 'utilidadHistorica'));
+        batch.set(docRef, {
+          año: dato.año,
+          mes: dato.mes,
+          utilidad: dato.utilidad,
+          fechaImportacion: new Date().toISOString()
+        });
+      });
+      
+      await batch.commit();
+      alert(`✅ Se importaron ${datosHistoricos.length} registros históricos exitosamente`);
+    } catch (error) {
+      console.error('Error al importar datos históricos:', error);
+      alert('Error al importar datos históricos');
+    }
+  };
+
+  // Función para cargar utilidad histórica desde Firebase
+  const cargarUtilidadHistorica = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'utilidadHistorica'));
+      const datos = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setUtilidadHistorica(datos);
+    } catch (error) {
+      console.error('Error al cargar utilidad histórica:', error);
+    }
+  };
+
+  // Función para calcular evolución mensual de ganancias (histórica + actual)
+  const calcularEvolucionMensual = () => {
+    const mesesMap = {
+      'Enero': 0, 'Febrero': 1, 'Marzo': 2, 'Abril': 3, 'Mayo': 4, 'Junio': 5,
+      'Julio': 6, 'Agosto': 7, 'Septiembre': 8, 'Octubre': 9, 'Noviembre': 10, 'Diciembre': 11
+    };
+    
+    const evolucion = {};
+    
+    // 1. Agregar datos históricos
+    utilidadHistorica.forEach(registro => {
+      const key = `${registro.año}-${String(mesesMap[registro.mes] + 1).padStart(2, '0')}`;
+      evolucion[key] = {
+        año: registro.año,
+        mes: registro.mes,
+        mesNum: mesesMap[registro.mes],
+        ganancia: registro.utilidad,
+        fuente: 'histórico'
+      };
+    });
+    
+    // 2. Calcular ganancias del sistema (citas completadas)
+    const citasCompletadas = citas.filter(c => c.estado === 'completada');
+    
+    citasCompletadas.forEach(cita => {
+      const fecha = new Date(cita.fecha);
+      const año = fecha.getFullYear();
+      const mes = fecha.getMonth();
+      const key = `${año}-${String(mes + 1).padStart(2, '0')}`;
+      
+      // Calcular duración
+      const inicio = new Date(`2000-01-01T${cita.horaInicio}`);
+      const fin = new Date(`2000-01-01T${cita.horaFin}`);
+      const duracionHoras = (fin - inicio) / (1000 * 60 * 60);
+      
+      // Calcular ganancia
+      const ingresos = cita.costoTotal || (cita.costoPorHora * duracionHoras) || 0;
+      const costos = cita.costoTerapeutaTotal || 0;
+      const ganancia = ingresos - costos;
+      
+      if (!evolucion[key]) {
+        const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                              'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        evolucion[key] = {
+          año: año,
+          mes: mesesNombres[mes],
+          mesNum: mes,
+          ganancia: 0,
+          fuente: 'sistema'
+        };
+      }
+      
+      // Si ya existe dato histórico, lo respetamos (no sobreescribimos)
+      if (evolucion[key].fuente !== 'histórico') {
+        evolucion[key].ganancia += ganancia;
+        evolucion[key].fuente = 'sistema';
+      }
+    });
+    
+    // Convertir a array y ordenar cronológicamente
+    return Object.values(evolucion).sort((a, b) => {
+      if (a.año !== b.año) return a.año - b.año;
+      return a.mesNum - b.mesNum;
+    });
+  };
+
+  // Función para calcular KPIs de crecimiento anual
+  const calcularKPIsAnuales = () => {
+    const evolucion = calcularEvolucionMensual();
+    
+    if (evolucion.length === 0) return null;
+    
+    // Agrupar por año
+    const porAño = {};
+    evolucion.forEach(mes => {
+      if (!porAño[mes.año]) {
+        porAño[mes.año] = [];
+      }
+      porAño[mes.año].push(mes.ganancia);
+    });
+    
+    // Calcular promedios por año
+    const promediosAnuales = Object.entries(porAño).map(([año, ganancias]) => ({
+      año: parseInt(año),
+      promedio: ganancias.reduce((sum, g) => sum + g, 0) / ganancias.length,
+      total: ganancias.reduce((sum, g) => sum + g, 0),
+      meses: ganancias.length
+    })).sort((a, b) => a.año - b.año);
+    
+    // Calcular crecimientos
+    const crecimientos = [];
+    for (let i = 1; i < promediosAnuales.length; i++) {
+      const añoAnterior = promediosAnuales[i - 1];
+      const añoActual = promediosAnuales[i];
+      const crecimiento = ((añoActual.promedio - añoAnterior.promedio) / añoAnterior.promedio) * 100;
+      crecimientos.push({
+        año: añoActual.año,
+        crecimiento: crecimiento
+      });
+    }
+    
+    // Mejor y peor año
+    const mejorAño = promediosAnuales.reduce((max, año) => año.promedio > max.promedio ? año : max);
+    const peorAño = promediosAnuales.reduce((min, año) => año.promedio < min.promedio ? año : min);
+    
+    return {
+      promediosAnuales,
+      crecimientos,
+      mejorAño,
+      peorAño
+    };
   };
 
   const cargarCitas = async () => {
@@ -1469,6 +1622,48 @@ const SistemaGestion = () => {
       <main className={`${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex-1 p-8 transition-all duration-300`}>
         {activeTab === 'dashboard' && hasPermission('dashboard') && (
           <div className="space-y-6">
+            {/* Botón de Importación (solo si no hay datos históricos) */}
+            {utilidadHistorica.length === 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-yellow-900">📊 Importar Datos Históricos</h4>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      Importa tu historial de ganancias desde el archivo JSON para ver la evolución completa
+                    </p>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = async (event) => {
+                          try {
+                            const datos = JSON.parse(event.target.result);
+                            await importarUtilidadHistorica(datos);
+                            await cargarUtilidadHistorica();
+                          } catch (error) {
+                            alert('Error al leer el archivo JSON');
+                          }
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                    className="hidden"
+                    id="importar-historico"
+                  />
+                  <label
+                    htmlFor="importar-historico"
+                    className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 cursor-pointer flex items-center gap-2"
+                  >
+                    <Upload size={16} />
+                    Importar JSON
+                  </label>
+                </div>
+              </div>
+            )}
             {/* KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-lg shadow">
@@ -1587,6 +1782,251 @@ const SistemaGestion = () => {
                           </tr>
                         </tfoot>
                       </table>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Gráfica de Evolución Mensual de Ganancias */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-gray-800">
+                  📈 Evolución Mensual de Ganancias
+                </h3>
+                
+                {/* Selector de Rango */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setRangoMeses(6)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      rangoMeses === 6
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    6 meses
+                  </button>
+                  <button
+                    onClick={() => setRangoMeses(12)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      rangoMeses === 12
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    12 meses
+                  </button>
+                  <button
+                    onClick={() => setRangoMeses(24)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      rangoMeses === 24
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    24 meses
+                  </button>
+                  <button
+                    onClick={() => setRangoMeses('todo')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      rangoMeses === 'todo'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Todo
+                  </button>
+                </div>
+              </div>
+              
+              {(() => {
+                const kpis = calcularKPIsAnuales();
+                
+                // Mostrar KPIs de Crecimiento Anual
+                if (kpis && kpis.promediosAnuales.length > 1) {
+                  return (
+                    <div className="mb-6">
+                      {/* Tarjetas de Crecimiento - Ahora en 3 columnas */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        
+                        {/* Promedios Mensuales por Año */}
+                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
+                          <h4 className="text-sm font-semibold text-purple-900 mb-3">📊 Promedio Mensual por Año</h4>
+                          <div className="space-y-2">
+                            {kpis.promediosAnuales.map(año => {
+                              const esAñoActual = año.año === new Date().getFullYear();
+                              const esAñoCompleto = año.meses >= 12;
+                              return (
+                                <div key={año.año} className="flex justify-between items-center">
+                                  <span className="text-sm text-purple-800">
+                                    {año.año}{esAñoActual && !esAñoCompleto ? ` (YTD - ${año.meses} meses)` : ''}:
+                                  </span>
+                                  <span className="text-sm font-bold text-purple-900">
+                                    ${Math.round(año.promedio).toLocaleString()}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Crecimiento Anual */}
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
+                          <h4 className="text-sm font-semibold text-blue-900 mb-3">📈 Crecimiento Anual</h4>
+                          <div className="space-y-2">
+                            {kpis.crecimientos.map(c => {
+                              const esAñoActual = c.año === new Date().getFullYear();
+                              const añoData = kpis.promediosAnuales.find(a => a.año === c.año);
+                              const esAñoCompleto = añoData && añoData.meses >= 12;
+                              
+                              return (
+                                <div key={c.año} className="flex justify-between items-center">
+                                  <span className="text-sm text-blue-800">
+                                    {c.año - 1} → {c.año}{esAñoActual && !esAñoCompleto ? '*' : ''}:
+                                  </span>
+                                  <span className={`text-sm font-bold ${c.crecimiento >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {c.crecimiento >= 0 ? '↑' : '↓'} {Math.abs(c.crecimiento).toFixed(1)}%
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            {kpis.crecimientos.some(c => {
+                              const esAñoActual = c.año === new Date().getFullYear();
+                              const añoData = kpis.promediosAnuales.find(a => a.año === c.año);
+                              const esAñoCompleto = añoData && añoData.meses >= 12;
+                              return esAñoActual && !esAñoCompleto;
+                            }) && (
+                              <p className="text-xs text-blue-600 mt-2 pt-2 border-t border-blue-200">
+                                * Año en progreso, sujeto a cambios
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Mejor Año */}
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
+                          <h4 className="text-sm font-semibold text-green-900 mb-3">💰 Análisis Histórico</h4>
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-xs text-green-700">Mejor Año</p>
+                              <p className="text-lg font-bold text-green-900">
+                                {kpis.mejorAño.año}: ${Math.round(kpis.mejorAño.promedio).toLocaleString()}/mes
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-green-700">Promedio Histórico</p>
+                              <p className="text-lg font-bold text-green-900">
+                                ${Math.round(kpis.promediosAnuales.reduce((sum, a) => sum + a.promedio, 0) / kpis.promediosAnuales.length).toLocaleString()}/mes
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-green-700">Crecimiento Total</p>
+                              <p className="text-lg font-bold text-green-900">
+                                {(() => {
+                                  const primerAño = kpis.promediosAnuales[0];
+                                  const ultimoAño = kpis.promediosAnuales[kpis.promediosAnuales.length - 1];
+                                  const crecimientoTotal = ((ultimoAño.promedio - primerAño.promedio) / primerAño.promedio) * 100;
+                                  return `${crecimientoTotal >= 0 ? '+' : ''}${crecimientoTotal.toFixed(1)}%`;
+                                })()}
+                              </p>
+                              <p className="text-xs text-green-600">
+                                {kpis.promediosAnuales[0].año} → {kpis.promediosAnuales[kpis.promediosAnuales.length - 1].año}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                return null;
+              })()}
+
+              {(() => {
+                const evolucion = calcularEvolucionMensual();
+                
+                // Filtrar según el rango seleccionado
+                const datosFiltrados = rangoMeses === 'todo' 
+                  ? evolucion 
+                  : evolucion.slice(-rangoMeses);
+                
+                if (datosFiltrados.length === 0) {
+                  return (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500">No hay datos suficientes para mostrar la evolución</p>
+                      <p className="text-sm text-gray-400 mt-2">
+                        {utilidadHistorica.length === 0 ? 'Importa tus datos históricos para ver la gráfica' : 'Completa algunas citas para ver datos del sistema'}
+                      </p>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="space-y-4">
+                    <LineChart width={1000} height={400} data={datosFiltrados}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="mes" 
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
+                      />
+                      <Tooltip 
+                        formatter={(value) => [`$${Math.round(value).toLocaleString()}`, 'Ganancia']}
+                        labelFormatter={(label, payload) => {
+                          if (payload && payload[0]) {
+                            return `${payload[0].payload.mes} ${payload[0].payload.año}`;
+                          }
+                          return label;
+                        }}
+                      />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="ganancia" 
+                        stroke="#10b981" 
+                        strokeWidth={3}
+                        name="Ganancia Mensual"
+                        dot={{ r: 5 }}
+                        activeDot={{ r: 8 }}
+                      />
+                    </LineChart>
+                    
+                    {/* Estadísticas del período actual */}
+                    <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t">
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600">Ganancia Promedio</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          ${Math.round(datosFiltrados.reduce((sum, m) => sum + m.ganancia, 0) / datosFiltrados.length).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {rangoMeses === 'todo' ? 'Histórico' : `Últimos ${rangoMeses} meses`}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600">Mejor Mes</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          ${Math.round(Math.max(...datosFiltrados.map(m => m.ganancia))).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {(() => {
+                            const mejor = datosFiltrados.reduce((max, m) => m.ganancia > max.ganancia ? m : max);
+                            return `${mejor.mes} ${mejor.año}`;
+                          })()}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600">Total Período</p>
+                        <p className="text-2xl font-bold text-purple-600">
+                          ${Math.round(datosFiltrados.reduce((sum, m) => sum + m.ganancia, 0)).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {datosFiltrados.length} meses
+                        </p>
+                      </div>
                     </div>
                   </div>
                 );
