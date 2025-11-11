@@ -315,6 +315,17 @@ const SistemaGestion = () => {
     }
   }, [citaForm.cliente, citaForm.tipoTerapia, clientes, obtenerPrecioCliente]);
 
+  // useEffect para recalcular costo total (precio al cliente) cuando cambian horas o precio por hora
+  useEffect(() => {
+    if (citaForm.horaInicio && citaForm.horaFin && citaForm.costoPorHora) {
+      const inicio = new Date(`2000-01-01T${citaForm.horaInicio}`);
+      const fin = new Date(`2000-01-01T${citaForm.horaFin}`);
+      const duracionHoras = (fin - inicio) / (1000 * 60 * 60);
+      const costoTotal = duracionHoras * parseFloat(citaForm.costoPorHora);
+      setCitaForm(prev => ({ ...prev, costoTotal: isNaN(costoTotal) ? 0 : costoTotal }));
+    }
+  }, [citaForm.horaInicio, citaForm.horaFin, citaForm.costoPorHora]);
+
   // useEffect para recalcular costo de terapeuta total cuando cambian horas o costo
   useEffect(() => {
     if (citaForm.horaInicio && citaForm.horaFin && citaForm.costoTerapeuta) {
