@@ -22,12 +22,14 @@ const SistemaGestion = () => {
   const [loadingCitas, setLoadingCitas] = useState(false);
   const [utilidadHistorica, setUtilidadHistorica] = useState([]);
   const [rangoMeses, setRangoMeses] = useState(12); // 6, 12, 24, o 'todo'
+  const [ordenClientes, setOrdenClientes] = useState('original'); // 'original' o 'alfabetico'
+  const [ordenTerapeutas, setOrdenTerapeutas] = useState('original'); // 'original' o 'alfabetico'
 
   const [modals, setModals] = useState({ horas: false, terapeuta: false, cliente: false, pago: false, cita: false });
   const [editingId, setEditingId] = useState(null);
   
   const [horasForm, setHorasForm] = useState({ terapeutaId: '', clienteId: '', fecha: '', horas: '', codigoCliente: '', notas: '' });
-  const [terapeutaForm, setTerapeutaForm] = useState({ nombre: '', especialidad: '', telefono: '', email: '', costosPorServicio: {} });
+  const [terapeutaForm, setTerapeutaForm] = useState({ nombre: '', especialidad: '', telefono: '', email: '', costosPorServicio: {}, costosPorCliente: {} });
   const [clienteForm, setClienteForm] = useState({ nombre: '', email: '', telefono: '', empresa: '', codigo: '', preciosPersonalizados: {} });
   const [pagoForm, setPagoForm] = useState({ clienteId: '', monto: '', concepto: '', metodo: 'efectivo', fecha: '' });
   const [citaForm, setCitaForm] = useState({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0, tipoTerapia: 'Sesión de ABA estándar', costoTerapeuta: 0, costoTerapeutaTotal: 0 });
@@ -61,7 +63,8 @@ const SistemaGestion = () => {
   const [mesReporte, setMesReporte] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [reporteGenerado, setReporteGenerado] = useState(null);
   const [terapeutaReporte, setTerapeutaReporte] = useState('todas'); // Nuevo: filtro de terapeuta
-  
+  const [clienteReporte, setClienteReporte] = useState('todos'); // Nuevo: filtro de cliente
+
   // Estados para gestión de precios por cliente
   const [pestanaCliente, setPestanaCliente] = useState('datos'); // 'datos' o 'precios'
   const [nuevoPrecio, setNuevoPrecio] = useState({ tipoTerapia: 'Sesión de ABA estándar', precio: 450 });
@@ -69,6 +72,7 @@ const SistemaGestion = () => {
   // Estados para gestión de costos por terapeuta
   const [pestanaTerapeuta, setPestanaTerapeuta] = useState('datos'); // 'datos' o 'costos'
   const [nuevoCostoTerapeuta, setNuevoCostoTerapeuta] = useState({ tipoTerapia: 'Sesión de ABA estándar', costo: 200 });
+  const [nuevoCostoPorCliente, setNuevoCostoPorCliente] = useState({ clienteId: '', costo: 200 });
 
   const diasSemanaOptions = [
     { value: 1, label: 'Lunes' }, { value: 2, label: 'Martes' }, { value: 3, label: 'Miércoles' },
@@ -287,13 +291,31 @@ const SistemaGestion = () => {
   }, [clientes, preciosBasePorTerapia]);
 
   // Función para obtener costo de una terapeuta para un tipo de terapia
-  const obtenerCostoTerapeuta = useCallback((nombreTerapeuta, tipoTerapia) => {
+  const obtenerCostoTerapeuta = useCallback((nombreTerapeuta, tipoTerapia, nombreCliente = '') => {
     const terapeuta = terapeutas.find(t => t.nombre === nombreTerapeuta);
     
-    if (terapeuta && terapeuta.costosPorServicio && terapeuta.costosPorServicio[tipoTerapia]) {
+    if (!terapeuta) {
+      return { costo: 0, esPersonalizado: false };
+    }
+    
+    // PRIORIDAD 1: Costo por cliente específico (más específico)
+    if (nombreCliente && terapeuta.costosPorCliente) {
+      const cliente = clientes.find(c => c.nombre === nombreCliente);
+      if (cliente && terapeuta.costosPorCliente[cliente.id]) {
+        return {
+          costo: terapeuta.costosPorCliente[cliente.id],
+          esPersonalizado: true,
+          tipo: 'cliente'
+        };
+      }
+    }
+    
+    // PRIORIDAD 2: Costo por servicio
+    if (terapeuta.costosPorServicio && terapeuta.costosPorServicio[tipoTerapia]) {
       return {
         costo: terapeuta.costosPorServicio[tipoTerapia],
-        esPersonalizado: true
+        esPersonalizado: true,
+        tipo: 'servicio'
       };
     }
     
@@ -302,7 +324,7 @@ const SistemaGestion = () => {
       costo: 0,
       esPersonalizado: false
     };
-  }, [terapeutas]);
+  }, [terapeutas, clientes]);
 
   // useEffect para autocompletar precio cuando cambia el cliente o tipo de terapia
   useEffect(() => {
@@ -337,10 +359,10 @@ const SistemaGestion = () => {
     }
   }, [citaForm.horaInicio, citaForm.horaFin, citaForm.costoTerapeuta]);
 
-  // useEffect para autocompletar costo de terapeuta cuando cambia la terapeuta o tipo de terapia
+  // useEffect para autocompletar costo de terapeuta cuando cambia la terapeuta, tipo de terapia o cliente
   useEffect(() => {
     if (citaForm.terapeuta && citaForm.tipoTerapia) {
-      const costoInfo = obtenerCostoTerapeuta(citaForm.terapeuta, citaForm.tipoTerapia);
+      const costoInfo = obtenerCostoTerapeuta(citaForm.terapeuta, citaForm.tipoTerapia, citaForm.cliente);
       if (costoInfo.esPersonalizado) {
         setCitaForm(prev => ({
           ...prev,
@@ -348,7 +370,7 @@ const SistemaGestion = () => {
         }));
       }
     }
-  }, [citaForm.terapeuta, citaForm.tipoTerapia, terapeutas, obtenerCostoTerapeuta]);
+  }, [citaForm.terapeuta, citaForm.tipoTerapia, citaForm.cliente, terapeutas, clientes, obtenerCostoTerapeuta]);
 
   // Función para calcular contribución de ganancias por terapeuta
   const calcularContribucionPorTerapeuta = () => {
@@ -567,6 +589,34 @@ const SistemaGestion = () => {
     setClientes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
   };
 
+  // Función para ordenar clientes
+  const ordenarClientes = (orden) => {
+    setOrdenClientes(orden);
+    if (orden === 'alfabetico') {
+      const clientesOrdenados = [...clientes].sort((a, b) => 
+        a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
+      );
+      setClientes(clientesOrdenados);
+    } else {
+      // Recargar del servidor para orden original
+      cargarClientes();
+    }
+  };
+
+  // Función para ordenar terapeutas
+  const ordenarTerapeutas = (orden) => {
+    setOrdenTerapeutas(orden);
+    if (orden === 'alfabetico') {
+      const terapeutasOrdenados = [...terapeutas].sort((a, b) => 
+        a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
+      );
+      setTerapeutas(terapeutasOrdenados);
+    } else {
+      // Recargar del servidor para orden original
+      cargarTerapeutas();
+    }
+  };
+
   const cargarHorasTrabajadas = async () => {
     try {
       const q = currentUser?.rol === 'terapeuta' 
@@ -622,19 +672,25 @@ const SistemaGestion = () => {
 
   // Función para generar reporte mensual
   const generarReporteMensual = () => {
-    const [year, month] = mesReporte.split('-');
-    const citasDelMes = citas.filter(cita => {
-      if (cita.estado !== 'completada') return false;
-      const fechaCita = new Date(cita.fecha);
-      const cumpleMes = fechaCita.getFullYear() === parseInt(year) && 
-             fechaCita.getMonth() === parseInt(month) - 1;
-      
-      // Filtrar por terapeuta si no es "todas"
-      if (terapeutaReporte !== 'todas') {
-        return cumpleMes && cita.terapeuta === terapeutaReporte;
-      }
-      return cumpleMes;
-    });
+  const [year, month] = mesReporte.split('-');
+  const citasDelMes = citas.filter(cita => {
+    if (cita.estado !== 'completada') return false;
+    const fechaCita = new Date(cita.fecha);
+    const cumpleMes = fechaCita.getFullYear() === parseInt(year) && 
+           fechaCita.getMonth() === parseInt(month) - 1;
+    
+    // Filtrar por terapeuta si no es "todas"
+    if (terapeutaReporte !== 'todas' && cita.terapeuta !== terapeutaReporte) {
+      return false;
+    }
+    
+    // Filtrar por cliente si no es "todos"
+    if (clienteReporte !== 'todos' && cita.cliente !== clienteReporte) {
+      return false;
+    }
+    
+    return cumpleMes;
+  });
 
     // Agrupar por cliente para generar recibos individuales
     const reportePorCliente = {};
@@ -1195,6 +1251,38 @@ const SistemaGestion = () => {
     setTerapeutaForm({
       ...terapeutaForm,
       costosPorServicio: costosActualizados
+    });
+  };
+
+  // Función para agregar costo personalizado por cliente
+  const agregarCostoPorCliente = () => {
+    if (!nuevoCostoPorCliente.clienteId || !nuevoCostoPorCliente.costo) {
+      alert('Por favor completa todos los campos');
+      return;
+    }
+
+    const costosActualizados = {
+      ...terapeutaForm.costosPorCliente,
+      [nuevoCostoPorCliente.clienteId]: parseFloat(nuevoCostoPorCliente.costo)
+    };
+
+    setTerapeutaForm({
+      ...terapeutaForm,
+      costosPorCliente: costosActualizados
+    });
+
+    // Resetear el formulario
+    setNuevoCostoPorCliente({ clienteId: '', costo: 200 });
+  };
+
+  // Función para eliminar costo personalizado por cliente
+  const eliminarCostoPorCliente = (clienteId) => {
+    const costosActualizados = { ...terapeutaForm.costosPorCliente };
+    delete costosActualizados[clienteId];
+    
+    setTerapeutaForm({
+      ...terapeutaForm,
+      costosPorCliente: costosActualizados
     });
   };
 
@@ -2144,6 +2232,22 @@ const SistemaGestion = () => {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selecciona cliente
+                  </label>
+                  <select
+                    value={clienteReporte}
+                    onChange={(e) => setClienteReporte(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="todos">Todos los clientes</option>
+                    {/* Obtener lista única de clientes de las citas */}
+                    {Array.from(new Set(citas.map(c => c.cliente))).sort().map((cliente, idx) => (
+                      <option key={idx} value={cliente}>{cliente}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <button
                 onClick={generarReporteMensual}
@@ -2205,6 +2309,7 @@ const SistemaGestion = () => {
                             <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Precio de la sesión</th>
                             <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">IVA</th>
                             <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Total</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase bg-orange-50">Costo Terapeuta</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -2224,6 +2329,7 @@ const SistemaGestion = () => {
                               <td className="px-4 py-3 text-sm text-right text-gray-900">{cita.precio.toFixed(2)}</td>
                               <td className="px-4 py-3 text-sm text-right text-gray-900">{cita.iva.toFixed(2)}</td>
                               <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{cita.total.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-sm text-right font-semibold text-orange-600 bg-orange-50">${(cita.costoTerapeuta || 0).toFixed(2)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2246,6 +2352,9 @@ const SistemaGestion = () => {
                             <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">
                               Suma {Math.round(recibo.totalGeneral.toFixed(2))}
                             </td>
+                            <td className="px-4 py-3 text-sm text-right font-bold text-orange-600 bg-orange-50">
+                              Suma ${Math.round(recibo.totalCostoTerapeutas || 0).toLocaleString()}
+                            </td>
                           </tr>
                         </tfoot>
                       </table>
@@ -2254,7 +2363,7 @@ const SistemaGestion = () => {
                 ))}
 
                 {/* Resumen General */}
-                {reporteGenerado.recibos.length > 1 && (
+                {reporteGenerado.recibos.length > 0 && (
                   <div className="bg-blue-50 rounded-lg shadow p-6">
                     <h3 className="text-lg font-bold text-gray-800 mb-4">Resumen General</h3>
                     <div className="grid grid-cols-2 gap-6">
@@ -2341,7 +2450,7 @@ const SistemaGestion = () => {
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Configurar Horarios</h3>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <select className="px-4 py-2 border border-gray-300 rounded-lg" value={nuevoHorario.terapeuta} onChange={(e) => setNuevoHorario({...nuevoHorario, terapeuta: e.target.value})}>
                       <option value="">Seleccionar terapeuta</option>
                       {terapeutas.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
@@ -2773,7 +2882,42 @@ const SistemaGestion = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Terapeutas</h2>
-              <button onClick={() => openModal('terapeuta')} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"><Plus className="w-4 h-4 mr-2" />Nuevo</button>
+              <div className="flex gap-3 items-center">
+                {/* Botones de ordenamiento */}
+                <div className="flex gap-2 mr-2">
+                  <button
+                    onClick={() => ordenarTerapeutas('original')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      ordenTerapeutas === 'original'
+                        ? 'bg-gray-700 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                    title="Orden original"
+                  >
+                    📋 Original
+                  </button>
+                  <button
+                    onClick={() => ordenarTerapeutas('alfabetico')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      ordenTerapeutas === 'alfabetico'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                    title="Orden alfabético"
+                  >
+                    🔤 A-Z
+                  </button>
+                </div>
+                
+                {/* Botón nuevo */}
+                <button 
+                  onClick={() => openModal('terapeuta')} 
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nuevo
+                </button>
+              </div>
             </div>
             <div className="bg-white shadow rounded-md"><ul className="divide-y">{terapeutas.map(t => (<li key={t.id} className="px-6 py-4"><div className="flex justify-between items-center"><div><p className="font-medium">{t.nombre}</p><p className="text-sm text-gray-600">{t.especialidad}</p></div><div className="flex gap-2"><button onClick={() => openModal('terapeuta', t)} className="text-blue-600 hover:text-blue-800"><Edit className="w-5 h-5" /></button><button onClick={() => eliminarTerapeuta(t.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-5 h-5" /></button></div></div></li>))}</ul></div>
           </div>
@@ -2783,7 +2927,34 @@ const SistemaGestion = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Clientes</h2>
-              <div className="flex gap-3">
+              <div className="flex gap-3 items-center">
+                {/* Botones de ordenamiento */}
+                <div className="flex gap-2 mr-2">
+                  <button
+                    onClick={() => ordenarClientes('original')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      ordenClientes === 'original'
+                        ? 'bg-gray-700 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                    title="Orden original"
+                  >
+                    📋 Original
+                  </button>
+                  <button
+                    onClick={() => ordenarClientes('alfabetico')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      ordenClientes === 'alfabetico'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                    title="Orden alfabético"
+                  >
+                    🔤 A-Z
+                  </button>
+                </div>
+                
+                {/* Botones de acción */}
                 <button 
                   onClick={importarPreciosAutomaticamente} 
                   className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center"
@@ -3177,7 +3348,7 @@ const SistemaGestion = () => {
                 ) : (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                     <p className="text-sm text-yellow-800">
-                      ⚠️ Esta terapeuta no tiene costos configurados. Los costos deberán ingresarse manualmente en cada cita.
+                      Esta terapeuta no tiene costos configurados. Los costos deberán ingresarse manualmente en cada cita.
                     </p>
                   </div>
                 )}
@@ -3222,6 +3393,97 @@ const SistemaGestion = () => {
                     <Plus size={16} />
                     Agregar Costo
                   </button>
+                </div>
+
+                {/* Sección de Costos por Cliente */}
+                <div className="mt-6 pt-6 border-t">
+                  <h4 className="text-md font-medium text-gray-700 mb-3">💰 Costos Personalizados por Cliente</h4>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Define cuánto le pagas a esta terapeuta por cada cliente específico. Estos costos tienen prioridad sobre los costos por servicio.
+                  </p>
+                  
+                  {/* Tabla de costos por cliente existentes */}
+                  {terapeutaForm.costosPorCliente && Object.keys(terapeutaForm.costosPorCliente).length > 0 ? (
+                    <div className="mb-4 border rounded-lg overflow-hidden">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Costo por Hora</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {Object.entries(terapeutaForm.costosPorCliente).map(([clienteId, costo]) => {
+                            const cliente = clientes.find(c => c.id === clienteId);
+                            return (
+                              <tr key={clienteId}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {cliente ? cliente.nombre : 'Cliente no encontrado'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  ${costo}/hora
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                  <button
+                                    onClick={() => eliminarCostoPorCliente(clienteId)}
+                                    className="text-red-600 hover:text-red-800"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-blue-800">
+                        💡 No hay costos personalizados por cliente. El sistema usará los costos por servicio.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Formulario para agregar nuevo costo por cliente */}
+                  <div className="border-t pt-4">
+                    <h4 className="text-md font-medium text-gray-700 mb-3">Agregar Costo por Cliente</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
+                        <select
+                          value={nuevoCostoPorCliente.clienteId}
+                          onChange={(e) => setNuevoCostoPorCliente({ ...nuevoCostoPorCliente, clienteId: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Seleccionar cliente...</option>
+                          {clientes.map(cliente => (
+                            <option key={cliente.id} value={cliente.id}>
+                              {cliente.nombre}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Costo por Hora ($)</label>
+                        <input
+                          type="number"
+                          value={nuevoCostoPorCliente.costo}
+                          onChange={(e) => setNuevoCostoPorCliente({ ...nuevoCostoPorCliente, costo: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="200"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={agregarCostoPorCliente}
+                      className="mt-3 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                    >
+                      <Plus size={16} />
+                      Agregar Costo por Cliente
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
