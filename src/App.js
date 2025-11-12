@@ -2564,6 +2564,14 @@ const SistemaGestion = () => {
               {<div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold">Citas Programadas</h2>
                 <div className="flex gap-2">
+                  {/* Botón de Nueva Cita Manual */}
+                    <button
+                      onClick={() => openModal('cita')}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    >
+                      <Plus size={18} />
+                      Nueva Cita
+                    </button>
                   {/* Botón de Importar Word */}
                   <label className={`px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-all ${
                     importandoWord 
