@@ -1,29 +1,72 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
-import { db, auth } from './firebase';
+import { db } from './firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, writeBatch, query, orderBy, where, getDoc, setDoc } from 'firebase/firestore';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import mammoth from 'mammoth';
+import { useAuth } from './hooks/useAuth';  
+import { useData } from './hooks/useData';   
+import { useReportes } from './hooks/useReportes';  // ← NUEVO IMPORT
 
 const SistemaGestion = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-  const [loginError, setLoginError] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Hook de autenticación
+  const {
+    isLoggedIn,
+    currentUser,
+    loading,
+    loginError,
+    loginForm,
+    setLoginForm,
+    setLoginError,
+    handleLogin,
+    handleGoogleLogin,
+    handleLogout,
+    hasPermission
+  } = useAuth();
+ 
+  // Hook de datos - NUEVO
+  const {
+    clientes,
+    terapeutas,
+    horasTrabajadas,
+    pagos,
+    citas,
+    utilidadHistorica,
+    loadingCitas,
+    loadingData,
+    ordenClientes,
+    ordenTerapeutas,
+    setClientes,
+    setTerapeutas,
+    setCitas,
+    cargarCitas,
+    cargarTerapeutas,
+    cargarClientes,
+    cargarHorasTrabajadas,
+    cargarPagos,
+    cargarUtilidadHistorica,
+    cargarTodosLosDatos,
+    guardarHorasTrabajadas,
+    guardarTerapeuta,
+    guardarCliente,
+    guardarPago,
+    guardarCita,
+    eliminarTerapeuta,
+    eliminarCliente,
+    eliminarPago,
+    eliminarCita,
+    ordenarClientes,
+    ordenarTerapeutas,
+    getNombre,
+    getTotales
+  } = useData(currentUser, isLoggedIn);
+
   
-  const [clientes, setClientes] = useState([]);
-  const [terapeutas, setTerapeutas] = useState([]);
-  const [horasTrabajadas, setHorasTrabajadas] = useState([]);
-  const [pagos, setPagos] = useState([]);
-  const [citas, setCitas] = useState([]);
-  const [loadingCitas, setLoadingCitas] = useState(false);
-  const [utilidadHistorica, setUtilidadHistorica] = useState([]);
+  const [activeTab, setActiveTab] = useState('dashboard');  
+
   const [rangoMeses, setRangoMeses] = useState(12); // 6, 12, 24, o 'todo'
-  const [ordenClientes, setOrdenClientes] = useState('original'); // 'original' o 'alfabetico'
-  const [ordenTerapeutas, setOrdenTerapeutas] = useState('original'); // 'original' o 'alfabetico'
+  const [loadingBatch, setLoadingBatch] = useState(false); // ← AGREGAR ESTA LÍNEA
+
 
   const [modals, setModals] = useState({ horas: false, terapeuta: false, cliente: false, pago: false, cita: false });
   const [editingId, setEditingId] = useState(null);
@@ -59,13 +102,6 @@ const SistemaGestion = () => {
   const [dragOverDay, setDragOverDay] = useState(null);
   const [importandoWord, setImportandoWord] = useState(false);
 
-  // Estados para reportes
-  const [mesReporte, setMesReporte] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const [reporteGenerado, setReporteGenerado] = useState(null);
-  const [terapeutaReporte, setTerapeutaReporte] = useState('todas'); // Nuevo: filtro de terapeuta
-  const [clienteReporte, setClienteReporte] = useState('todos'); // Nuevo: filtro de cliente
-  const [ordenColumna, setOrdenColumna] = useState({ campo: null, direccion: 'asc' });
-
   // Estados para gestión de precios por cliente
   const [pestanaCliente, setPestanaCliente] = useState('datos'); // 'datos' o 'precios'
   const [nuevoPrecio, setNuevoPrecio] = useState({ tipoTerapia: 'Sesión de ABA estándar', precio: 450 });
@@ -84,6 +120,23 @@ const SistemaGestion = () => {
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
   ];
+
+    // // Hook de reportes - NUEVO
+  const {
+    mesReporte,
+    setMesReporte,
+    reporteGenerado,
+    setReporteGenerado,
+    terapeutaReporte,
+    setTerapeutaReporte,
+    clienteReporte,
+    setClienteReporte,
+    ordenColumna,
+    generarReporteMensual,
+    ordenarCitasReporte,
+    renderIndicadorOrden,
+    descargarReporte
+  } = useReportes(citas, clientes, meses);
 
   const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
@@ -210,68 +263,12 @@ const SistemaGestion = () => {
     }
   };
 
+  // Efecto para establecer la pestaña activa según el rol del usuario
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const userDocRef = doc(db, 'usuarios', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setCurrentUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              nombre: userData.nombre,
-              rol: userData.rol
-            });
-            setIsLoggedIn(true);
-            setActiveTab(userData.rol === 'terapeuta' ? 'horas' : 'dashboard');
-          } else {
-            const newUserData = {
-              nombre: firebaseUser.displayName || firebaseUser.email.split('@')[0],
-              email: firebaseUser.email,
-              rol: 'terapeuta',
-              createdAt: new Date().toISOString()
-            };
-            
-            await setDoc(userDocRef, newUserData);
-            
-            setCurrentUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              nombre: newUserData.nombre,
-              rol: newUserData.rol
-            });
-            setIsLoggedIn(true);
-            setActiveTab('horas');
-          }
-        } catch (error) {
-          console.error('Error al cargar datos del usuario:', error);
-          setLoginError('Error al cargar datos del usuario');
-          await signOut(auth);
-        }
-      } else {
-        setCurrentUser(null);
-        setIsLoggedIn(false);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (isLoggedIn) {
-      cargarCitas();
-      cargarTerapeutas();
-      cargarClientes();
-      cargarHorasTrabajadas();
-      cargarPagos();
-      cargarUtilidadHistorica();
+    if (isLoggedIn && currentUser) {
+      setActiveTab(currentUser.rol === 'terapeuta' ? 'horas' : 'dashboard');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn]);
+  }, [isLoggedIn, currentUser]);
 
     // Función para obtener precio de un cliente para un tipo de terapia
   const obtenerPrecioCliente = useCallback((nombreCliente, tipoTerapia) => {
@@ -442,20 +439,6 @@ const SistemaGestion = () => {
     }
   };
 
-  // Función para cargar utilidad histórica desde Firebase
-  const cargarUtilidadHistorica = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'utilidadHistorica'));
-      const datos = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setUtilidadHistorica(datos);
-    } catch (error) {
-      console.error('Error al cargar utilidad histórica:', error);
-    }
-  };
-
   // Función para calcular evolución mensual de ganancias (histórica + actual)
   const calcularEvolucionMensual = () => {
     const mesesMap = {
@@ -569,72 +552,6 @@ const SistemaGestion = () => {
     };
   };
 
-  const cargarCitas = async () => {
-    try {
-      const q = query(collection(db, 'citas'), orderBy('fecha', 'asc'));
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setCitas(data);
-    } catch (error) {
-      console.error('Error al cargar citas:', error);
-    }
-  };
-
-  const cargarTerapeutas = async () => {
-    const snapshot = await getDocs(collection(db, 'terapeutas'));
-    setTerapeutas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-  };
-
-  const cargarClientes = async () => {
-    const snapshot = await getDocs(collection(db, 'clientes'));
-    setClientes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-  };
-
-  // Función para ordenar clientes
-  const ordenarClientes = (orden) => {
-    setOrdenClientes(orden);
-    if (orden === 'alfabetico') {
-      const clientesOrdenados = [...clientes].sort((a, b) => 
-        a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
-      );
-      setClientes(clientesOrdenados);
-    } else {
-      // Recargar del servidor para orden original
-      cargarClientes();
-    }
-  };
-
-  // Función para ordenar terapeutas
-  const ordenarTerapeutas = (orden) => {
-    setOrdenTerapeutas(orden);
-    if (orden === 'alfabetico') {
-      const terapeutasOrdenados = [...terapeutas].sort((a, b) => 
-        a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
-      );
-      setTerapeutas(terapeutasOrdenados);
-    } else {
-      // Recargar del servidor para orden original
-      cargarTerapeutas();
-    }
-  };
-
-  const cargarHorasTrabajadas = async () => {
-    try {
-      const q = currentUser?.rol === 'terapeuta' 
-        ? query(collection(db, 'horasTrabajadas'), where('terapeutaId', '==', currentUser.uid), orderBy('fecha', 'desc'))
-        : query(collection(db, 'horasTrabajadas'), orderBy('fecha', 'desc'));
-      const snapshot = await getDocs(q);
-      setHorasTrabajadas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } catch (error) {
-      console.error('Error:', error);
-    }
-  };
-
-  const cargarPagos = async () => {
-    const snapshot = await getDocs(query(collection(db, 'pagos'), orderBy('fecha', 'desc')));
-    setPagos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-  };
-
   // Función para calcular horas desde citas completadas
   const calcularHorasDesdeCitas = () => {
     const citasCompletadas = citas.filter(cita => cita.estado === 'completada');
@@ -669,221 +586,6 @@ const SistemaGestion = () => {
     return Object.values(horasPorTerapeutaFecha).sort((a, b) => 
       new Date(b.fecha) - new Date(a.fecha)
     );
-  };
-
-  // Función para generar reporte mensual
-  const generarReporteMensual = () => {
-  const [year, month] = mesReporte.split('-');
-  const citasDelMes = citas.filter(cita => {
-    if (cita.estado !== 'completada') return false;
-    const fechaCita = new Date(cita.fecha);
-    const cumpleMes = fechaCita.getFullYear() === parseInt(year) && 
-           fechaCita.getMonth() === parseInt(month) - 1;
-    
-    // Filtrar por terapeuta si no es "todas"
-    if (terapeutaReporte !== 'todas' && cita.terapeuta !== terapeutaReporte) {
-      return false;
-    }
-    
-    // Filtrar por cliente si no es "todos"
-    if (clienteReporte !== 'todos' && cita.cliente !== clienteReporte) {
-      return false;
-    }
-    
-    return cumpleMes;
-  });
-
-    // Agrupar por cliente para generar recibos individuales
-    const reportePorCliente = {};
-    
-    citasDelMes.forEach(cita => {
-      if (!reportePorCliente[cita.cliente]) {
-        // Buscar código del cliente
-        const clienteObj = clientes.find(c => c.nombre === cita.cliente);
-        reportePorCliente[cita.cliente] = {
-          nombre: cita.cliente,
-          codigo: clienteObj?.codigo || 'N/A',
-          citas: [],
-          totalHoras: 0,
-          totalCitas: 0
-        };
-      }
-      
-      const inicio = new Date(`2000-01-01T${cita.horaInicio}`);
-      const fin = new Date(`2000-01-01T${cita.horaFin}`);
-      const duracionHoras = (fin - inicio) / (1000 * 60 * 60);
-      
-      // Usar el precio real de la cita
-      const costoReal = cita.costoTotal || (cita.costoPorHora * duracionHoras) || 0;
-      const iva = costoReal * 0.16;
-      const totalConIva = costoReal + iva;
-
-      reportePorCliente[cita.cliente].citas.push({
-        fecha: cita.fecha,
-        terapeuta: cita.terapeuta,
-        tipoTerapia: cita.tipoTerapia || 'N/A',
-        horaInicio: cita.horaInicio,
-        horaFin: cita.horaFin,
-        duracion: duracionHoras,
-        precio: costoReal,
-        iva: iva,
-        total: totalConIva,
-        costoTerapeuta: cita.costoTerapeutaTotal || 0
-      });
-      
-      reportePorCliente[cita.cliente].totalHoras += duracionHoras;
-      reportePorCliente[cita.cliente].totalCitas += 1;
-    });
-
-    // Convertir a array y ordenar citas por fecha
-    const recibos = Object.values(reportePorCliente).map(cliente => {
-      const citasOrdenadas = cliente.citas.sort((a, b) => 
-        new Date(a.fecha) - new Date(b.fecha)
-      );
-      
-      const totalPrecio = citasOrdenadas.reduce((sum, c) => sum + c.precio, 0);
-      const totalIva = citasOrdenadas.reduce((sum, c) => sum + c.iva, 0);
-      const totalGeneral = citasOrdenadas.reduce((sum, c) => sum + c.total, 0);
-      const totalCostoTerapeutas = citasOrdenadas.reduce((sum, c) => sum + (c.costoTerapeuta || 0), 0);
-      const gananciaTotal = totalGeneral - totalCostoTerapeutas;
-      const margenPorcentaje = totalGeneral > 0 ? ((gananciaTotal / totalGeneral) * 100) : 0;
-      
-      return {
-        ...cliente,
-        citas: citasOrdenadas,
-        totalPrecio,
-        totalIva,
-        totalGeneral,
-        totalCostoTerapeutas,
-        gananciaTotal,
-        margenPorcentaje
-      };
-    });
-
-    setReporteGenerado({
-      mes: mesReporte,
-      nombreMes: `${meses[parseInt(month) - 1]} ${year}`,
-      recibos: recibos,
-      terapeutaFiltrada: terapeutaReporte,
-      totalCitasGeneral: citasDelMes.length,
-      totalHorasGeneral: recibos.reduce((sum, r) => sum + r.totalHoras, 0),
-      totalIngresos: recibos.reduce((sum, r) => sum + r.totalGeneral, 0)
-    });
-  };
-
-  // Función para ordenar las citas en los reportes
-  const ordenarCitasReporte = (citas, campo) => {
-    if (!citas || citas.length === 0) return citas;
-    
-    // Cambiar dirección si se hace clic en la misma columna
-    const nuevaDireccion = ordenColumna.campo === campo && ordenColumna.direccion === 'asc' ? 'desc' : 'asc';
-    setOrdenColumna({ campo, direccion: nuevaDireccion });
-    
-    const citasOrdenadas = [...citas].sort((a, b) => {
-      let valorA, valorB;
-      
-      switch(campo) {
-        case 'fecha':
-          valorA = new Date(a.fecha);
-          valorB = new Date(b.fecha);
-          break;
-        case 'duracion':
-          valorA = a.duracion;
-          valorB = b.duracion;
-          break;
-        case 'tipoTerapia':
-          valorA = a.tipoTerapia.toLowerCase();
-          valorB = b.tipoTerapia.toLowerCase();
-          return nuevaDireccion === 'asc' 
-            ? valorA.localeCompare(valorB)
-            : valorB.localeCompare(valorA);
-        case 'terapeuta':
-          valorA = a.terapeuta.toLowerCase();
-          valorB = b.terapeuta.toLowerCase();
-          return nuevaDireccion === 'asc' 
-            ? valorA.localeCompare(valorB)
-            : valorB.localeCompare(valorA);
-        case 'precio':
-          valorA = a.precio;
-          valorB = b.precio;
-          break;
-        case 'iva':
-          valorA = a.iva;
-          valorB = b.iva;
-          break;
-        case 'total':
-          valorA = a.total;
-          valorB = b.total;
-          break;
-        case 'costoTerapeuta':
-          valorA = a.costoTerapeuta || 0;
-          valorB = b.costoTerapeuta || 0;
-          break;
-        default:
-          return 0;
-      }
-      
-      if (nuevaDireccion === 'asc') {
-        return valorA > valorB ? 1 : valorA < valorB ? -1 : 0;
-      } else {
-        return valorA < valorB ? 1 : valorA > valorB ? -1 : 0;
-      }
-    });
-    
-    return citasOrdenadas;
-  };
-
-  // Función para renderizar el indicador de ordenamiento
-  const renderIndicadorOrden = (campo) => {
-    if (ordenColumna.campo !== campo) {
-      return <span className="text-gray-400 ml-1">⇅</span>;
-    }
-    return ordenColumna.direccion === 'asc' 
-      ? <span className="text-blue-600 ml-1">↑</span>
-      : <span className="text-blue-600 ml-1">↓</span>;
-  };
-
-  // Función para descargar reporte como texto
-  const descargarReporte = () => {
-    if (!reporteGenerado) return;
-
-    let contenido = `REPORTE DE HORAS TRABAJADAS\n`;
-    contenido += `Período: ${reporteGenerado.nombreMes}\n`;
-    contenido += `Generado: ${new Date().toLocaleDateString()}\n`;
-    contenido += `${'='.repeat(80)}\n\n`;
-
-    reporteGenerado.terapeutas.forEach(terapeuta => {
-      contenido += `TERAPEUTA: ${terapeuta.nombre}\n`;
-      contenido += `${'-'.repeat(80)}\n`;
-      contenido += `Total de Horas: ${terapeuta.totalHoras.toFixed(2)}h\n`;
-      contenido += `Total de Citas: ${terapeuta.totalCitas}\n`;
-      contenido += `Clientes Atendidos: ${terapeuta.totalClientes}\n`;
-      contenido += `Promedio Diario: ${terapeuta.promedioDiario.toFixed(2)}h\n\n`;
-      
-      contenido += `Desglose por Día:\n`;
-      terapeuta.detallesPorDia.forEach(dia => {
-        contenido += `  ${dia.fecha} - ${dia.horas.toFixed(2)}h (${dia.citas.length} citas)\n`;
-        dia.citas.forEach(cita => {
-          contenido += `    • ${cita.cliente}: ${cita.horaInicio} - ${cita.horaFin} (${cita.duracion.toFixed(2)}h)\n`;
-        });
-      });
-      contenido += `\n${'='.repeat(80)}\n\n`;
-    });
-
-    contenido += `RESUMEN GENERAL\n`;
-    contenido += `${'-'.repeat(80)}\n`;
-    contenido += `Total de Horas (Todos): ${reporteGenerado.totalGeneral.toFixed(2)}h\n`;
-    contenido += `Total de Citas (Todas): ${reporteGenerado.totalCitasGeneral}\n`;
-
-    const blob = new Blob([contenido], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reporte_horas_${mesReporte}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   const getDaysInMonth = (date) => {
@@ -1152,50 +854,6 @@ const SistemaGestion = () => {
     return count;
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoginError('');
-    try {
-      await signInWithEmailAndPassword(auth, loginForm.email, loginForm.password);
-    } catch (error) {
-      setLoginError('Credenciales incorrectas');
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      const userDocRef = doc(db, 'usuarios', user.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      if (!userDoc.exists()) {
-        await setDoc(userDocRef, {
-          nombre: user.displayName,
-          email: user.email,
-          rol: 'terapeuta',
-          createdAt: new Date().toISOString()
-        });
-      }
-    } catch (error) {
-      console.error('Error en login con Google:', error);
-      setLoginError('Error al iniciar sesión con Google');
-    }
-  };
-
-  const handleLogout = () => {
-    signOut(auth);
-  };
-
-  const hasPermission = (permission) => {
-    if (!currentUser) return false;
-    if (currentUser.rol === 'admin') return true;
-    if (currentUser.rol === 'terapeuta') return ['horas', 'citas', 'bloques', 'reportes'].includes(permission);
-    return false;
-  };
-
   const openModal = (type, item = null) => {
     setEditingId(item?.id || null);
     setModals({ ...modals, [type]: true });
@@ -1425,95 +1083,41 @@ const SistemaGestion = () => {
   };
 
   const save = async (type) => {
+    let result;
+    
     try {
-      if (type === 'horas') {
-        const data = {
-          ...horasForm,
-          terapeutaId: currentUser.rol === 'admin' ? horasForm.terapeutaId : currentUser.uid,
-          horas: parseFloat(horasForm.horas)
-        };
-        if (editingId) {
-          await updateDoc(doc(db, 'horasTrabajadas', editingId), data);
-        } else {
-          await addDoc(collection(db, 'horasTrabajadas'), data);
-        }
-        cargarHorasTrabajadas();
-      } else if (type === 'terapeuta') {
-        if (editingId) {
-          await updateDoc(doc(db, 'terapeutas', editingId), terapeutaForm);
-        } else {
-          await addDoc(collection(db, 'terapeutas'), terapeutaForm);
-        }
-        cargarTerapeutas();
-      } else if (type === 'cliente') {
-        if (editingId) {
-          await updateDoc(doc(db, 'clientes', editingId), clienteForm);
-        } else {
-          await addDoc(collection(db, 'clientes'), clienteForm);
-        }
-        cargarClientes();
-      } else if (type === 'pago') {
-        const data = { ...pagoForm, monto: parseFloat(pagoForm.monto) };
-        if (editingId) {
-          await updateDoc(doc(db, 'pagos', editingId), data);
-        } else {
-          await addDoc(collection(db, 'pagos'), data);
-        }
-        cargarPagos();
-      } else if (type === 'cita') {
-        if (editingId) {
-          await updateDoc(doc(db, 'citas', editingId), citaForm);
-          alert('✅ Cita actualizada correctamente');
-        } else {
-          await addDoc(collection(db, 'citas'), citaForm);
-          alert('✅ Cita creada correctamente');
-        }
-        cargarCitas();
+      switch(type) {
+        case 'horas':
+          result = await guardarHorasTrabajadas(horasForm, editingId);
+          break;
+        case 'terapeuta':
+          result = await guardarTerapeuta(terapeutaForm, editingId);
+          break;
+        case 'cliente':
+          result = await guardarCliente(clienteForm, editingId);
+          break;
+        case 'pago':
+          result = await guardarPago(pagoForm, editingId);
+          break;
+        case 'cita':
+          result = await guardarCita(citaForm, editingId);
+          if (result.success) {
+            alert(result.isEdit ? '✅ Cita actualizada correctamente' : '✅ Cita creada correctamente');
+          }
+          break;
+        default:
+          break;
       }
-      closeModal(type);
+      
+      if (result.success) {
+        closeModal(type);
+      } else if (!result.cancelled) {
+        alert('Error al guardar');
+      }
     } catch (error) {
       console.error('Error:', error);
       alert('Error al guardar');
     }
-  };
-
-  const eliminarTerapeuta = async (id) => {
-    if (window.confirm('¿Eliminar terapeuta?')) {
-      await deleteDoc(doc(db, 'terapeutas', id));
-      cargarTerapeutas();
-    }
-  };
-
-  const eliminarCliente = async (id) => {
-    if (window.confirm('¿Eliminar cliente?')) {
-      await deleteDoc(doc(db, 'clientes', id));
-      cargarClientes();
-    }
-  };
-
-  const eliminarPago = async (id) => {
-    if (window.confirm('¿Eliminar pago?')) {
-      await deleteDoc(doc(db, 'pagos', id));
-      cargarPagos();
-    }
-  };
-
-  const eliminarCita = async (id) => {
-    if (window.confirm('¿Eliminar esta cita?')) {
-      await deleteDoc(doc(db, 'citas', id));
-      cargarCitas();
-    }
-  };
-
-  const getNombre = (id, lista) => {
-    const item = lista.find(x => x.id === id);
-    return item?.nombre || 'Sin asignar';
-  };
-
-  const getTotales = () => {
-    const totalHoras = horasTrabajadas.reduce((acc, h) => acc + parseFloat(h.horas || 0), 0);
-    const totalPagos = pagos.reduce((acc, p) => acc + parseFloat(p.monto || 0), 0);
-    return { totalHoras, totalPagos };
   };
 
   const agregarHorario = () => {
@@ -1572,7 +1176,7 @@ const SistemaGestion = () => {
   };
 
   const guardarCitas = async () => {
-    setLoadingCitas(true);
+    setLoadingBatch(true); // ← Cambio aquí
     try {
       const batch = writeBatch(db);
       citasGeneradas.forEach(cita => {
@@ -1588,7 +1192,7 @@ const SistemaGestion = () => {
       console.error('Error:', error);
       alert('Error al guardar citas');
     }
-    setLoadingCitas(false);
+    setLoadingBatch(false); // ← Cambio aquí
   };
 
   if (loading) {
