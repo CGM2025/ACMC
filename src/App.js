@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Save, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
+import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, writeBatch, query, orderBy, where, getDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, writeBatch, updateDoc } from 'firebase/firestore';
 import mammoth from 'mammoth';
 import { useAuth } from './hooks/useAuth';  
 import { useData } from './hooks/useData';   
@@ -30,7 +30,6 @@ const SistemaGestion = () => {
     pagos,
     citas,
     utilidadHistorica,
-    loadingCitas,
     ordenClientes,
     ordenTerapeutas,
     cargarCitas,
@@ -2288,8 +2287,16 @@ const SistemaGestion = () => {
                       <p className="text-center text-gray-600 text-sm py-2">... y {citasGeneradas.length - 10} citas más</p>
                     )}
                   </div>
-                  <button onClick={guardarCitas} disabled={loadingCitas} className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition-all flex items-center justify-center gap-2 disabled:bg-gray-400">
-                    <Save size={20} />{loadingCitas ? 'Guardando...' : `Guardar ${citasGeneradas.length} Citas`}
+                  <button 
+                    onClick={guardarCitas}
+                    disabled={loadingBatch}
+                    className={`px-4 py-2 rounded transition-colors ${
+                      loadingBatch 
+                        ? 'bg-gray-400 cursor-not-allowed' 
+                        : 'bg-blue-600 hover:bg-blue-700'
+                    } text-white`}
+                  >
+                    {loadingBatch ? 'Guardando...' : 'Guardar Citas'}
                   </button>
                 </div>
               )}
