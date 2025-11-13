@@ -64,6 +64,7 @@ const SistemaGestion = () => {
   const [reporteGenerado, setReporteGenerado] = useState(null);
   const [terapeutaReporte, setTerapeutaReporte] = useState('todas'); // Nuevo: filtro de terapeuta
   const [clienteReporte, setClienteReporte] = useState('todos'); // Nuevo: filtro de cliente
+  const [ordenColumna, setOrdenColumna] = useState({ campo: null, direccion: 'asc' });
 
   // Estados para gestión de precios por cliente
   const [pestanaCliente, setPestanaCliente] = useState('datos'); // 'datos' o 'precios'
@@ -768,6 +769,78 @@ const SistemaGestion = () => {
       totalHorasGeneral: recibos.reduce((sum, r) => sum + r.totalHoras, 0),
       totalIngresos: recibos.reduce((sum, r) => sum + r.totalGeneral, 0)
     });
+  };
+
+  // Función para ordenar las citas en los reportes
+  const ordenarCitasReporte = (citas, campo) => {
+    if (!citas || citas.length === 0) return citas;
+    
+    // Cambiar dirección si se hace clic en la misma columna
+    const nuevaDireccion = ordenColumna.campo === campo && ordenColumna.direccion === 'asc' ? 'desc' : 'asc';
+    setOrdenColumna({ campo, direccion: nuevaDireccion });
+    
+    const citasOrdenadas = [...citas].sort((a, b) => {
+      let valorA, valorB;
+      
+      switch(campo) {
+        case 'fecha':
+          valorA = new Date(a.fecha);
+          valorB = new Date(b.fecha);
+          break;
+        case 'duracion':
+          valorA = a.duracion;
+          valorB = b.duracion;
+          break;
+        case 'tipoTerapia':
+          valorA = a.tipoTerapia.toLowerCase();
+          valorB = b.tipoTerapia.toLowerCase();
+          return nuevaDireccion === 'asc' 
+            ? valorA.localeCompare(valorB)
+            : valorB.localeCompare(valorA);
+        case 'terapeuta':
+          valorA = a.terapeuta.toLowerCase();
+          valorB = b.terapeuta.toLowerCase();
+          return nuevaDireccion === 'asc' 
+            ? valorA.localeCompare(valorB)
+            : valorB.localeCompare(valorA);
+        case 'precio':
+          valorA = a.precio;
+          valorB = b.precio;
+          break;
+        case 'iva':
+          valorA = a.iva;
+          valorB = b.iva;
+          break;
+        case 'total':
+          valorA = a.total;
+          valorB = b.total;
+          break;
+        case 'costoTerapeuta':
+          valorA = a.costoTerapeuta || 0;
+          valorB = b.costoTerapeuta || 0;
+          break;
+        default:
+          return 0;
+      }
+      
+      if (nuevaDireccion === 'asc') {
+        return valorA > valorB ? 1 : valorA < valorB ? -1 : 0;
+      } else {
+        return valorA < valorB ? 1 : valorA > valorB ? -1 : 0;
+      }
+    });
+    
+    return citasOrdenadas;
+  };
+
+  // Función para renderizar el indicador de ordenamiento
+  const renderIndicadorOrden = (campo) => {
+    if (ordenColumna.campo !== campo) {
+      return <span className="text-gray-400 ml-1">⇅</span>;
+    }
+    return ordenColumna.direccion === 'asc' 
+      ? <span className="text-blue-600 ml-1">↑</span>
+      : <span className="text-blue-600 ml-1">↓</span>;
   };
 
   // Función para descargar reporte como texto
@@ -2302,14 +2375,86 @@ const SistemaGestion = () => {
                         <thead className="bg-gray-100 border-b-2 border-gray-300">
                           <tr>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">#</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Fecha de sesión</th>
-                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Duración</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Tipo de Terapia</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Terapeuta</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Precio de la sesión</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">IVA</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Total</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase bg-orange-50">Costo Terapeuta</th>
+                            <th 
+                              onClick={() => {
+                                const citasOrdenadas = ordenarCitasReporte(recibo.citas, 'fecha');
+                                recibo.citas = citasOrdenadas;
+                                setReporteGenerado({...reporteGenerado});
+                              }}
+                              className="px-4 py-3 text-left text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+                            >
+                              Fecha de sesión {renderIndicadorOrden('fecha')}
+                            </th>
+                            <th 
+                              onClick={() => {
+                                const citasOrdenadas = ordenarCitasReporte(recibo.citas, 'duracion');
+                                recibo.citas = citasOrdenadas;
+                                setReporteGenerado({...reporteGenerado});
+                              }}
+                              className="px-4 py-3 text-center text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+                            >
+                              Duración {renderIndicadorOrden('duracion')}
+                            </th>
+                            <th 
+                              onClick={() => {
+                                const citasOrdenadas = ordenarCitasReporte(recibo.citas, 'tipoTerapia');
+                                recibo.citas = citasOrdenadas;
+                                setReporteGenerado({...reporteGenerado});
+                              }}
+                              className="px-4 py-3 text-left text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+                            >
+                              Tipo de Terapia {renderIndicadorOrden('tipoTerapia')}
+                            </th>
+                            <th 
+                              onClick={() => {
+                                const citasOrdenadas = ordenarCitasReporte(recibo.citas, 'terapeuta');
+                                recibo.citas = citasOrdenadas;
+                                setReporteGenerado({...reporteGenerado});
+                              }}
+                              className="px-4 py-3 text-left text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+                            >
+                              Terapeuta {renderIndicadorOrden('terapeuta')}
+                            </th>
+                            <th 
+                              onClick={() => {
+                                const citasOrdenadas = ordenarCitasReporte(recibo.citas, 'precio');
+                                recibo.citas = citasOrdenadas;
+                                setReporteGenerado({...reporteGenerado});
+                              }}
+                              className="px-4 py-3 text-right text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+                            >
+                              Precio de la sesión {renderIndicadorOrden('precio')}
+                            </th>
+                            <th 
+                              onClick={() => {
+                                const citasOrdenadas = ordenarCitasReporte(recibo.citas, 'iva');
+                                recibo.citas = citasOrdenadas;
+                                setReporteGenerado({...reporteGenerado});
+                              }}
+                              className="px-4 py-3 text-right text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+                            >
+                              IVA {renderIndicadorOrden('iva')}
+                            </th>
+                            <th 
+                              onClick={() => {
+                                const citasOrdenadas = ordenarCitasReporte(recibo.citas, 'total');
+                                recibo.citas = citasOrdenadas;
+                                setReporteGenerado({...reporteGenerado});
+                              }}
+                              className="px-4 py-3 text-right text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+                            >
+                              Total {renderIndicadorOrden('total')}
+                            </th>
+                            <th 
+                              onClick={() => {
+                                const citasOrdenadas = ordenarCitasReporte(recibo.citas, 'costoTerapeuta');
+                                recibo.citas = citasOrdenadas;
+                                setReporteGenerado({...reporteGenerado});
+                              }}
+                              className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase bg-orange-50 cursor-pointer hover:bg-orange-100 transition-colors"
+                            >
+                              Costo Terapeuta {renderIndicadorOrden('costoTerapeuta')}
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
