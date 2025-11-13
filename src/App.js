@@ -7,6 +7,7 @@ import mammoth from 'mammoth';
 import { useAuth } from './hooks/useAuth';  
 import { useData } from './hooks/useData';   
 import { useReportes } from './hooks/useReportes';  // ← NUEVO IMPORT
+import { useCitas } from './hooks/useCitas';
 
 const SistemaGestion = () => {
   // Hook de autenticación
@@ -54,8 +55,8 @@ const SistemaGestion = () => {
   const [activeTab, setActiveTab] = useState('dashboard');  
 
   const [rangoMeses, setRangoMeses] = useState(12); // 6, 12, 24, o 'todo'
-  const [loadingBatch, setLoadingBatch] = useState(false); // ← AGREGAR ESTA LÍNEA
-
+  // const [loadingBatch, setLoadingBatch] = useState(false); 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // ← AGREGAR ESTA LÍNEA
 
   const [modals, setModals] = useState({ horas: false, terapeuta: false, cliente: false, pago: false, cita: false });
   const [editingId, setEditingId] = useState(null);
@@ -66,32 +67,7 @@ const SistemaGestion = () => {
   const [pagoForm, setPagoForm] = useState({ clienteId: '', monto: '', concepto: '', metodo: 'efectivo', fecha: '' });
   const [citaForm, setCitaForm] = useState({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0, tipoTerapia: 'Sesión de ABA estándar', costoTerapeuta: 0, costoTerapeutaTotal: 0 });
 
-  const [horarios, setHorarios] = useState([]);
-  const [nuevoHorario, setNuevoHorario] = useState({ terapeuta: '', cliente: '', diasSemana: [], horaInicio: '08:00', horaFin: '12:00' });
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
-  const [citasGeneradas, setCitasGeneradas] = useState([]);
-  const [mostrarResultado, setMostrarResultado] = useState(false);
-
-  // Estados para filtros y búsqueda de citas
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterEstado, setFilterEstado] = useState('todos');
-  const [filterTerapeuta, setFilterTerapeuta] = useState('todos');
-  const [filterFechaInicio, setFilterFechaInicio] = useState('');
-  const [filterFechaFin, setFilterFechaFin] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-
-  // Estados para el calendario
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [vistaCalendario, setVistaCalendario] = useState('lista');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Estado para sidebar colapsado
-  
-  // Estados para drag and drop
-  const [draggedCita, setDraggedCita] = useState(null);
-  const [dragOverDay, setDragOverDay] = useState(null);
-  const [importandoWord, setImportandoWord] = useState(false);
-
-  // Estados para gestión de precios por cliente
+    // Estados para gestión de precios por cliente
   const [pestanaCliente, setPestanaCliente] = useState('datos'); // 'datos' o 'precios'
   const [nuevoPrecio, setNuevoPrecio] = useState({ tipoTerapia: 'Sesión de ABA estándar', precio: 450 });
 
@@ -126,8 +102,6 @@ const SistemaGestion = () => {
     descargarReporte
   } = useReportes(citas, clientes, meses);
 
-  const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-
   // Precios base por tipo de terapia (fallback si el cliente no tiene precio personalizado)
   const preciosBasePorTerapia = useMemo(() => ({
     'Terapia Ocupacional': 950,
@@ -140,6 +114,103 @@ const SistemaGestion = () => {
     'Sesión en casa': 640,
     'Otro': 450
   }), []);
+
+  // Hook de citas - NUEVO
+  const {
+    // Estados de filtrado
+    searchTerm,
+    setSearchTerm,
+    filterEstado,
+    setFilterEstado,
+    filterTerapeuta,
+    setFilterTerapeuta,
+    filterFechaInicio,
+    setFilterFechaInicio,
+    filterFechaFin,
+    setFilterFechaFin,
+    showFilters,
+    setShowFilters,
+    
+    // Estados de calendario
+    currentDate,
+    setCurrentDate,
+    vistaCalendario,
+    setVistaCalendario,
+    
+    // Estados de drag & drop
+    draggedCita,
+    dragOverDay,
+    
+    // Estados de generación
+    horarios,
+    setHorarios,
+    nuevoHorario,
+    setNuevoHorario,
+    fechaInicio,
+    setFechaInicio,
+    fechaFin,
+    setFechaFin,
+    citasGeneradas,
+    mostrarResultado,
+    
+    // Estados de importación
+    importandoWord,
+    
+    // Funciones
+    filtrarCitas,
+    limpiarFiltros,
+    contarFiltrosActivos,
+    abrirCitaDesdeReporte,
+    calcularHorasDesdeCitas,
+    getCitasDelDia,
+    handleDragStart,
+    handleDragOver,
+    handleDrop,
+    handleDragLeave,
+    importarDesdeWord,
+    agregarHorario,
+    eliminarHorario,
+    generarCitas,
+    guardarCitas
+  } = useCitas(citas, terapeutas, clientes, cargarCitas, preciosBasePorTerapia);
+
+  const horasDesdeCitas = useMemo(() => {
+    // Convertir objeto a array con estructura esperada
+    const citasCompletadas = citas.filter(cita => cita.estado === 'completada');
+    const horasPorTerapeutaFecha = {};
+    
+    citasCompletadas.forEach(cita => {
+      const key = `${cita.terapeuta}-${cita.fecha}`;
+      
+      if (!horasPorTerapeutaFecha[key]) {
+        horasPorTerapeutaFecha[key] = {
+          terapeuta: cita.terapeuta,
+          fecha: cita.fecha,
+          cliente: cita.cliente,
+          citas: [],
+          horasTotal: 0
+        };
+      }
+      
+      const inicio = new Date(`2000-01-01T${cita.horaInicio}`);
+      const fin = new Date(`2000-01-01T${cita.horaFin}`);
+      const duracionHoras = (fin - inicio) / (1000 * 60 * 60);
+      
+      horasPorTerapeutaFecha[key].citas.push({
+        cliente: cita.cliente,
+        horaInicio: cita.horaInicio,
+        horaFin: cita.horaFin,
+        duracion: duracionHoras
+      });
+      horasPorTerapeutaFecha[key].horasTotal += duracionHoras;
+    });
+    
+    return Object.values(horasPorTerapeutaFecha).sort((a, b) => 
+      new Date(b.fecha) - new Date(a.fecha)
+    );
+  }, [citas]);
+
+  const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   
   // Precios personalizados por cliente (extraídos de la lista de servicios)
   const preciosInicializacionClientes = {
@@ -225,29 +296,6 @@ const SistemaGestion = () => {
       'Sesión de ABA precio especial': 900,
       'Sesión de ABA estándar': 450,
       'Servicios de Apoyo y Entrenamiento': 1200
-    }
-  };
-
-  // NUEVA FUNCIÓN: Abrir modal de edición de cita desde el reporte
-  const abrirCitaDesdeReporte = (fecha, terapeuta, cliente, horaInicio, horaFin) => {
-    // Buscar la cita original en el arreglo de citas
-    const citaOriginal = citas.find(c => 
-      c.fecha === fecha && 
-      c.terapeuta === terapeuta && 
-      c.cliente === cliente &&
-      c.horaInicio === horaInicio &&
-      c.horaFin === horaFin
-    );
-
-    if (citaOriginal) {
-      // Cargar los datos de la cita en el formulario
-      setCitaForm(citaOriginal);
-      setEditingId(citaOriginal.id);
-      setModals({ ...modals, cita: true });
-      // Cambiar a la pestaña de citas para mejor UX
-      // setActiveTab('citas');
-    } else {
-      alert('No se pudo encontrar la cita original');
     }
   };
 
@@ -540,42 +588,6 @@ const SistemaGestion = () => {
     };
   };
 
-  // Función para calcular horas desde citas completadas
-  const calcularHorasDesdeCitas = () => {
-    const citasCompletadas = citas.filter(cita => cita.estado === 'completada');
-    const horasPorTerapeutaFecha = {};
-    
-    citasCompletadas.forEach(cita => {
-      const key = `${cita.terapeuta}-${cita.fecha}`;
-      
-      if (!horasPorTerapeutaFecha[key]) {
-        horasPorTerapeutaFecha[key] = {
-          terapeuta: cita.terapeuta,
-          fecha: cita.fecha,
-          cliente: cita.cliente,
-          citas: [],
-          horasTotal: 0
-        };
-      }
-      
-      const inicio = new Date(`2000-01-01T${cita.horaInicio}`);
-      const fin = new Date(`2000-01-01T${cita.horaFin}`);
-      const duracionHoras = (fin - inicio) / (1000 * 60 * 60);
-      
-      horasPorTerapeutaFecha[key].citas.push({
-        cliente: cita.cliente,
-        horaInicio: cita.horaInicio,
-        horaFin: cita.horaFin,
-        duracion: duracionHoras
-      });
-      horasPorTerapeutaFecha[key].horasTotal += duracionHoras;
-    });
-    
-    return Object.values(horasPorTerapeutaFecha).sort((a, b) => 
-      new Date(b.fecha) - new Date(a.fecha)
-    );
-  };
-
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -594,12 +606,6 @@ const SistemaGestion = () => {
     return days;
   };
 
-  const getCitasDelDia = (fecha) => {
-    if (!fecha) return [];
-    const fechaStr = fecha.toISOString().split('T')[0];
-    return filtrarCitas().filter(cita => cita.fecha === fechaStr);
-  };
-
   const cambiarMes = (direccion) => {
     const newDate = new Date(currentDate);
     newDate.setMonth(newDate.getMonth() + direccion);
@@ -612,57 +618,6 @@ const SistemaGestion = () => {
     return fecha.getDate() === hoy.getDate() &&
            fecha.getMonth() === hoy.getMonth() &&
            fecha.getFullYear() === hoy.getFullYear();
-  };
-
-  // Funciones de Drag & Drop para el calendario
-  const handleDragStart = (e, cita) => {
-    setDraggedCita(cita);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e, fecha) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (fecha) {
-      setDragOverDay(fecha.toISOString().split('T')[0]);
-    }
-  };
-
-  const handleDrop = async (e, nuevaFecha) => {
-    e.preventDefault();
-    
-    if (!draggedCita || !nuevaFecha) {
-      setDraggedCita(null);
-      setDragOverDay(null);
-      return;
-    }
-
-    const nuevaFechaStr = nuevaFecha.toISOString().split('T')[0];
-    
-    if (draggedCita.fecha === nuevaFechaStr) {
-      setDraggedCita(null);
-      setDragOverDay(null);
-      return;
-    }
-
-    try {
-      await updateDoc(doc(db, 'citas', draggedCita.id), {
-        fecha: nuevaFechaStr
-      });
-      
-      await cargarCitas();
-      alert(`✅ Cita movida al ${nuevaFechaStr}`);
-    } catch (error) {
-      console.error('Error al mover cita:', error);
-      alert('❌ Error al mover la cita');
-    }
-    
-    setDraggedCita(null);
-    setDragOverDay(null);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverDay(null);
   };
 
   // Función para parsear fechas del Word
@@ -713,133 +668,6 @@ const SistemaGestion = () => {
       console.error('Error parseando hora:', horaStr, error);
       return null;
     }
-  };
-
-  // Función principal de importación
-  const importarDesdeWord = async (file) => {
-    if (!file) {
-      alert('Por favor selecciona un archivo');
-      return;
-    }
-
-    setImportandoWord(true);
-    
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const result = await mammoth.extractRawText({ arrayBuffer });
-      const texto = result.value;
-      
-      let nombreTerapeuta = '';
-      const lineas = texto.split('\n');
-      
-      for (const linea of lineas) {
-        if (linea.includes('Nombre de Terapeuta:')) {
-          nombreTerapeuta = linea.split(':')[1].trim();
-          break;
-        }
-      }
-      
-      if (!nombreTerapeuta) {
-        alert('No se pudo extraer el nombre de la terapeuta del documento');
-        setImportandoWord(false);
-        return;
-      }
-      
-      const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
-      const parser = new DOMParser();
-      const docHtml = parser.parseFromString(htmlResult.value, 'text/html');
-      const tabla = docHtml.querySelector('table');
-      
-      if (!tabla) {
-        alert('No se encontró una tabla en el documento');
-        setImportandoWord(false);
-        return;
-      }
-      
-      const filas = Array.from(tabla.querySelectorAll('tr'));
-      const citasNuevas = [];
-      
-      for (let i = 1; i < filas.length; i++) {
-        const celdas = Array.from(filas[i].querySelectorAll('td, th')).map(c => c.textContent.trim());
-        
-        if (celdas[0] === 'TOTAL' || celdas[0] === '----------') continue;
-        
-        const fecha = parsearFechaWord(celdas[0]);
-        const horaInicio = parsearHoraWord(celdas[1]);
-        const horaFin = parsearHoraWord(celdas[2]);
-        const costoPorHora = parseFloat(celdas[4]?.replace(',', '')) || 300;
-        const costoTotal = parseFloat(celdas[5]?.replace(',', '')) || 0;
-        const paciente = celdas[6];
-        
-        if (fecha && horaInicio && horaFin && paciente) {
-          citasNuevas.push({
-            terapeuta: nombreTerapeuta,
-            cliente: paciente,
-            fecha: fecha,
-            horaInicio: horaInicio,
-            horaFin: horaFin,
-            estado: 'completada',
-            costoPorHora: costoPorHora,
-            costoTotal: costoTotal
-          });
-        }
-      }
-      
-      if (citasNuevas.length > 0) {
-        const batch = writeBatch(db);
-        citasNuevas.forEach(cita => {
-          const docRef = doc(collection(db, 'citas'));
-          batch.set(docRef, cita);
-        });
-        
-        await batch.commit();
-        await cargarCitas();
-        
-        alert(`✅ Se importaron ${citasNuevas.length} citas de ${nombreTerapeuta}`);
-      } else {
-        alert('⚠️ No se encontraron citas válidas en el documento');
-      }
-      
-    } catch (error) {
-      console.error('Error importando archivo:', error);
-      alert('❌ Error al importar el archivo. Verifica que sea un documento Word válido.\n\nDetalle: ' + error.message);
-    }
-    
-    setImportandoWord(false);
-  };
-
-  const filtrarCitas = () => {
-    return citas.filter(cita => {
-      const matchSearch = searchTerm === '' || 
-        cita.terapeuta?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cita.cliente?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cita.fecha?.includes(searchTerm);
-
-      const matchEstado = filterEstado === 'todos' || cita.estado === filterEstado;
-      const matchTerapeuta = filterTerapeuta === 'todos' || cita.terapeuta === filterTerapeuta;
-      const matchFecha = (!filterFechaInicio || cita.fecha >= filterFechaInicio) &&
-                        (!filterFechaFin || cita.fecha <= filterFechaFin);
-
-      return matchSearch && matchEstado && matchTerapeuta && matchFecha;
-    });
-  };
-
-  const limpiarFiltros = () => {
-    setSearchTerm('');
-    setFilterEstado('todos');
-    setFilterTerapeuta('todos');
-    setFilterFechaInicio('');
-    setFilterFechaFin('');
-  };
-
-  const contarFiltrosActivos = () => {
-    let count = 0;
-    if (searchTerm) count++;
-    if (filterEstado !== 'todos') count++;
-    if (filterTerapeuta !== 'todos') count++;
-    if (filterFechaInicio) count++;
-    if (filterFechaFin) count++;
-    return count;
   };
 
   const openModal = (type, item = null) => {
@@ -1108,19 +936,6 @@ const SistemaGestion = () => {
     }
   };
 
-  const agregarHorario = () => {
-    if (!nuevoHorario.terapeuta || !nuevoHorario.cliente || nuevoHorario.diasSemana.length === 0) {
-      alert('Por favor completa todos los campos');
-      return;
-    }
-    setHorarios([...horarios, { ...nuevoHorario, id: Date.now() }]);
-    setNuevoHorario({ terapeuta: '', cliente: '', diasSemana: [], horaInicio: '08:00', horaFin: '12:00' });
-  };
-
-  const eliminarHorario = (id) => {
-    setHorarios(horarios.filter(h => h.id !== id));
-  };
-
   const toggleDia = (dia) => {
     setNuevoHorario(prev => ({
       ...prev,
@@ -1128,59 +943,6 @@ const SistemaGestion = () => {
         ? prev.diasSemana.filter(d => d !== dia)
         : [...prev.diasSemana, dia]
     }));
-  };
-
-  const generarCitas = () => {
-    if (!fechaInicio || !fechaFin || horarios.length === 0) {
-      alert('Configura horarios y fechas');
-      return;
-    }
-
-    const inicio = new Date(fechaInicio);
-    const fin = new Date(fechaFin);
-    const nuevasCitas = [];
-
-    for (let d = new Date(inicio); d <= fin; d.setDate(d.getDate() + 1)) {
-      const diaSemana = d.getDay();
-      const fechaStr = d.toISOString().split('T')[0];
-
-      horarios.forEach(horario => {
-        if (horario.diasSemana.includes(diaSemana)) {
-          nuevasCitas.push({
-            terapeuta: horario.terapeuta,
-            cliente: horario.cliente,
-            fecha: fechaStr,
-            diaSemana: diasSemanaOptions.find(opt => opt.value === diaSemana)?.label || '',
-            horaInicio: horario.horaInicio,
-            horaFin: horario.horaFin,
-            estado: 'pendiente'
-          });
-        }
-      });
-    }
-
-    setCitasGeneradas(nuevasCitas);
-    setMostrarResultado(true);
-  };
-
-  const guardarCitas = async () => {
-    setLoadingBatch(true); // ← Cambio aquí
-    try {
-      const batch = writeBatch(db);
-      citasGeneradas.forEach(cita => {
-        const docRef = doc(collection(db, 'citas'));
-        batch.set(docRef, cita);
-      });
-      await batch.commit();
-      alert(`✅ ${citasGeneradas.length} citas guardadas`);
-      setCitasGeneradas([]);
-      setMostrarResultado(false);
-      cargarCitas();
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Error al guardar citas');
-    }
-    setLoadingBatch(false); // ← Cambio aquí
   };
 
   if (loading) {
@@ -1219,7 +981,7 @@ const SistemaGestion = () => {
   const { totalHoras, totalPagos } = getTotales();
   // const citasFiltradas = filtrarCitas(); // No usado directamente
   // const filtrosActivos = contarFiltrosActivos(); // No usado directamente
-  const horasDesdeCitas = calcularHorasDesdeCitas();
+  const horasDesdeCitasObj = calcularHorasDesdeCitas();
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
@@ -2492,7 +2254,7 @@ const SistemaGestion = () => {
 
                   <div className="grid grid-cols-7 gap-2">
                     {getDaysInMonth(currentDate).map((fecha, index) => {
-                      const citasDelDia = getCitasDelDia(fecha);
+                      const citasDelDia = fecha ? getCitasDelDia(fecha) : [];
                       const isToday = esHoy(fecha);
                       const isDragOver = dragOverDay === fecha?.toISOString().split('T')[0];
                       
@@ -2972,6 +2734,90 @@ const SistemaGestion = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Pago */}
+      {modals.pago && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <h3 className="text-lg font-bold mb-4">{editingId ? 'Editar Pago' : 'Registrar Pago'}</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={pagoForm.clienteId} 
+                  onChange={(e) => setPagoForm({...pagoForm, clienteId: e.target.value})}
+                >
+                  <option value="">Seleccionar cliente</option>
+                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Monto ($)</label>
+                <input 
+                  type="number" 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={pagoForm.monto} 
+                  onChange={(e) => setPagoForm({...pagoForm, monto: e.target.value})}
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Concepto</label>
+                <input 
+                  type="text" 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={pagoForm.concepto} 
+                  onChange={(e) => setPagoForm({...pagoForm, concepto: e.target.value})}
+                  placeholder="Descripción del pago"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Método de Pago</label>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={pagoForm.metodo} 
+                  onChange={(e) => setPagoForm({...pagoForm, metodo: e.target.value})}
+                >
+                  <option value="efectivo">Efectivo</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="tarjeta">Tarjeta</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fecha</label>
+                <input 
+                  type="date" 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                  value={pagoForm.fecha} 
+                  onChange={(e) => setPagoForm({...pagoForm, fecha: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 mt-6">
+              <button 
+                onClick={() => closeModal('pago')} 
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => save('pago')} 
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                {editingId ? 'Actualizar' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE TERAPEUTA */}
       {modals.terapeuta && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
