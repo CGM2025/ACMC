@@ -104,7 +104,7 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
   // ========================================
   // FUNCIÓN: ABRIR CITA DESDE REPORTE
   // ========================================
-  const abrirCitaDesdeReporte = useCallback((fecha, terapeuta, cliente, horaInicio, horaFin) => {
+  const abrirCitaDesdeReporte = useCallback((fecha, terapeuta, cliente, horaInicio, horaFin, openModalCallback) => {
     const citaEncontrada = citas.find(c => 
       c.fecha === fecha && 
       c.terapeuta === terapeuta && 
@@ -113,6 +113,12 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
       c.horaFin === horaFin
     );
     
+    if (citaEncontrada && openModalCallback) {
+      openModalCallback('cita', citaEncontrada);
+    } else if (!citaEncontrada) {
+      console.warn('⚠️ No se encontró la cita en el sistema');
+    }
+
     return citaEncontrada;
   }, [citas]);
 

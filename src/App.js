@@ -8,6 +8,7 @@ import { useAuth } from './hooks/useAuth';
 import { useData } from './hooks/useData';   
 import { useReportes } from './hooks/useReportes';  // ← NUEVO IMPORT
 import { useCitas } from './hooks/useCitas';
+import { useModals } from './hooks/useModals';  // ← NUEVO
 
 const SistemaGestion = () => {
   // Hook de autenticación
@@ -51,30 +52,45 @@ const SistemaGestion = () => {
     getTotales
   } = useData(currentUser, isLoggedIn);
 
+  // Hook de modales - NUEVO
+  const {
+    modals,
+    editingId,
+    horasForm,
+    setHorasForm,
+    terapeutaForm,
+    setTerapeutaForm,
+    clienteForm,
+    setClienteForm,
+    pagoForm,
+    setPagoForm,
+    citaForm,
+    setCitaForm,
+    pestanaCliente,
+    setPestanaCliente,
+    nuevoPrecio,
+    setNuevoPrecio,
+    pestanaTerapeuta,
+    setPestanaTerapeuta,
+    nuevoCostoTerapeuta,
+    setNuevoCostoTerapeuta,
+    nuevoCostoPorCliente,
+    setNuevoCostoPorCliente,
+    openModal,
+    closeModal,
+    agregarPrecioPersonalizado,
+    eliminarPrecioPersonalizado,
+    agregarCostoTerapeuta,
+    eliminarCostoTerapeuta,
+    agregarCostoPorCliente,
+    eliminarCostoPorCliente
+  } = useModals();
   
   const [activeTab, setActiveTab] = useState('dashboard');  
 
   const [rangoMeses, setRangoMeses] = useState(12); // 6, 12, 24, o 'todo'
   // const [loadingBatch, setLoadingBatch] = useState(false); 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // ← AGREGAR ESTA LÍNEA
-
-  const [modals, setModals] = useState({ horas: false, terapeuta: false, cliente: false, pago: false, cita: false });
-  const [editingId, setEditingId] = useState(null);
-  
-  const [horasForm, setHorasForm] = useState({ terapeutaId: '', clienteId: '', fecha: '', horas: '', codigoCliente: '', notas: '' });
-  const [terapeutaForm, setTerapeutaForm] = useState({ nombre: '', especialidad: '', telefono: '', email: '', costosPorServicio: {}, costosPorCliente: {} });
-  const [clienteForm, setClienteForm] = useState({ nombre: '', email: '', telefono: '', empresa: '', codigo: '', preciosPersonalizados: {} });
-  const [pagoForm, setPagoForm] = useState({ clienteId: '', monto: '', concepto: '', metodo: 'efectivo', fecha: '' });
-  const [citaForm, setCitaForm] = useState({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0, tipoTerapia: 'Sesión de ABA estándar', costoTerapeuta: 0, costoTerapeutaTotal: 0 });
-
-    // Estados para gestión de precios por cliente
-  const [pestanaCliente, setPestanaCliente] = useState('datos'); // 'datos' o 'precios'
-  const [nuevoPrecio, setNuevoPrecio] = useState({ tipoTerapia: 'Sesión de ABA estándar', precio: 450 });
-
-  // Estados para gestión de costos por terapeuta
-  const [pestanaTerapeuta, setPestanaTerapeuta] = useState('datos'); // 'datos' o 'costos'
-  const [nuevoCostoTerapeuta, setNuevoCostoTerapeuta] = useState({ tipoTerapia: 'Sesión de ABA estándar', costo: 200 });
-  const [nuevoCostoPorCliente, setNuevoCostoPorCliente] = useState({ clienteId: '', costo: 200 });
 
   const diasSemanaOptions = [
     { value: 1, label: 'Lunes' }, { value: 2, label: 'Martes' }, { value: 3, label: 'Miércoles' },
@@ -668,169 +684,6 @@ const SistemaGestion = () => {
       console.error('Error parseando hora:', horaStr, error);
       return null;
     }
-  };
-
-  const openModal = (type, item = null) => {
-    setEditingId(item?.id || null);
-    setModals({ ...modals, [type]: true });
-    if (item) {
-      switch(type) {
-        case 'horas':
-          setHorasForm({
-            terapeutaId: item.terapeutaId,
-            clienteId: item.clienteId,
-            fecha: item.fecha,
-            horas: item.horas,
-            codigoCliente: item.codigoCliente,
-            notas: item.notas || ''
-          });
-          break;
-        case 'terapeuta':
-          setTerapeutaForm({
-            ...item,
-            costosPorServicio: item.costosPorServicio || {}
-          });
-          break;
-        case 'cliente':
-          setClienteForm({
-            ...item,
-            preciosPersonalizados: item.preciosPersonalizados || {}
-          });
-          break;
-        case 'pago':
-          setPagoForm(item);
-          break;
-        case 'cita':
-          setCitaForm({
-            terapeuta: item.terapeuta,
-            cliente: item.cliente,
-            fecha: item.fecha,
-            horaInicio: item.horaInicio,
-            horaFin: item.horaFin,
-            estado: item.estado,
-            costoPorHora: item.costoPorHora || 300,
-            costoTotal: item.costoTotal || 0,
-            tipoTerapia: item.tipoTerapia || 'Sesión de ABA estándar',
-            costoTerapeuta: item.costoTerapeuta || 0,
-            costoTerapeutaTotal: item.costoTerapeutaTotal || 0
-          });
-          break;
-        default:
-          break;
-      }
-    }
-  };
-
-  const closeModal = (type) => {
-    setModals({ ...modals, [type]: false });
-    setEditingId(null);
-    setHorasForm({ terapeutaId: '', clienteId: '', fecha: '', horas: '', codigoCliente: '', notas: '' });
-    setTerapeutaForm({ nombre: '', especialidad: '', telefono: '', email: '', costosPorServicio: {} });
-    setClienteForm({ nombre: '', email: '', telefono: '', empresa: '', codigo: '', preciosPersonalizados: {}  });
-    setPagoForm({ clienteId: '', monto: '', concepto: '', metodo: 'efectivo', fecha: '' });
-    setCitaForm({ terapeuta: '', cliente: '', fecha: '', horaInicio: '', horaFin: '', estado: 'pendiente', costoPorHora: 300, costoTotal: 0, tipoTerapia: 'Sesión de ABA estándar', costoTerapeuta: 0, costoTerapeutaTotal: 0 });
-
-    // Resetear estados de precios y costos
-    setPestanaCliente('datos');
-    setNuevoPrecio({ tipoTerapia: 'Sesión de ABA estándar', precio: 450 });
-    setPestanaTerapeuta('datos');
-    setNuevoCostoTerapeuta({ tipoTerapia: 'Sesión de ABA estándar', costo: 200 });
-  };
-
-  // Función para agregar precio personalizado al cliente
-  const agregarPrecioPersonalizado = () => {
-    if (!nuevoPrecio.tipoTerapia || !nuevoPrecio.precio) {
-      alert('Por favor completa todos los campos');
-      return;
-    }
-
-    const preciosActualizados = {
-      ...clienteForm.preciosPersonalizados,
-      [nuevoPrecio.tipoTerapia]: parseFloat(nuevoPrecio.precio)
-    };
-
-    setClienteForm({
-      ...clienteForm,
-      preciosPersonalizados: preciosActualizados
-    });
-
-    // Resetear el formulario de nuevo precio
-    setNuevoPrecio({ tipoTerapia: 'Sesión de ABA estándar', precio: 450 });
-  };
-
-  // Función para eliminar precio personalizado
-  const eliminarPrecioPersonalizado = (tipoTerapia) => {
-    const preciosActualizados = { ...clienteForm.preciosPersonalizados };
-    delete preciosActualizados[tipoTerapia];
-    
-    setClienteForm({
-      ...clienteForm,
-      preciosPersonalizados: preciosActualizados
-    });
-  };
-
-  // Función para agregar costo personalizado a la terapeuta
-  const agregarCostoTerapeuta = () => {
-    if (!nuevoCostoTerapeuta.tipoTerapia || !nuevoCostoTerapeuta.costo) {
-      alert('Por favor completa todos los campos');
-      return;
-    }
-
-    const costosActualizados = {
-      ...terapeutaForm.costosPorServicio,
-      [nuevoCostoTerapeuta.tipoTerapia]: parseFloat(nuevoCostoTerapeuta.costo)
-    };
-
-    setTerapeutaForm({
-      ...terapeutaForm,
-      costosPorServicio: costosActualizados
-    });
-
-    // Resetear el formulario de nuevo costo
-    setNuevoCostoTerapeuta({ tipoTerapia: 'Sesión de ABA estándar', costo: 200 });
-  };
-
-  // Función para eliminar costo personalizado de terapeuta
-  const eliminarCostoTerapeuta = (tipoTerapia) => {
-    const costosActualizados = { ...terapeutaForm.costosPorServicio };
-    delete costosActualizados[tipoTerapia];
-    
-    setTerapeutaForm({
-      ...terapeutaForm,
-      costosPorServicio: costosActualizados
-    });
-  };
-
-  // Función para agregar costo personalizado por cliente
-  const agregarCostoPorCliente = () => {
-    if (!nuevoCostoPorCliente.clienteId || !nuevoCostoPorCliente.costo) {
-      alert('Por favor completa todos los campos');
-      return;
-    }
-
-    const costosActualizados = {
-      ...terapeutaForm.costosPorCliente,
-      [nuevoCostoPorCliente.clienteId]: parseFloat(nuevoCostoPorCliente.costo)
-    };
-
-    setTerapeutaForm({
-      ...terapeutaForm,
-      costosPorCliente: costosActualizados
-    });
-
-    // Resetear el formulario
-    setNuevoCostoPorCliente({ clienteId: '', costo: 200 });
-  };
-
-  // Función para eliminar costo personalizado por cliente
-  const eliminarCostoPorCliente = (clienteId) => {
-    const costosActualizados = { ...terapeutaForm.costosPorCliente };
-    delete costosActualizados[clienteId];
-    
-    setTerapeutaForm({
-      ...terapeutaForm,
-      costosPorCliente: costosActualizados
-    });
   };
 
   // Función para importar precios automáticamente a clientes existentes
@@ -1816,7 +1669,7 @@ const SistemaGestion = () => {
                             // <tr key={idx} className="hover:bg-gray-50">
                             <tr 
                               key={idx} 
-                              onClick={() => abrirCitaDesdeReporte(cita.fecha, cita.terapeuta, recibo.nombre, cita.horaInicio, cita.horaFin)}
+                              onClick={() => abrirCitaDesdeReporte(cita.fecha, cita.terapeuta, recibo.nombre, cita.horaInicio, cita.horaFin, openModal)}
                               className="hover:bg-blue-50 cursor-pointer transition-colors"
                               title="Click para ver/editar esta cita"
                             >
