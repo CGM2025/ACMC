@@ -17,7 +17,6 @@ const SistemaGestion = () => {
     loginError,
     loginForm,
     setLoginForm,
-    setLoginError,
     handleLogin,
     handleGoogleLogin,
     handleLogout,
@@ -28,24 +27,15 @@ const SistemaGestion = () => {
   const {
     clientes,
     terapeutas,
-    horasTrabajadas,
     pagos,
     citas,
     utilidadHistorica,
     loadingCitas,
-    loadingData,
     ordenClientes,
     ordenTerapeutas,
-    setClientes,
-    setTerapeutas,
-    setCitas,
     cargarCitas,
-    cargarTerapeutas,
     cargarClientes,
-    cargarHorasTrabajadas,
-    cargarPagos,
     cargarUtilidadHistorica,
-    cargarTodosLosDatos,
     guardarHorasTrabajadas,
     guardarTerapeuta,
     guardarCliente,
@@ -131,7 +121,6 @@ const SistemaGestion = () => {
     setTerapeutaReporte,
     clienteReporte,
     setClienteReporte,
-    ordenColumna,
     generarReporteMensual,
     ordenarCitasReporte,
     renderIndicadorOrden,
@@ -2530,7 +2519,7 @@ const SistemaGestion = () => {
                                       cita.estado === 'cancelada' ? 'bg-red-100 text-red-800' :
                                       'bg-blue-100 text-blue-800'
                                     } hover:opacity-75 transition-opacity`}
-                                    onClick={(e) => {
+                                    onClick={() => {
                                       if (!draggedCita) {
                                         openModal('cita', cita);
                                       }
