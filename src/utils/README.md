@@ -63,6 +63,110 @@ The test suite (`costoCalculations.test.js`) covers the following scenarios:
 - Decimal cost values
 - Time with seconds format
 
+## reporteSorting.js
+
+This module contains utility functions for sorting appointments in reports.
+
+### `ordenarCitasPorCampo(citas, campo, direccion)`
+
+Sorts appointments by a specified field in ascending or descending order.
+
+**Parameters:**
+- `citas` (Array): Array of appointments to sort
+- `campo` (string): Field to sort by ('fecha', 'duracion', 'tipoTerapia', 'terapeuta', 'precio', 'iva', 'total', 'costoTerapeuta')
+- `direccion` (string): Sort direction ('asc' or 'desc'). Default is 'asc'
+
+**Returns:**
+- `Array`: Sorted array of appointments (does not mutate original array)
+
+**Example:**
+```javascript
+import { ordenarCitasPorCampo } from './utils/reporteSorting';
+
+const citas = [
+  { fecha: '2025-01-20', precio: 300 },
+  { fecha: '2025-01-15', precio: 500 },
+];
+
+const citasOrdenadas = ordenarCitasPorCampo(citas, 'fecha', 'asc');
+// Returns: [{ fecha: '2025-01-15', ... }, { fecha: '2025-01-20', ... }]
+```
+
+### `determinarNuevaDireccion(campoActual, direccionActual, nuevoCampo)`
+
+Determines the new sort direction when a column is clicked.
+
+**Parameters:**
+- `campoActual` (string): Current sorted field
+- `direccionActual` (string): Current sort direction
+- `nuevoCampo` (string): New field that was clicked
+
+**Returns:**
+- `string`: New sort direction ('asc' or 'desc')
+
+**Example:**
+```javascript
+import { determinarNuevaDireccion } from './utils/reporteSorting';
+
+// Clicking the same column toggles direction
+const nuevaDir = determinarNuevaDireccion('precio', 'asc', 'precio');
+// Returns: 'desc'
+
+// Clicking a different column resets to ascending
+const nuevaDir2 = determinarNuevaDireccion('precio', 'desc', 'fecha');
+// Returns: 'asc'
+```
+
+### Unit Tests (`reporteSorting.test.js`)
+
+The test suite covers the following scenarios:
+
+#### 1. Sorting by Numeric Field in Ascending Order (5 tests)
+✅ Tests that appointments are correctly sorted by:
+- `precio` (price)
+- `duracion` (duration)
+- `total` (total cost)
+- `iva` (tax)
+- `costoTerapeuta` (therapist cost, handling missing values)
+
+#### 2. Sorting by Numeric Field in Descending Order (3 tests)
+✅ Tests descending order sorting for:
+- `precio`
+- `duracion`
+- `total`
+
+#### 3. Sorting by Date Field (3 tests)
+✅ Tests that appointments are correctly sorted by date:
+- Ascending order (earliest to latest)
+- Descending order (latest to earliest)
+- Different months (cross-month sorting)
+
+#### 4. Sorting by String Field (4 tests)
+✅ Tests that appointments are correctly sorted by text fields:
+- `tipoTerapia` (therapy type) in ascending order
+- `terapeuta` (therapist) in ascending order
+- `tipoTerapia` in descending order
+- Case-insensitive sorting
+
+#### 5. Direction Toggle Tests (5 tests)
+✅ Tests the `determinarNuevaDireccion` function:
+- Toggles from asc to desc when clicking same column
+- Stays asc when clicking same column that was desc
+- Resets to asc when clicking different column
+- Handles initial state correctly
+
+#### 6. Edge Cases (7 tests)
+✅ Tests handling of:
+- Empty array
+- Null input
+- Undefined input
+- Single appointment
+- Original array immutability
+- Equal values
+- Unknown field name
+
+**Test Results:** All 27 tests pass successfully
+
 ## Running the Tests
 
 To run all tests:
