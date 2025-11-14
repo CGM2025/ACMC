@@ -1,16 +1,40 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '../firebase';
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  query, 
-  orderBy, 
-  where 
-} from 'firebase/firestore';
+
+// ✅ Importar TODAS las funciones de la API (sin Firebase)
+import {
+  // Citas
+  obtenerCitas,
+  crearCita,
+  actualizarCita,
+  eliminarCita as eliminarCitaAPI,
+  
+  // Terapeutas
+  obtenerTerapeutas,
+  crearTerapeuta as crearTerapeutaAPI,
+  actualizarTerapeuta as actualizarTerapeutaAPI,
+  eliminarTerapeuta as eliminarTerapeutaAPI,
+  
+  // Clientes
+  obtenerClientes,
+  crearCliente as crearClienteAPI,
+  actualizarCliente as actualizarClienteAPI,
+  eliminarCliente as eliminarClienteAPI,
+  
+  // Horas Trabajadas
+  obtenerHorasTrabajadas as obtenerHorasTrabajadasAPI,
+  crearHorasTrabajadas as crearHorasTrabajadasAPI,
+  actualizarHorasTrabajadas as actualizarHorasTrabajadasAPI,
+  eliminarHorasTrabajadas as eliminarHorasTrabajadasAPI,
+  
+  // Pagos
+  obtenerPagos,
+  crearPago as crearPagoAPI,
+  actualizarPago as actualizarPagoAPI,
+  eliminarPago as eliminarPagoAPI,
+  
+  // Utilidad Histórica
+  obtenerUtilidadHistorica
+} from '../api';
 
 /**
  * Custom Hook para manejar la carga, guardado y eliminación de datos
@@ -39,15 +63,14 @@ export const useData = (currentUser, isLoggedIn) => {
   // ==================== FUNCIONES DE CARGA ====================
 
   /**
-   * Carga las citas desde Firestore
+   * Carga las citas desde Firestore usando la API
    */
   const cargarCitas = useCallback(async () => {
     try {
       setLoadingCitas(true);
-      const q = query(collection(db, 'citas'), orderBy('fecha', 'asc'));
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = await obtenerCitas();
       setCitas(data);
+      console.log('✅ Citas cargadas:', data.length);
     } catch (error) {
       console.error('Error al cargar citas:', error);
     } finally {
@@ -56,79 +79,67 @@ export const useData = (currentUser, isLoggedIn) => {
   }, []);
 
   /**
-   * Carga los terapeutas desde Firestore
+   * Carga los terapeutas desde Firestore usando la API
    */
   const cargarTerapeutas = useCallback(async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'terapeutas'));
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = await obtenerTerapeutas();
       setTerapeutas(data);
+      console.log('✅ Terapeutas cargados:', data.length);
     } catch (error) {
       console.error('Error al cargar terapeutas:', error);
     }
   }, []);
 
   /**
-   * Carga los clientes desde Firestore
+   * Carga los clientes desde Firestore usando la API
    */
   const cargarClientes = useCallback(async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'clientes'));
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = await obtenerClientes();
       setClientes(data);
+      console.log('✅ Clientes cargados:', data.length);
     } catch (error) {
       console.error('Error al cargar clientes:', error);
     }
   }, []);
 
   /**
-   * Carga las horas trabajadas desde Firestore
+   * Carga las horas trabajadas desde Firestore usando la API
    * Si el usuario es terapeuta, solo carga sus propias horas
    */
   const cargarHorasTrabajadas = useCallback(async () => {
     try {
-      const q = currentUser?.rol === 'terapeuta' 
-        ? query(
-            collection(db, 'horasTrabajadas'), 
-            where('terapeutaId', '==', currentUser.uid), 
-            orderBy('fecha', 'desc')
-          )
-        : query(collection(db, 'horasTrabajadas'), orderBy('fecha', 'desc'));
-      
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const terapeutaId = currentUser?.rol === 'terapeuta' ? currentUser.uid : null;
+      const data = await obtenerHorasTrabajadasAPI(terapeutaId);
       setHorasTrabajadas(data);
+      console.log('✅ Horas trabajadas cargadas:', data.length);
     } catch (error) {
       console.error('Error al cargar horas trabajadas:', error);
     }
   }, [currentUser]);
 
   /**
-   * Carga los pagos desde Firestore
+   * Carga los pagos desde Firestore usando la API
    */
   const cargarPagos = useCallback(async () => {
     try {
-      const snapshot = await getDocs(
-        query(collection(db, 'pagos'), orderBy('fecha', 'desc'))
-      );
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = await obtenerPagos();
       setPagos(data);
+      console.log('✅ Pagos cargados:', data.length);
     } catch (error) {
       console.error('Error al cargar pagos:', error);
     }
   }, []);
 
   /**
-   * Carga la utilidad histórica desde Firestore
+   * Carga la utilidad histórica desde Firestore usando la API
    */
   const cargarUtilidadHistorica = useCallback(async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, 'utilidadHistorica'));
-      const datos = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const datos = await obtenerUtilidadHistorica();
       setUtilidadHistorica(datos);
+      console.log('✅ Utilidad histórica cargada:', datos.length, 'registros');
     } catch (error) {
       console.error('Error al cargar utilidad histórica:', error);
     }
@@ -148,6 +159,7 @@ export const useData = (currentUser, isLoggedIn) => {
         cargarPagos(),
         cargarUtilidadHistorica()
       ]);
+      console.log('✅ Todos los datos cargados');
     } catch (error) {
       console.error('Error al cargar datos:', error);
     } finally {
@@ -165,7 +177,7 @@ export const useData = (currentUser, isLoggedIn) => {
   // ==================== FUNCIONES DE GUARDADO ====================
 
   /**
-   * Guarda o actualiza horas trabajadas
+   * Guarda o actualiza horas trabajadas usando la API
    */
   const guardarHorasTrabajadas = async (horasForm, editingId) => {
     try {
@@ -176,9 +188,9 @@ export const useData = (currentUser, isLoggedIn) => {
       };
       
       if (editingId) {
-        await updateDoc(doc(db, 'horasTrabajadas', editingId), data);
+        await actualizarHorasTrabajadasAPI(editingId, data);
       } else {
-        await addDoc(collection(db, 'horasTrabajadas'), data);
+        await crearHorasTrabajadasAPI(data);
       }
       
       await cargarHorasTrabajadas();
@@ -190,14 +202,14 @@ export const useData = (currentUser, isLoggedIn) => {
   };
 
   /**
-   * Guarda o actualiza un terapeuta
+   * Guarda o actualiza un terapeuta usando la API
    */
   const guardarTerapeuta = async (terapeutaForm, editingId) => {
     try {
       if (editingId) {
-        await updateDoc(doc(db, 'terapeutas', editingId), terapeutaForm);
+        await actualizarTerapeutaAPI(editingId, terapeutaForm);
       } else {
-        await addDoc(collection(db, 'terapeutas'), terapeutaForm);
+        await crearTerapeutaAPI(terapeutaForm);
       }
       
       await cargarTerapeutas();
@@ -209,14 +221,14 @@ export const useData = (currentUser, isLoggedIn) => {
   };
 
   /**
-   * Guarda o actualiza un cliente
+   * Guarda o actualiza un cliente usando la API
    */
   const guardarCliente = async (clienteForm, editingId) => {
     try {
       if (editingId) {
-        await updateDoc(doc(db, 'clientes', editingId), clienteForm);
+        await actualizarClienteAPI(editingId, clienteForm);
       } else {
-        await addDoc(collection(db, 'clientes'), clienteForm);
+        await crearClienteAPI(clienteForm);
       }
       
       await cargarClientes();
@@ -228,16 +240,16 @@ export const useData = (currentUser, isLoggedIn) => {
   };
 
   /**
-   * Guarda o actualiza un pago
+   * Guarda o actualiza un pago usando la API
    */
   const guardarPago = async (pagoForm, editingId) => {
     try {
       const data = { ...pagoForm, monto: parseFloat(pagoForm.monto) };
       
       if (editingId) {
-        await updateDoc(doc(db, 'pagos', editingId), data);
+        await actualizarPagoAPI(editingId, data);
       } else {
-        await addDoc(collection(db, 'pagos'), data);
+        await crearPagoAPI(data);
       }
       
       await cargarPagos();
@@ -249,14 +261,14 @@ export const useData = (currentUser, isLoggedIn) => {
   };
 
   /**
-   * Guarda o actualiza una cita
+   * Guarda o actualiza una cita usando la API
    */
   const guardarCita = async (citaForm, editingId) => {
     try {
       if (editingId) {
-        await updateDoc(doc(db, 'citas', editingId), citaForm);
+        await actualizarCita(editingId, citaForm);
       } else {
-        await addDoc(collection(db, 'citas'), citaForm);
+        await crearCita(citaForm);
       }
       
       await cargarCitas();
@@ -270,13 +282,13 @@ export const useData = (currentUser, isLoggedIn) => {
   // ==================== FUNCIONES DE ELIMINACIÓN ====================
 
   /**
-   * Elimina un terapeuta
+   * Elimina un terapeuta usando la API
    */
   const eliminarTerapeuta = async (id) => {
     if (!window.confirm('¿Eliminar terapeuta?')) return { success: false, cancelled: true };
     
     try {
-      await deleteDoc(doc(db, 'terapeutas', id));
+      await eliminarTerapeutaAPI(id);
       await cargarTerapeutas();
       return { success: true };
     } catch (error) {
@@ -286,13 +298,13 @@ export const useData = (currentUser, isLoggedIn) => {
   };
 
   /**
-   * Elimina un cliente
+   * Elimina un cliente usando la API
    */
   const eliminarCliente = async (id) => {
     if (!window.confirm('¿Eliminar cliente?')) return { success: false, cancelled: true };
     
     try {
-      await deleteDoc(doc(db, 'clientes', id));
+      await eliminarClienteAPI(id);
       await cargarClientes();
       return { success: true };
     } catch (error) {
@@ -302,13 +314,13 @@ export const useData = (currentUser, isLoggedIn) => {
   };
 
   /**
-   * Elimina un pago
+   * Elimina un pago usando la API
    */
   const eliminarPago = async (id) => {
     if (!window.confirm('¿Eliminar pago?')) return { success: false, cancelled: true };
     
     try {
-      await deleteDoc(doc(db, 'pagos', id));
+      await eliminarPagoAPI(id);
       await cargarPagos();
       return { success: true };
     } catch (error) {
@@ -318,13 +330,13 @@ export const useData = (currentUser, isLoggedIn) => {
   };
 
   /**
-   * Elimina una cita
+   * Elimina una cita usando la API
    */
   const eliminarCita = async (id) => {
     if (!window.confirm('¿Eliminar esta cita?')) return { success: false, cancelled: true };
     
     try {
-      await deleteDoc(doc(db, 'citas', id));
+      await eliminarCitaAPI(id);
       await cargarCitas();
       return { success: true };
     } catch (error) {

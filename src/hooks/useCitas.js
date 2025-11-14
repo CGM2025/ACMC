@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
-import { doc, updateDoc, writeBatch, collection } from 'firebase/firestore';
-import { db } from '../firebase';
 import mammoth from 'mammoth';
+
+import { actualizarCita, crearCitasEnBatch } from '../api';
 
 /**
  * Custom Hook para manejar toda la lógica relacionada con citas
@@ -181,9 +181,8 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
     }
 
     try {
-      await updateDoc(doc(db, 'citas', draggedCita.id), {
-        fecha: nuevaFechaStr
-      });
+      // ✅ Usar la función de la API
+      await actualizarCita(draggedCita.id, { fecha: nuevaFechaStr });
       
       await cargarCitas();
       alert(`✅ Cita movida al ${nuevaFechaStr}`);
@@ -272,12 +271,8 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
       }
 
       if (citasImportadas.length > 0) {
-        const batch = writeBatch(db);
-        citasImportadas.forEach(cita => {
-          const docRef = doc(collection(db, 'citas'));
-          batch.set(docRef, cita);
-        });
-        await batch.commit();
+        // ✅ Usar la función de la API
+        await crearCitasEnBatch(citasImportadas);
         
         alert(`✅ ${citasImportadas.length} citas importadas correctamente`);
         await cargarCitas();
@@ -378,12 +373,9 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
   // ========================================
   const guardarCitas = useCallback(async () => {
     try {
-      const batch = writeBatch(db);
-      citasGeneradas.forEach(cita => {
-        const docRef = doc(collection(db, 'citas'));
-        batch.set(docRef, cita);
-      });
-      await batch.commit();
+      // ✅ Usar la función de la API
+      await crearCitasEnBatch(citasGeneradas);
+      
       alert(`✅ ${citasGeneradas.length} citas guardadas`);
       setCitasGeneradas([]);
       setMostrarResultado(false);
