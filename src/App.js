@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
-import { db } from './firebase';
-import { collection, doc, writeBatch, updateDoc } from 'firebase/firestore';
+import { importarUtilidadHistorica } from './api';
 import mammoth from 'mammoth';
 import { useAuth } from './hooks/useAuth';  
 import { useData } from './hooks/useData';   
 import { useReportes } from './hooks/useReportes';  // ← NUEVO IMPORT
 import { useCitas } from './hooks/useCitas';
 import { useModals } from './hooks/useModals';  // ← NUEVO
+
 
 const SistemaGestion = () => {
   // Hook de autenticación
@@ -91,6 +91,7 @@ const SistemaGestion = () => {
   const [rangoMeses, setRangoMeses] = useState(12); // 6, 12, 24, o 'todo'
   // const [loadingBatch, setLoadingBatch] = useState(false); 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // ← AGREGAR ESTA LÍNEA
+  const [refreshKey, setRefreshKey] = useState(0); // ← NUEVO estado
 
   const diasSemanaOptions = [
     { value: 1, label: 'Lunes' }, { value: 2, label: 'Martes' }, { value: 3, label: 'Miércoles' },
@@ -469,25 +470,24 @@ const SistemaGestion = () => {
   };
 
   // Función para importar datos históricos de utilidad
-  const importarUtilidadHistorica = async (datosHistoricos) => {
+  const importarUtilidadHistoricaLocal = async (datosHistoricos) => {
     try {
-      const batch = writeBatch(db);
+      console.log('📊 Importando', datosHistoricos.length, 'registros...');
+      const registrosImportados = await importarUtilidadHistorica(datosHistoricos);
+      console.log('✅ Registros importados:', registrosImportados);
       
-      datosHistoricos.forEach(dato => {
-        const docRef = doc(collection(db, 'utilidadHistorica'));
-        batch.set(docRef, {
-          año: dato.año,
-          mes: dato.mes,
-          utilidad: dato.utilidad,
-          fechaImportacion: new Date().toISOString()
-        });
-      });
+      // Recargar datos
+      console.log('🔄 Recargando datos históricos...');
+      await cargarUtilidadHistorica();
+
+      // Forzar re-render
+      setRefreshKey(prev => prev + 1); // ← FORZAR actualización
       
-      await batch.commit();
-      alert(`✅ Se importaron ${datosHistoricos.length} registros históricos exitosamente`);
+      console.log('📈 Datos actuales:', utilidadHistorica.length, 'registros');
+      alert(`✅ Se importaron ${registrosImportados} registros históricos exitosamente`);
     } catch (error) {
-      console.error('Error al importar datos históricos:', error);
-      alert('Error al importar datos históricos');
+      console.error('❌ Error al importar datos históricos:', error);
+      alert('Error al importar datos históricos: ' + error.message);
     }
   };
 
@@ -501,6 +501,7 @@ const SistemaGestion = () => {
     const evolucion = {};
     
     // 1. Agregar datos históricos
+    console.log('📊 Procesando', utilidadHistorica.length, 'registros históricos');
     utilidadHistorica.forEach(registro => {
       const key = `${registro.año}-${String(mesesMap[registro.mes] + 1).padStart(2, '0')}`;
       evolucion[key] = {
@@ -1021,8 +1022,7 @@ const SistemaGestion = () => {
                         reader.onload = async (event) => {
                           try {
                             const datos = JSON.parse(event.target.result);
-                            await importarUtilidadHistorica(datos);
-                            await cargarUtilidadHistorica();
+                            await importarUtilidadHistoricaLocal(datos);
                           } catch (error) {
                             alert('Error al leer el archivo JSON');
                           }
@@ -1168,7 +1168,7 @@ const SistemaGestion = () => {
             </div>
 
             {/* Gráfica de Evolución Mensual de Ganancias */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-lg shadow p-6" key={refreshKey}>  {/* ← AGREGAR key */}
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-gray-800">
                   📈 Evolución Mensual de Ganancias
@@ -1326,11 +1326,14 @@ const SistemaGestion = () => {
               {(() => {
                 const evolucion = calcularEvolucionMensual();
                 
+                console.log('📈 Datos de evolución:', evolucion.length);
+
                 // Filtrar según el rango seleccionado
                 const datosFiltrados = rangoMeses === 'todo' 
                   ? evolucion 
                   : evolucion.slice(-rangoMeses);
-                
+                  console.log('📊 Datos filtrados:', datosFiltrados.length);
+
                 if (datosFiltrados.length === 0) {
                   return (
                     <div className="text-center py-12">
