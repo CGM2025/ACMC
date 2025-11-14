@@ -3,12 +3,13 @@ import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, S
 import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { importarUtilidadHistorica } from './api';
 import mammoth from 'mammoth';
+import moment from 'moment';
 import { useAuth } from './hooks/useAuth';  
 import { useData } from './hooks/useData';   
 import { useReportes } from './hooks/useReportes';  // ← NUEVO IMPORT
 import { useCitas } from './hooks/useCitas';
 import { useModals } from './hooks/useModals';  // ← NUEVO
-
+import CalendarioCitas from './components/CalendarioCitas';
 
 const SistemaGestion = () => {
   // Hook de autenticación
@@ -798,6 +799,60 @@ const SistemaGestion = () => {
         : [...prev.diasSemana, dia]
     }));
   };
+
+  // ========================================
+  // HANDLERS PARA CALENDARIO
+  // ========================================
+  
+  /**
+   * Handler cuando se selecciona una cita en el calendario
+   */
+  const handleCalendarioSelectCita = useCallback((cita) => {
+    openModal('cita', cita);
+  }, [openModal]);
+
+  /**
+   * Handler cuando se selecciona un slot vacío en el calendario
+   */
+  const handleCalendarioSelectSlot = useCallback((slotInfo) => {
+    const fecha = moment(slotInfo.start).format('YYYY-MM-DD');
+    const horaInicio = moment(slotInfo.start).format('HH:mm');
+    const horaFin = moment(slotInfo.end).format('HH:mm');
+    
+    // Pre-llenar el formulario con la fecha/hora seleccionada
+    setCitaForm({
+      ...citaForm,
+      fecha,
+      horaInicio,
+      horaFin
+    });
+    
+    openModal('cita');
+  }, [openModal, citaForm, setCitaForm]);
+
+  /**
+   * Handler cuando se mueve una cita (drag & drop)
+   */
+  const handleCalendarioEventDrop = useCallback(async (cita, start, end) => {
+    const nuevaFecha = moment(start).format('YYYY-MM-DD');
+    const nuevaHoraInicio = moment(start).format('HH:mm');
+    const nuevaHoraFin = moment(end).format('HH:mm');
+    
+    try {
+      await actualizarCita(cita.id, {
+        ...cita,
+        fecha: nuevaFecha,
+        horaInicio: nuevaHoraInicio,
+        horaFin: nuevaHoraFin
+      });
+      
+      await cargarCitas();
+      alert(`✅ Cita movida a ${nuevaFecha} ${nuevaHoraInicio}-${nuevaHoraFin}`);
+    } catch (error) {
+      console.error('Error al mover cita:', error);
+      alert('❌ Error al mover la cita');
+    }
+  }, [cargarCitas]);
 
   if (loading) {
     return (
@@ -2081,117 +2136,12 @@ const SistemaGestion = () => {
               </div>
 
               {vistaCalendario === 'calendario' ? (
-                <div className="bg-white rounded-lg shadow p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <button 
-                      onClick={() => cambiarMes(-1)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-all"
-                    >
-                      <ChevronLeft size={24} />
-                    </button>
-                    <h3 className="text-2xl font-bold">
-                      {meses[currentDate.getMonth()]} {currentDate.getFullYear()}
-                    </h3>
-                    <button 
-                      onClick={() => cambiarMes(1)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-all"
-                    >
-                      <ChevronRight size={24} />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-7 gap-2 mb-2">
-                    {diasSemana.map(dia => (
-                      <div key={dia} className="text-center font-semibold text-gray-600 py-2">
-                        {dia}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-7 gap-2">
-                    {getDaysInMonth(currentDate).map((fecha, index) => {
-                      const citasDelDia = fecha ? getCitasDelDia(fecha) : [];
-                      const isToday = esHoy(fecha);
-                      const isDragOver = dragOverDay === fecha?.toISOString().split('T')[0];
-                      
-                      return (
-                        <div
-                          key={index}
-                          className={`min-h-24 p-2 border rounded-lg transition-all ${
-                            !fecha ? 'bg-gray-50' : 
-                            isToday ? 'bg-blue-50 border-blue-500' : 
-                            isDragOver ? 'bg-green-100 border-green-500 border-2' :
-                            'bg-white hover:bg-gray-50'
-                          }`}
-                          onDragOver={(e) => handleDragOver(e, fecha)}
-                          onDrop={(e) => handleDrop(e, fecha)}
-                          onDragLeave={handleDragLeave}
-                        >
-                          {fecha && (
-                            <>
-                              <div className={`text-sm font-semibold mb-1 ${isToday ? 'text-blue-600' : 'text-gray-700'}`}>
-                                {fecha.getDate()}
-                              </div>
-                              <div className="space-y-1">
-                                {citasDelDia.slice(0, 2).map((cita) => (
-                                  <div
-                                    key={cita.id}
-                                    draggable
-                                    onDragStart={(e) => handleDragStart(e, cita)}
-                                    className={`text-xs p-1 rounded cursor-move ${
-                                      cita.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
-                                      cita.estado === 'confirmada' ? 'bg-green-100 text-green-800' :
-                                      cita.estado === 'cancelada' ? 'bg-red-100 text-red-800' :
-                                      'bg-blue-100 text-blue-800'
-                                    } hover:opacity-75 transition-opacity`}
-                                    onClick={() => {
-                                      if (!draggedCita) {
-                                        openModal('cita', cita);
-                                      }
-                                    }}
-                                  >
-                                    <div className="font-medium truncate">{cita.terapeuta}</div>
-                                    <div className="truncate">{cita.horaInicio}</div>
-                                  </div>
-                                ))}
-                                {citasDelDia.length > 2 && (
-                                  <div className="text-xs text-gray-500 text-center">
-                                    +{citasDelDia.length - 2} más
-                                  </div>
-                                )}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="flex gap-4 mt-6 justify-center flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded"></div>
-                      <span className="text-sm">Pendiente</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
-                      <span className="text-sm">Confirmada</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 bg-red-100 border border-red-300 rounded"></div>
-                      <span className="text-sm">Cancelada</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
-                      <span className="text-sm">Completada</span>
-                    </div>
-                    {/* Instrucción de uso */}
-                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-sm text-blue-800">
-                        💡 <strong>Tip:</strong> Arrastra las citas con el mouse para moverlas a otro día
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <CalendarioCitas
+                  citas={filtrarCitas()}
+                  onSelectCita={handleCalendarioSelectCita}
+                  onSelectSlot={handleCalendarioSelectSlot}
+                  onEventDrop={handleCalendarioEventDrop}
+                />
               ) : (
                 <>
                   {filtrarCitas().length > 0 ? (
