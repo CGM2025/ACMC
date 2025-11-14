@@ -1,0 +1,59 @@
+/* Estilos específicos para CalendarioCitas */
+
+.calendario-container {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+  height: 700px;
+}
+
+/* Barra de herramientas */
+.rbc-toolbar {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 10px;
+  margin-bottom: 15px;
+  background-color: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.rbc-toolbar-label {
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  color: #1f2937 !important;
+  flex-grow: 1;
+  text-align: center;
+  padding: 0 20px;
+}
+
+.rbc-btn-group {
+  display: flex !important;
+  gap: 5px;
+}
+
+.rbc-toolbar button {
+  padding: 8px 16px !important;
+  border-radius: 6px !important;
+  border: 1px solid #d1d5db !important;
+  background-color: white !important;
+  color: #374151 !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+}
+
+.rbc-toolbar button:hover {
+  background-color: #f3f4f6 !important;
+  border-color: #9ca3af !important;
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: #3b82f6 !important;
+  color: white !important;
+  border-color: #3b82f6 !important;
+}
