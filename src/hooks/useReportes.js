@@ -63,17 +63,20 @@ export const useReportes = (citas, clientes, meses) => {
 
       // Verificar si ya existen recibos para este mes
       const recibosExistentes = await obtenerRecibosPorMes(mes);
-      
+
       if (recibosExistentes.length > 0) {
-        const confirmacion = window.confirm(
-          `Ya existen ${recibosExistentes.length} recibos guardados para este mes.\n\n` +
-          `¿Deseas continuar? Esto creará recibos duplicados.`
+        // BLOQUEAR la creación de duplicados
+        setGuardandoRecibos(false);
+        alert(
+          `⚠️ Ya existen ${recibosExistentes.length} recibos guardados para este mes.\n\n` +
+          `Para evitar duplicados, primero debes eliminar los recibos existentes.\n\n` +
+          `Usa el botón "🗑️ Eliminar Recibos del Mes" antes de generar nuevos recibos.`
         );
-        
-        if (!confirmacion) {
-          setGuardandoRecibos(false);
-          return { exito: false, mensaje: 'Guardado cancelado por el usuario' };
-        }
+        return { 
+          exito: false, 
+          mensaje: 'Ya existen recibos para este mes',
+          recibosExistentes: recibosExistentes.length 
+        };
       }
 
       let recibosGuardados = 0;
@@ -135,6 +138,101 @@ export const useReportes = (citas, clientes, meses) => {
     // Luego guardar los recibos
     return await guardarRecibosEnFirebase();
   }, [generarReporteMensual, guardarRecibosEnFirebase]);
+
+    /**
+   * Elimina todos los recibos de un mes específico
+   * Útil para regenerar recibos cuando hay errores
+   * @param {string} mes - Mes en formato YYYY-MM (opcional, usa mesReporte por defecto)
+   * @returns {Promise<Object>} - Resultado de la eliminación
+   */
+  const eliminarRecibosPorMes = useCallback(async (mes = null) => {
+    const mesAEliminar = mes || mesReporte;
+    
+    try {
+      // Obtener recibos del mes
+      const recibosExistentes = await obtenerRecibosPorMes(mesAEliminar);
+      
+      if (recibosExistentes.length === 0) {
+        alert('ℹ️ No hay recibos para eliminar en este mes.');
+        return { exito: false, mensaje: 'No hay recibos para eliminar' };
+      }
+
+      // Confirmar eliminación
+      const confirmacion = window.confirm(
+        `⚠️ ¿Estás seguro de eliminar TODOS los recibos de este mes?\n\n` +
+        `Se eliminarán ${recibosExistentes.length} recibos.\n\n` +
+        `⚠️ ADVERTENCIA: Esta acción NO se puede deshacer.\n` +
+        `Los pagos ligados a estos recibos quedarán sin recibo asociado.`
+      );
+
+      if (!confirmacion) {
+        return { exito: false, mensaje: 'Eliminación cancelada por el usuario' };
+      }
+
+      // Segunda confirmación para estar seguros
+      const confirmacionFinal = window.confirm(
+        `🚨 ÚLTIMA CONFIRMACIÓN\n\n` +
+        `Estás a punto de eliminar ${recibosExistentes.length} recibos.\n\n` +
+        `¿Realmente deseas continuar?`
+      );
+
+      if (!confirmacionFinal) {
+        return { exito: false, mensaje: 'Eliminación cancelada por el usuario' };
+      }
+
+      setGuardandoRecibos(true);
+      console.log(`🗑️ Eliminando ${recibosExistentes.length} recibos...`);
+
+      // Importar la función de eliminación desde la API
+      const { eliminarRecibo } = await import('../api/recibos');
+      
+      let recibosEliminados = 0;
+      const errores = [];
+
+      for (const recibo of recibosExistentes) {
+        try {
+          await eliminarRecibo(recibo.id);
+          recibosEliminados++;
+          console.log(`✅ Recibo eliminado: ${recibo.reciboId}`);
+        } catch (error) {
+          console.error(`❌ Error eliminando recibo ${recibo.reciboId}:`, error);
+          errores.push({ reciboId: recibo.reciboId, error: error.message });
+        }
+      }
+
+      setGuardandoRecibos(false);
+
+      if (errores.length === 0) {
+        alert(`✅ Se eliminaron ${recibosEliminados} recibos exitosamente.\n\nAhora puedes generar nuevos recibos.`);
+        return {
+          exito: true,
+          mensaje: `${recibosEliminados} recibos eliminados`,
+          recibosEliminados
+        };
+      } else {
+        alert(
+          `⚠️ Se eliminaron ${recibosEliminados} recibos.\n` +
+          `${errores.length} recibos tuvieron errores.\n\n` +
+          `Revisa la consola para más detalles.`
+        );
+        return {
+          exito: true,
+          mensaje: `${recibosEliminados} eliminados, ${errores.length} con errores`,
+          recibosEliminados,
+          errores
+        };
+      }
+
+    } catch (error) {
+      console.error('❌ Error general al eliminar recibos:', error);
+      setGuardandoRecibos(false);
+      alert(`❌ Error al eliminar recibos: ${error.message}`);
+      return {
+        exito: false,
+        mensaje: 'Error al eliminar recibos: ' + error.message
+      };
+    }
+  }, [mesReporte]);
 
   /**
    * Ordena las citas en los reportes por columna
@@ -270,6 +368,7 @@ export const useReportes = (citas, clientes, meses) => {
     guardarRecibosEnFirebase,
     generarYGuardarRecibos,
     ordenarCitasReporte,
+    eliminarRecibosPorMes,  // ← AGREGAR ESTA LÍNEA
     renderIndicadorOrden,
     descargarReporte
   };

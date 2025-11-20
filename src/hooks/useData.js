@@ -1,4 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { 
+  registrarPagoVinculado,
+  actualizarPagoVinculado,
+  eliminarPagoVinculado 
+} from '../api/transacciones';
 
 // ✅ Importar TODAS las funciones de la API (sin Firebase)
 import {
@@ -278,30 +283,76 @@ export const useData = (currentUser, isLoggedIn) => {
    * Ahora también actualiza el estado del recibo si está ligado
    * ← FUNCIÓN MEJORADA
    */
-  const guardarPago = async (pagoForm, editingId) => {
+  // const guardarPago = async (pagoForm, editingId) => {
+  //   try {
+  //     const data = { ...pagoForm, monto: parseFloat(pagoForm.monto) };
+      
+  //     if (editingId) {
+  //       await actualizarPagoAPI(editingId, data);
+  //     } else {
+  //       await crearPagoAPI(data);
+  //     }
+      
+  //     // Si el pago está ligado a un recibo, actualizar el estado del recibo
+  //     if (data.reciboFirebaseId) {
+  //       await actualizarEstadoReciboConPagos(data.reciboFirebaseId);
+  //     }
+      
+  //     await cargarPagos();
+  //     await cargarRecibos(); // Recargar recibos para ver el cambio de estado
+  //     return { success: true };
+  //   } catch (error) {
+  //     console.error('Error al guardar pago:', error);
+  //     return { success: false, error };
+  //   }
+  // };
+  /**
+   * Guarda un pago (crear nuevo o actualizar existente) usando transacciones atómicas
+   * ← FUNCIÓN MEJORADA CON TRANSACCIONES
+   */
+  const guardarPago = async (pagoData, editingId = null) => {
     try {
-      const data = { ...pagoForm, monto: parseFloat(pagoForm.monto) };
+      let resultado;
       
       if (editingId) {
-        await actualizarPagoAPI(editingId, data);
+        // ACTUALIZAR pago existente
+        const pagoActual = pagos.find(p => p.id === editingId);
+        
+        if (!pagoActual) {
+          alert('❌ Pago no encontrado');
+          return { success: false };
+        }
+        
+        resultado = await actualizarPagoVinculado(
+          editingId,
+          pagoData,
+          pagoActual.reciboFirebaseId || null,
+          pagoData.reciboFirebaseId || null
+        );
       } else {
-        await crearPagoAPI(data);
+        // CREAR pago nuevo
+        resultado = await registrarPagoVinculado(
+          pagoData,
+          pagoData.reciboFirebaseId || null
+        );
       }
       
-      // Si el pago está ligado a un recibo, actualizar el estado del recibo
-      if (data.reciboFirebaseId) {
-        await actualizarEstadoReciboConPagos(data.reciboFirebaseId);
+      if (resultado.exito) {
+        // Recargar ambas colecciones (importante!)
+        await cargarPagos();
+        await cargarRecibos();
+        return { success: true, mensaje: resultado.mensaje };
+      } else {
+        alert('❌ ' + resultado.mensaje);
+        return { success: false, error: resultado.mensaje };
       }
-      
-      await cargarPagos();
-      await cargarRecibos(); // Recargar recibos para ver el cambio de estado
-      return { success: true };
     } catch (error) {
       console.error('Error al guardar pago:', error);
-      return { success: false, error };
+      alert('❌ Error: ' + error.message);
+      return { success: false, error: error.message };
     }
   };
-
+  
   /**
    * Actualiza el estado de pago de un recibo basándose en sus pagos
    * ← NUEVA FUNCIÓN AUXILIAR
@@ -389,29 +440,40 @@ export const useData = (currentUser, isLoggedIn) => {
   };
 
   /**
-   * Elimina un pago usando la API
-   * Ahora también actualiza el estado del recibo si estaba ligado
-   * ← FUNCIÓN MEJORADA
+   * Elimina un pago usando transacciones atómicas
+   * Revierte automáticamente el monto en el recibo vinculado
+   * ← FUNCIÓN MEJORADA CON TRANSACCIONES
    */
   const eliminarPago = async (id) => {
     if (!window.confirm('¿Eliminar pago?')) return;
     
     try {
-      // Buscar el pago antes de eliminarlo para saber si tiene recibo ligado
+      // Buscar el pago antes de eliminarlo
       const pago = pagos.find(p => p.id === id);
-      const reciboId = pago?.reciboFirebaseId;
+      
+      if (!pago) {
+        alert('❌ Pago no encontrado');
+        return;
+      }
 
-      await eliminarPagoAPI(id);
-      await cargarPagos();
+      // Usar transacción atómica para eliminar
+      const resultado = await eliminarPagoVinculado(
+        id,
+        pago.reciboFirebaseId || null,
+        pago.monto
+      );
 
-      // Si tenía recibo ligado, actualizar su estado
-      if (reciboId) {
-        await actualizarEstadoReciboConPagos(reciboId);
+      if (resultado.exito) {
+        alert('✅ ' + resultado.mensaje);
+        // Recargar ambas colecciones
+        await cargarPagos();
         await cargarRecibos();
+      } else {
+        alert('❌ ' + resultado.mensaje);
       }
     } catch (error) {
       console.error('Error al eliminar pago:', error);
-      alert('Error al eliminar pago');
+      alert('❌ Error al eliminar pago: ' + error.message);
     }
   };
 

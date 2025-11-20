@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { FileText, Download, Calendar, DollarSign, TrendingUp, User, Save } from 'lucide-react';
+import { Trash2, FileText, Download, Calendar, DollarSign, TrendingUp, User, Save } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
 
 /**
  * Componente de Reportes con exportación a Excel y PDF
@@ -19,6 +20,7 @@ const Reportes = ({
   terapeutas, 
   meses,
   guardarRecibosEnFirebase,
+  eliminarRecibosPorMes,  // ← AGREGAR ESTA LÍNEA
   guardandoRecibos,
   reporteGenerado
 }) => {
@@ -102,7 +104,7 @@ const Reportes = ({
       reporte[cita.cliente].totalGeneral += total;
       reporte[cita.cliente].totalCostoTerapeutas += costoTerapeuta;
     });
-    
+
     Object.values(reporte).forEach(cliente => {
       cliente.gananciaTotal = cliente.totalGeneral - cliente.totalCostoTerapeutas;
       cliente.margenPorcentaje = cliente.totalGeneral > 0 
@@ -481,6 +483,27 @@ const Reportes = ({
           >
             <Save size={18} />
             {guardandoRecibos ? 'Guardando...' : 'Guardar Recibos'}
+          </button>
+
+          {/* Botón para Eliminar Recibos del Mes */}
+          <button
+            onClick={async () => {
+              if (eliminarRecibosPorMes) {
+                const resultado = await eliminarRecibosPorMes(mesReporte);
+                if (resultado.exito) {
+                  // Regenerar el reporte después de eliminar
+                  // generarReporteMensual();
+                }
+              }
+            }}
+            // disabled={guardandoRecibos || !reporteGenerado || !reporteGenerado.recibos || reporteGenerado.recibos.length === 0}
+            disabled={guardandoRecibos}
+            className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            <Trash2 size={18} />
+            <span>
+              {guardandoRecibos ? 'Procesando...' : '🗑️ Eliminar Recibos del Mes'}
+            </span>
           </button>
         </div>
       </div>

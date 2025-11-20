@@ -12,6 +12,13 @@ import { useModals } from './hooks/useModals';  // ← NUEVO
 import CalendarioCitas from './components/CalendarioCitas';
 import Reportes from './components/Reportes';
 import ModalPago from './components/ModalPago';
+import { 
+  registrarPagoVinculado,
+  actualizarPagoVinculado,
+  eliminarPagoVinculado 
+} from './api/transacciones';
+import RecibosGemini from './components/RecibosGemini';
+import Sidebar from './components/Sidebar';
 
 const SistemaGestion = () => {
   // Hook de autenticación
@@ -122,6 +129,7 @@ const SistemaGestion = () => {
     renderIndicadorOrden,
     descargarReporte,
     guardarRecibosEnFirebase,  // ← Necesitas esto
+    eliminarRecibosPorMes,  // ← AGREGAR ESTA LÍNEA
     guardandoRecibos,          // ← Y esto
   } = useReportes(citas, clientes, meses);
 
@@ -907,163 +915,15 @@ const SistemaGestion = () => {
   return (
     <div className="min-h-screen bg-gray-100 flex">
       {/* Sidebar Colapsable */}
-      <aside className={`${sidebarCollapsed ? 'w-20' : 'w-64'} bg-white shadow-lg fixed h-full transition-all duration-300 ease-in-out flex flex-col`}>
-        {/* Logo/Header del Sidebar */}
-        <div className="p-6 border-b flex-shrink-0">
-          <div className="flex items-center justify-between">
-            {!sidebarCollapsed && (
-              <div className="flex-1">
-                <h1 className="text-xl font-bold text-gray-800">Sistema de Gestión</h1>
-                <p className="text-sm text-gray-500 mt-1">{currentUser.nombre}</p>
-                <p className="text-xs text-gray-400">{currentUser.rol}</p>
-              </div>
-            )}
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-all"
-            >
-              {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Menú de Navegación con Scroll */}
-        <nav className="p-4 flex-1 overflow-y-auto">
-          <div className="space-y-2">
-            {hasPermission('dashboard') && (
-              <button 
-                onClick={() => setActiveTab('dashboard')} 
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
-                  activeTab === 'dashboard' 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-                title={sidebarCollapsed ? 'Dashboard' : ''}
-              >
-                <DollarSign size={20} />
-                {!sidebarCollapsed && <span>Dashboard</span>}
-              </button>
-            )}
-            
-            {hasPermission('horas') && (
-              <button 
-                onClick={() => setActiveTab('horas')} 
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
-                  activeTab === 'horas' 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-                title={sidebarCollapsed ? 'Horas' : ''}
-              >
-                <Clock size={20} />
-                {!sidebarCollapsed && <span>Horas</span>}
-              </button>
-            )}
-            
-            {hasPermission('reportes') && (
-              <button 
-                onClick={() => setActiveTab('reportes')} 
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
-                  activeTab === 'reportes' 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-                title={sidebarCollapsed ? 'Reportes' : ''}
-              >
-                <FileText size={20} />
-                {!sidebarCollapsed && <span>Reportes</span>}
-              </button>
-            )}
-            
-            {hasPermission('terapeutas') && (
-              <button 
-                onClick={() => setActiveTab('terapeutas')} 
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
-                  activeTab === 'terapeutas' 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-                title={sidebarCollapsed ? 'Terapeutas' : ''}
-              >
-                <Users size={20} />
-                {!sidebarCollapsed && <span>Terapeutas</span>}
-              </button>
-            )}
-            
-            {hasPermission('bloques') && (
-              <button 
-                onClick={() => setActiveTab('bloques')} 
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
-                  activeTab === 'bloques' 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-                title={sidebarCollapsed ? 'Bloques de Citas' : ''}
-              >
-                <Calendar size={20} />
-                {!sidebarCollapsed && <span>Bloques de Citas</span>}
-              </button>
-            )}
-            
-            {hasPermission('citas') && (
-              <button 
-                onClick={() => setActiveTab('citas')} 
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
-                  activeTab === 'citas' 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-                title={sidebarCollapsed ? 'Citas' : ''}
-              >
-                <Calendar size={20} />
-                {!sidebarCollapsed && <span>Citas</span>}
-              </button>
-            )}
-            
-            {hasPermission('clientes') && (
-              <button 
-                onClick={() => setActiveTab('clientes')} 
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
-                  activeTab === 'clientes' 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-                title={sidebarCollapsed ? 'Clientes' : ''}
-              >
-                <Users size={20} />
-                {!sidebarCollapsed && <span>Clientes</span>}
-              </button>
-            )}
-            
-            {hasPermission('pagos') && (
-              <button 
-                onClick={() => setActiveTab('pagos')} 
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
-                  activeTab === 'pagos' 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-                title={sidebarCollapsed ? 'Pagos' : ''}
-              >
-                <DollarSign size={20} />
-                {!sidebarCollapsed && <span>Pagos</span>}
-              </button>
-            )}
-          </div>
-        </nav>
-
-        {/* Botón de Logout - Ahora dentro del flujo normal, no absolute */}
-        <div className="p-4 border-t bg-white flex-shrink-0">
-          <button 
-            onClick={handleLogout} 
-            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all font-medium`}
-            title={sidebarCollapsed ? 'Cerrar Sesión' : ''}
-          >
-            <LogOut size={18} />
-            {!sidebarCollapsed && <span>Cerrar Sesión</span>}
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        currentUser={currentUser}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        sidebarCollapsed={sidebarCollapsed}
+        setSidebarCollapsed={setSidebarCollapsed}
+        hasPermission={hasPermission}
+        handleLogout={handleLogout}
+      />
 
       {/* Contenido Principal - Se ajusta según el sidebar */}
       <main className={`${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex-1 p-8 transition-all duration-300`}>
@@ -1554,6 +1414,7 @@ const SistemaGestion = () => {
               terapeutas={terapeutas}
               meses={meses}
               guardarRecibosEnFirebase={guardarRecibosEnFirebase}  // ← AGREGAR
+              eliminarRecibosPorMes={eliminarRecibosPorMes}  // ← AGREGAR ESTA LÍNEA
               guardandoRecibos={guardandoRecibos}                  // ← AGREGAR
               reporteGenerado={reporteGenerado}                    // ← AGREGAR
             />
@@ -1683,7 +1544,6 @@ const SistemaGestion = () => {
               )}
             </div>
           )}
-
 
           {activeTab === 'citas' && hasPermission('citas') && (
             <div className="space-y-6">
@@ -1903,9 +1763,6 @@ const SistemaGestion = () => {
             </div>
           )}
 
-
-
-
         {/* RESTO DE SECCIONES (omitidas por brevedad - igual que antes) */}
         {activeTab === 'terapeutas' && hasPermission('terapeutas') && (
           <div className="space-y-6">
@@ -2012,6 +1869,15 @@ const SistemaGestion = () => {
             </div>
             <div className="bg-white shadow rounded-md"><ul className="divide-y">{pagos.map(p => (<li key={p.id} className="px-6 py-4"><div className="flex justify-between items-center"><div><p className="font-medium">{getNombre(p.clienteId, clientes)}</p><p className="text-sm text-gray-600">{p.concepto}</p></div><div className="flex items-center space-x-4"><p className="text-xl font-bold text-green-600">${p.monto.toLocaleString()}</p><button onClick={() => openModal('pago', p)} className="text-blue-600 hover:text-blue-800"><Edit className="w-5 h-5" /></button><button onClick={() => eliminarPago(p.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-5 h-5" /></button></div></div></li>))}</ul></div>
           </div>
+        )}
+
+        {/* NUEVO: Tu componente de Recibos Gemini */}
+        {activeTab === 'recibos-gemini' && (
+          <RecibosGemini
+            citas={citas}
+            clientes={clientes}
+            meses={meses}
+          />
         )}
       </main>
 
