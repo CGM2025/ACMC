@@ -19,6 +19,14 @@ import {
 } from './api/transacciones';
 import RecibosGemini from './components/RecibosGemini';
 import Sidebar from './components/Sidebar';
+import Pagos from './components/pages/Pagos';
+import Horas from './components/pages/Horas';
+import Terapeutas from './components/pages/Terapeutas';
+import Clientes from './components/pages/Clientes';
+import BloquesCitas from './components/pages/BloquesCitas';
+import Citas from './components/pages/Citas';
+import Dashboard from './components/pages/Dashboard';
+
 
 const SistemaGestion = () => {
   // Hook de autenticación
@@ -927,481 +935,26 @@ const SistemaGestion = () => {
 
       {/* Contenido Principal - Se ajusta según el sidebar */}
       <main className={`${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex-1 p-8 transition-all duration-300`}>
-        {activeTab === 'dashboard' && hasPermission('dashboard') && (
-          <div className="space-y-6">
-            {/* Botón de Importación (solo si no hay datos históricos) */}
-            {utilidadHistorica.length === 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-semibold text-yellow-900">📊 Importar Datos Históricos</h4>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      Importa tu historial de ganancias desde el archivo JSON para ver la evolución completa
-                    </p>
-                  </div>
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={async (e) => {
-                      const file = e.target.files[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = async (event) => {
-                          try {
-                            const datos = JSON.parse(event.target.result);
-                            await importarUtilidadHistoricaLocal(datos);
-                          } catch (error) {
-                            alert('Error al leer el archivo JSON');
-                          }
-                        };
-                        reader.readAsText(file);
-                      }
-                    }}
-                    className="hidden"
-                    id="importar-historico"
-                  />
-                  <label
-                    htmlFor="importar-historico"
-                    className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 cursor-pointer flex items-center gap-2"
-                  >
-                    <Upload size={16} />
-                    Importar JSON
-                  </label>
-                </div>
-              </div>
-            )}
-            {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white p-6 rounded-lg shadow">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm">Total Horas</p>
-                    <p className="text-3xl font-bold">{totalHoras.toFixed(1)}</p>
-                  </div>
-                  <Clock className="w-12 h-12 text-blue-500" />
-                </div>
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm">Total Pagos</p>
-                    <p className="text-3xl font-bold">${totalPagos.toLocaleString()}</p>
-                  </div>
-                  <DollarSign className="w-12 h-12 text-green-500" />
-                </div>
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm">Clientes</p>
-                    <p className="text-3xl font-bold">{clientes.length}</p>
-                  </div>
-                  <Users className="w-12 h-12 text-purple-500" />
-                </div>
-              </div>
-            </div>
-
-            {/* Gráfica de Contribución por Terapeuta */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-6">
-                💰 Contribución de Ganancias por Terapeuta
-              </h3>
-              
-              {(() => {
-                const contribuciones = calcularContribucionPorTerapeuta();
-                const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
-                
-                if (contribuciones.length === 0) {
-                  return (
-                    <div className="text-center py-12">
-                      <p className="text-gray-500">No hay citas completadas aún para mostrar contribuciones</p>
-                    </div>
-                  );
-                }
-                
-                return (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Gráfica de Pie */}
-                    <div className="flex items-center justify-center">
-                      <PieChart width={400} height={400}>
-                        <Pie
-                          data={contribuciones}
-                          cx={200}
-                          cy={200}
-                          labelLine={true}
-                          label={({ porcentaje }) => `${porcentaje.toFixed(1)}%`}
-                          outerRadius={120}
-                          fill="#8884d8"
-                          dataKey="ganancia"
-                        >
-                          {contribuciones.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value, name, props) => [
-                            `$${Math.round(value).toLocaleString()}`,
-                            props.payload.nombre
-                          ]}
-                        />
-                      </PieChart>
-                    </div>
-
-                    {/* Tabla de detalles */}
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Terapeuta</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">Ganancia</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700">%</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {contribuciones.map((t, index) => (
-                            <tr key={t.nombre} className="hover:bg-gray-50">
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <div 
-                                    className="w-3 h-3 rounded-full" 
-                                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                                  ></div>
-                                  <span className="text-sm font-medium text-gray-900">{t.nombre}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-right text-sm font-semibold text-green-600">
-                                ${Math.round(t.ganancia).toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
-                                {t.porcentaje.toFixed(1)}%
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot className="bg-gray-50 border-t-2">
-                          <tr>
-                            <td className="px-4 py-3 text-sm font-bold text-gray-900">TOTAL</td>
-                            <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                              ${Math.round(contribuciones.reduce((sum, t) => sum + t.ganancia, 0)).toLocaleString()}
-                            </td>
-                            <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">100%</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Gráfica de Evolución Mensual de Ganancias */}
-            <div className="bg-white rounded-lg shadow p-6" key={refreshKey}>  {/* ← AGREGAR key */}
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-gray-800">
-                  📈 Evolución Mensual de Ganancias
-                </h3>
-                
-                {/* Selector de Rango */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setRangoMeses(6)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      rangoMeses === 6
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    6 meses
-                  </button>
-                  <button
-                    onClick={() => setRangoMeses(12)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      rangoMeses === 12
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    12 meses
-                  </button>
-                  <button
-                    onClick={() => setRangoMeses(24)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      rangoMeses === 24
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    24 meses
-                  </button>
-                  <button
-                    onClick={() => setRangoMeses('todo')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      rangoMeses === 'todo'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Todo
-                  </button>
-                </div>
-              </div>
-              
-              {(() => {
-                const kpis = calcularKPIsAnuales();
-                
-                // Mostrar KPIs de Crecimiento Anual
-                if (kpis && kpis.promediosAnuales.length > 1) {
-                  return (
-                    <div className="mb-6">
-                      {/* Tarjetas de Crecimiento - Ahora en 3 columnas */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        
-                        {/* Promedios Mensuales por Año */}
-                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-purple-900 mb-3">📊 Promedio Mensual por Año</h4>
-                          <div className="space-y-2">
-                            {kpis.promediosAnuales.map(año => {
-                              const esAñoActual = año.año === new Date().getFullYear();
-                              const esAñoCompleto = año.meses >= 12;
-                              return (
-                                <div key={año.año} className="flex justify-between items-center">
-                                  <span className="text-sm text-purple-800">
-                                    {año.año}{esAñoActual && !esAñoCompleto ? ` (YTD - ${año.meses} meses)` : ''}:
-                                  </span>
-                                  <span className="text-sm font-bold text-purple-900">
-                                    ${Math.round(año.promedio).toLocaleString()}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Crecimiento Anual */}
-                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-blue-900 mb-3">📈 Crecimiento Anual</h4>
-                          <div className="space-y-2">
-                            {kpis.crecimientos.map(c => {
-                              const esAñoActual = c.año === new Date().getFullYear();
-                              const añoData = kpis.promediosAnuales.find(a => a.año === c.año);
-                              const esAñoCompleto = añoData && añoData.meses >= 12;
-                              
-                              return (
-                                <div key={c.año} className="flex justify-between items-center">
-                                  <span className="text-sm text-blue-800">
-                                    {c.año - 1} → {c.año}{esAñoActual && !esAñoCompleto ? '*' : ''}:
-                                  </span>
-                                  <span className={`text-sm font-bold ${c.crecimiento >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {c.crecimiento >= 0 ? '↑' : '↓'} {Math.abs(c.crecimiento).toFixed(1)}%
-                                  </span>
-                                </div>
-                              );
-                            })}
-                            {kpis.crecimientos.some(c => {
-                              const esAñoActual = c.año === new Date().getFullYear();
-                              const añoData = kpis.promediosAnuales.find(a => a.año === c.año);
-                              const esAñoCompleto = añoData && añoData.meses >= 12;
-                              return esAñoActual && !esAñoCompleto;
-                            }) && (
-                              <p className="text-xs text-blue-600 mt-2 pt-2 border-t border-blue-200">
-                                * Año en progreso, sujeto a cambios
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Mejor Año */}
-                        <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-green-900 mb-3">💰 Análisis Histórico</h4>
-                          <div className="space-y-3">
-                            <div>
-                              <p className="text-xs text-green-700">Mejor Año</p>
-                              <p className="text-lg font-bold text-green-900">
-                                {kpis.mejorAño.año}: ${Math.round(kpis.mejorAño.promedio).toLocaleString()}/mes
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-green-700">Promedio Histórico</p>
-                              <p className="text-lg font-bold text-green-900">
-                                ${Math.round(kpis.promediosAnuales.reduce((sum, a) => sum + a.promedio, 0) / kpis.promediosAnuales.length).toLocaleString()}/mes
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-green-700">Crecimiento Total</p>
-                              <p className="text-lg font-bold text-green-900">
-                                {(() => {
-                                  const primerAño = kpis.promediosAnuales[0];
-                                  const ultimoAño = kpis.promediosAnuales[kpis.promediosAnuales.length - 1];
-                                  const crecimientoTotal = ((ultimoAño.promedio - primerAño.promedio) / primerAño.promedio) * 100;
-                                  return `${crecimientoTotal >= 0 ? '+' : ''}${crecimientoTotal.toFixed(1)}%`;
-                                })()}
-                              </p>
-                              <p className="text-xs text-green-600">
-                                {kpis.promediosAnuales[0].año} → {kpis.promediosAnuales[kpis.promediosAnuales.length - 1].año}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                
-                return null;
-              })()}
-
-              {(() => {
-                const evolucion = calcularEvolucionMensual();
-                
-                console.log('📈 Datos de evolución:', evolucion.length);
-
-                // Filtrar según el rango seleccionado
-                const datosFiltrados = rangoMeses === 'todo' 
-                  ? evolucion 
-                  : evolucion.slice(-rangoMeses);
-                  console.log('📊 Datos filtrados:', datosFiltrados.length);
-
-                if (datosFiltrados.length === 0) {
-                  return (
-                    <div className="text-center py-12">
-                      <p className="text-gray-500">No hay datos suficientes para mostrar la evolución</p>
-                      <p className="text-sm text-gray-400 mt-2">
-                        {utilidadHistorica.length === 0 ? 'Importa tus datos históricos para ver la gráfica' : 'Completa algunas citas para ver datos del sistema'}
-                      </p>
-                    </div>
-                  );
-                }
-                
-                return (
-                  <div className="space-y-4">
-                    <LineChart width={1000} height={400} data={datosFiltrados}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="mes" 
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis 
-                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
-                      />
-                      <Tooltip 
-                        formatter={(value) => [`$${Math.round(value).toLocaleString()}`, 'Ganancia']}
-                        labelFormatter={(label, payload) => {
-                          if (payload && payload[0]) {
-                            return `${payload[0].payload.mes} ${payload[0].payload.año}`;
-                          }
-                          return label;
-                        }}
-                      />
-                      <Legend />
-                      <Line 
-                        type="monotone" 
-                        dataKey="ganancia" 
-                        stroke="#10b981" 
-                        strokeWidth={3}
-                        name="Ganancia Mensual"
-                        dot={{ r: 5 }}
-                        activeDot={{ r: 8 }}
-                      />
-                    </LineChart>
-                    
-                    {/* Estadísticas del período actual */}
-                    <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t">
-                      <div className="text-center">
-                        <p className="text-sm text-gray-600">Ganancia Promedio</p>
-                        <p className="text-2xl font-bold text-blue-600">
-                          ${Math.round(datosFiltrados.reduce((sum, m) => sum + m.ganancia, 0) / datosFiltrados.length).toLocaleString()}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {rangoMeses === 'todo' ? 'Histórico' : `Últimos ${rangoMeses} meses`}
-                        </p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm text-gray-600">Mejor Mes</p>
-                        <p className="text-2xl font-bold text-green-600">
-                          ${Math.round(Math.max(...datosFiltrados.map(m => m.ganancia))).toLocaleString()}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {(() => {
-                            const mejor = datosFiltrados.reduce((max, m) => m.ganancia > max.ganancia ? m : max);
-                            return `${mejor.mes} ${mejor.año}`;
-                          })()}
-                        </p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm text-gray-600">Total Período</p>
-                        <p className="text-2xl font-bold text-purple-600">
-                          ${Math.round(datosFiltrados.reduce((sum, m) => sum + m.ganancia, 0)).toLocaleString()}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {datosFiltrados.length} meses
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        )}
+      {activeTab === 'dashboard' && hasPermission('dashboard') && (
+        <Dashboard
+          citas={citas}
+          clientes={clientes}
+          utilidadHistorica={utilidadHistorica}
+          totalHoras={totalHoras}
+          totalPagos={totalPagos}
+          rangoMeses={rangoMeses}
+          setRangoMeses={setRangoMeses}
+          refreshKey={refreshKey}
+          setRefreshKey={setRefreshKey}
+          cargarUtilidadHistorica={cargarUtilidadHistorica}
+        />
+      )}
 
         {/* SECCIÓN DE HORAS (código igual que antes, omitido por brevedad) */}
         {activeTab === 'horas' && hasPermission('horas') && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Horas Trabajadas</h2>
-            </div>
-
-            <div className="bg-white shadow rounded-md">
-              {horasDesdeCitas.length > 0 ? (
-                <>
-                  <div className="px-6 py-4 bg-green-50 border-b">
-                    <p className="text-sm text-green-800">
-                      <CheckCircle className="inline w-4 h-4 mr-2" />
-                      Mostrando horas calculadas desde {horasDesdeCitas.length} días con citas completadas
-                    </p>
-                  </div>
-                  <ul className="divide-y">
-                    {horasDesdeCitas.map((registro, index) => (
-                      <li key={index} className="px-6 py-4 hover:bg-gray-50">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <p className="font-medium text-lg">{registro.terapeuta}</p>
-                            <p className="text-sm text-gray-600">{registro.fecha}</p>
-                            <div className="mt-2 space-y-1">
-                              {registro.citas.map((cita, idx) => (
-                                <div key={idx} className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
-                                  <span className="font-medium">{cita.cliente}</span>
-                                  <span className="text-gray-500 ml-2">
-                                    {cita.horaInicio} - {cita.horaFin} ({cita.duracion.toFixed(1)}h)
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="ml-4 text-right">
-                            <p className="text-2xl font-bold text-green-600">
-                              {registro.horasTotal.toFixed(1)}h
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {registro.citas.length} {registro.citas.length === 1 ? 'cita' : 'citas'}
-                            </p>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <div className="px-6 py-12 text-center">
-                  <CheckCircle className="mx-auto text-gray-300 mb-4" size={64} />
-                  <p className="text-gray-500 text-lg">No hay citas completadas aún</p>
-                  <p className="text-gray-400 mt-2">
-                    Las citas con estado "Completada" aparecerán aquí automáticamente
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
+          <Horas
+            horasDesdeCitas={horasDesdeCitas}
+          />
         )}
 
         {/* ============================================
@@ -1420,455 +973,88 @@ const SistemaGestion = () => {
             />
           )}
 
-          {activeTab === 'bloques' && hasPermission('bloques') && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">Bloques de Citas</h2>
-              </div>
+        {activeTab === 'bloques' && hasPermission('bloques') && (
+          <BloquesCitas
+            terapeutas={terapeutas}
+            clientes={clientes}
+            diasSemanaOptions={diasSemanaOptions}
+            nuevoHorario={nuevoHorario}
+            setNuevoHorario={setNuevoHorario}
+            horarios={horarios}
+            fechaInicio={fechaInicio}
+            setFechaInicio={setFechaInicio}
+            fechaFin={fechaFin}
+            setFechaFin={setFechaFin}
+            citasGeneradas={citasGeneradas}
+            mostrarResultado={mostrarResultado}
+            toggleDia={toggleDia}
+            agregarHorario={agregarHorario}
+            eliminarHorario={eliminarHorario}
+            generarCitas={generarCitas}
+            guardarCitas={guardarCitas}
+          />
+        )}
 
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Configurar Horarios</h3>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <select className="px-4 py-2 border border-gray-300 rounded-lg" value={nuevoHorario.terapeuta} onChange={(e) => setNuevoHorario({...nuevoHorario, terapeuta: e.target.value})}>
-                      <option value="">Seleccionar terapeuta</option>
-                      {terapeutas.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
-                    </select>
-                    <select className="px-4 py-2 border border-gray-300 rounded-lg" value={nuevoHorario.cliente} onChange={(e) => setNuevoHorario({...nuevoHorario, cliente: e.target.value})}>
-                      <option value="">Seleccionar cliente</option>
-                      {clientes.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-2">Días de la semana</p>
-                    <div className="flex flex-wrap gap-2">
-                      {diasSemanaOptions.map(dia => (
-                        <button 
-                          key={dia.value} 
-                          onClick={() => toggleDia(dia.value)} 
-                          className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                            nuevoHorario.diasSemana.includes(dia.value) ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          }`}
-                        >
-                          {dia.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Hora de inicio</label>
-                      <input type="time" value={nuevoHorario.horaInicio} onChange={(e) => setNuevoHorario({...nuevoHorario, horaInicio: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Hora de fin</label>
-                      <input type="time" value={nuevoHorario.horaFin} onChange={(e) => setNuevoHorario({...nuevoHorario, horaFin: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
-                    </div>
-                  </div>
-                  
-                  <button onClick={agregarHorario} className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-                    <Plus size={20} />Agregar Horario
-                  </button>
-                </div>
-              </div>
-
-              {horarios.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6">
-                  <h3 className="text-lg font-semibold mb-4">Horarios Configurados</h3>
-                  <div className="space-y-2">
-                    {horarios.map((horario) => (
-                      <div key={horario.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex justify-between items-center">
-                        <div>
-                          <p className="font-medium text-gray-800">{horario.terapeuta} - {horario.cliente}</p>
-                          <p className="text-sm text-gray-600">{horario.diasSemana.map(d => diasSemanaOptions.find(opt => opt.value === d)?.label).join(', ')}</p>
-                          <p className="text-sm text-blue-600">{horario.horaInicio} - {horario.horaFin}</p>
-                        </div>
-                        <button onClick={() => eliminarHorario(horario.id)} className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-all">
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Selecciona el período</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Fecha de inicio</label>
-                    <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Fecha de fin</label>
-                    <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
-                  </div>
-                </div>
-                <button onClick={generarCitas} className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-all flex items-center justify-center gap-2">
-                  <Calendar size={20} />Generar Citas
-                </button>
-              </div>
-
-              {mostrarResultado && (
-                <div className="bg-white rounded-lg shadow p-6">
-                  <h3 className="text-xl font-semibold mb-4 text-gray-800">✨ Se generarán {citasGeneradas.length} citas</h3>
-                  <div className="max-h-96 overflow-y-auto mb-4 space-y-2">
-                    {citasGeneradas.slice(0, 10).map((cita, index) => (
-                      <div key={index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="font-medium text-gray-800">{cita.terapeuta} con {cita.cliente}</p>
-                            <p className="text-sm text-gray-600">{cita.diaSemana}, {cita.fecha} | {cita.horaInicio} - {cita.horaFin}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {citasGeneradas.length > 10 && (
-                      <p className="text-center text-gray-600 text-sm py-2">... y {citasGeneradas.length - 10} citas más</p>
-                    )}
-                  </div>
-                  <button 
-                    onClick={guardarCitas}
-                    disabled={loadingBatch}
-                    className={`px-4 py-2 rounded transition-colors ${
-                      loadingBatch 
-                        ? 'bg-gray-400 cursor-not-allowed' 
-                        : 'bg-blue-600 hover:bg-blue-700'
-                    } text-white`}
-                  >
-                    {loadingBatch ? 'Guardando...' : 'Guardar Citas'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'citas' && hasPermission('citas') && (
-            <div className="space-y-6">
-              {<div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">Citas Programadas</h2>
-                <div className="flex gap-2">
-                  {/* Botón de Nueva Cita Manual */}
-                    <button
-                      onClick={() => openModal('cita')}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                      <Plus size={18} />
-                      Nueva Cita
-                    </button>
-                  {/* Botón de Importar Word */}
-                  <label className={`px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-all ${
-                    importandoWord 
-                      ? 'bg-gray-400 cursor-not-allowed' 
-                      : 'bg-green-600 hover:bg-green-700 text-white'
-                  }`}>
-                    <Upload size={18} />
-                    {importandoWord ? 'Importando...' : 'Importar Word'}
-                    <input
-                      type="file"
-                      accept=".docx"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                          importarDesdeWord(file);
-                        }
-                        e.target.value = '';
-                      }}
-                      disabled={importandoWord}
-                    />
-                  </label>
-                  
-                  {/* Botones existentes de Lista/Calendario */}
-                  <button
-                    onClick={() => setVistaCalendario('lista')}
-                    className={`px-4 py-2 rounded-lg transition-all ${
-                      vistaCalendario === 'lista' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    Lista
-                  </button>
-                  <button
-                    onClick={() => setVistaCalendario('calendario')}
-                    className={`px-4 py-2 rounded-lg transition-all ${
-                      vistaCalendario === 'calendario' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    Calendario
-                  </button>
-                </div>
-              </div>}
-
-              <div className="bg-white rounded-lg shadow p-6 space-y-4">
-                <div className="flex gap-3">
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                    <input
-                      type="text"
-                      placeholder="Buscar por terapeuta, cliente o fecha..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
-                      showFilters ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <Filter size={20} />
-                    Filtros
-                    {contarFiltrosActivos() > 0 && (
-                      <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                        {contarFiltrosActivos()}
-                      </span>
-                    )}
-                  </button>
-                  {contarFiltrosActivos() > 0 && (
-                    <button
-                      onClick={limpiarFiltros}
-                      className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
-                    >
-                      <X size={20} />
-                      Limpiar
-                    </button>
-                  )}
-                </div>
-
-                {showFilters && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
-                      <select
-                        value={filterEstado}
-                        onChange={(e) => setFilterEstado(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="todos">Todos</option>
-                        <option value="pendiente">Pendiente</option>
-                        <option value="confirmada">Confirmada</option>
-                        <option value="cancelada">Cancelada</option>
-                        <option value="completada">Completada</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Terapeuta</label>
-                      <select
-                        value={filterTerapeuta}
-                        onChange={(e) => setFilterTerapeuta(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="todos">Todos</option>
-                        {[...new Set(citas.map(c => c.terapeuta))].map((terapeuta, index) => (
-                          <option key={index} value={terapeuta}>{terapeuta}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Desde</label>
-                      <input
-                        type="date"
-                        value={filterFechaInicio}
-                        onChange={(e) => setFilterFechaInicio(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Hasta</label>
-                      <input
-                        type="date"
-                        value={filterFechaFin}
-                        onChange={(e) => setFilterFechaFin(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between text-sm text-gray-600 pt-2 border-t">
-                  <span>Mostrando {filtrarCitas().length} de {citas.length} citas</span>
-                  {contarFiltrosActivos() > 0 && (
-                    <span className="text-blue-600 font-medium">{contarFiltrosActivos()} filtro(s) activo(s)</span>
-                  )}
-                </div>
-              </div>
-
-              {vistaCalendario === 'calendario' ? (
-                <CalendarioCitas
-                  citas={filtrarCitas()}
-                  onSelectCita={handleCalendarioSelectCita}
-                  onSelectSlot={handleCalendarioSelectSlot}
-                  onEventDrop={handleCalendarioEventDrop}
-                />
-              ) : (
-                <>
-                  {filtrarCitas().length > 0 ? (
-                    <div className="bg-white rounded-lg shadow p-6">
-                      <h3 className="text-lg font-semibold mb-4">Citas ({filtrarCitas().length})</h3>
-                      <div className="max-h-96 overflow-y-auto space-y-2">
-                        {filtrarCitas().map((cita) => (
-                          <div key={cita.id} className="bg-blue-50 rounded-lg p-3 border border-blue-200 flex justify-between items-center hover:bg-blue-100 transition-all">
-                            <div className="flex-1">
-                              <p className="font-medium text-gray-800">{cita.terapeuta} con {cita.cliente}</p>
-                              <p className="text-sm text-gray-600">{cita.fecha} | {cita.horaInicio} - {cita.horaFin}</p>
-                              <p className="text-sm text-gray-600 mt-1">📋 {cita.tipoTerapia || 'No especificado'}</p>
-                              <span className={`inline-block mt-1 px-2 py-1 text-xs rounded-full font-medium ${
-                                cita.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
-                                cita.estado === 'confirmada' ? 'bg-green-100 text-green-800' :
-                                cita.estado === 'cancelada' ? 'bg-red-100 text-red-800' :
-                                'bg-blue-100 text-blue-800'
-                              }`}>
-                                {cita.estado}
-                              </span>
-                            </div>
-                            <div className="flex gap-2">
-                              <button 
-                                onClick={() => openModal('cita', cita)} 
-                                className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-all"
-                              >
-                                <Edit size={18} />
-                              </button>
-                              <button 
-                                onClick={() => eliminarCita(cita.id)} 
-                                className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-all"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-white rounded-lg shadow p-12 text-center">
-                      <Calendar className="mx-auto text-gray-300 mb-4" size={64} />
-                      <p className="text-gray-500 text-lg">No se encontraron citas</p>
-                      <p className="text-gray-400 mt-2">
-                        {contarFiltrosActivos() > 0 ? 'Intenta ajustar los filtros' : 'Ve a "Bloques de Citas" para generar nuevas citas'}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+        {activeTab === 'citas' && hasPermission('citas') && (
+          <Citas
+            citas={citas}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            showFilters={showFilters}
+            setShowFilters={setShowFilters}
+            filterEstado={filterEstado}
+            setFilterEstado={setFilterEstado}
+            filterTerapeuta={filterTerapeuta}
+            setFilterTerapeuta={setFilterTerapeuta}
+            filterFechaInicio={filterFechaInicio}
+            setFilterFechaInicio={setFilterFechaInicio}
+            filterFechaFin={filterFechaFin}
+            setFilterFechaFin={setFilterFechaFin}
+            vistaCalendario={vistaCalendario}
+            setVistaCalendario={setVistaCalendario}
+            importandoWord={importandoWord}
+            filtrarCitas={filtrarCitas}
+            contarFiltrosActivos={contarFiltrosActivos}
+            limpiarFiltros={limpiarFiltros}
+            openModal={openModal}
+            eliminarCita={eliminarCita}
+            importarDesdeWord={importarDesdeWord}
+            handleCalendarioSelectCita={handleCalendarioSelectCita}
+            handleCalendarioSelectSlot={handleCalendarioSelectSlot}
+            handleCalendarioEventDrop={handleCalendarioEventDrop}
+          />
+        )}
 
         {/* RESTO DE SECCIONES (omitidas por brevedad - igual que antes) */}
         {activeTab === 'terapeutas' && hasPermission('terapeutas') && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Terapeutas</h2>
-              <div className="flex gap-3 items-center">
-                {/* Botones de ordenamiento */}
-                <div className="flex gap-2 mr-2">
-                  <button
-                    onClick={() => ordenarTerapeutas('original')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      ordenTerapeutas === 'original'
-                        ? 'bg-gray-700 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                    title="Orden original"
-                  >
-                    📋 Original
-                  </button>
-                  <button
-                    onClick={() => ordenarTerapeutas('alfabetico')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      ordenTerapeutas === 'alfabetico'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                    title="Orden alfabético"
-                  >
-                    🔤 A-Z
-                  </button>
-                </div>
-                
-                {/* Botón nuevo */}
-                <button 
-                  onClick={() => openModal('terapeuta')} 
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nuevo
-                </button>
-              </div>
-            </div>
-            <div className="bg-white shadow rounded-md"><ul className="divide-y">{terapeutas.map(t => (<li key={t.id} className="px-6 py-4"><div className="flex justify-between items-center"><div><p className="font-medium">{t.nombre}</p><p className="text-sm text-gray-600">{t.especialidad}</p></div><div className="flex gap-2"><button onClick={() => openModal('terapeuta', t)} className="text-blue-600 hover:text-blue-800"><Edit className="w-5 h-5" /></button><button onClick={() => eliminarTerapeuta(t.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-5 h-5" /></button></div></div></li>))}</ul></div>
-          </div>
+          <Terapeutas
+            terapeutas={terapeutas}
+            ordenTerapeutas={ordenTerapeutas}
+            ordenarTerapeutas={ordenarTerapeutas}
+            openModal={openModal}
+            eliminarTerapeuta={eliminarTerapeuta}
+          />
         )}
 
         {activeTab === 'clientes' && hasPermission('clientes') && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Clientes</h2>
-              <div className="flex gap-3 items-center">
-                {/* Botones de ordenamiento */}
-                <div className="flex gap-2 mr-2">
-                  <button
-                    onClick={() => ordenarClientes('original')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      ordenClientes === 'original'
-                        ? 'bg-gray-700 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                    title="Orden original"
-                  >
-                    📋 Original
-                  </button>
-                  <button
-                    onClick={() => ordenarClientes('alfabetico')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      ordenClientes === 'alfabetico'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                    title="Orden alfabético"
-                  >
-                    🔤 A-Z
-                  </button>
-                </div>
-                
-                {/* Botones de acción */}
-                <button 
-                  onClick={importarPreciosAutomaticamente} 
-                  className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Importar Precios
-                </button>
-                <button 
-                  onClick={() => openModal('cliente')} 
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nuevo
-                </button>
-              </div>
-            </div>
-            <div className="bg-white shadow rounded-md"><ul className="divide-y">{clientes.map(c => (<li key={c.id} className="px-6 py-4"><div className="flex justify-between items-center"><div><p className="font-medium">{c.nombre}</p><p className="text-sm text-gray-600">{c.email}</p><p className="text-sm text-blue-600">Código: {c.codigo}</p></div><div className="flex gap-2"><button onClick={() => openModal('cliente', c)} className="text-blue-600 hover:text-blue-800"><Edit className="w-5 h-5" /></button><button onClick={() => eliminarCliente(c.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-5 h-5" /></button></div></div></li>))}</ul></div>
-          </div>
+          <Clientes
+            clientes={clientes}
+            ordenClientes={ordenClientes}
+            ordenarClientes={ordenarClientes}
+            openModal={openModal}
+            eliminarCliente={eliminarCliente}
+            importarPreciosAutomaticamente={importarPreciosAutomaticamente}
+          />
         )}
 
         {activeTab === 'pagos' && hasPermission('pagos') && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Pagos</h2>
-              <button onClick={() => openModal('pago')} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center"><Plus className="w-4 h-4 mr-2" />Registrar</button>
-            </div>
-            <div className="bg-white shadow rounded-md"><ul className="divide-y">{pagos.map(p => (<li key={p.id} className="px-6 py-4"><div className="flex justify-between items-center"><div><p className="font-medium">{getNombre(p.clienteId, clientes)}</p><p className="text-sm text-gray-600">{p.concepto}</p></div><div className="flex items-center space-x-4"><p className="text-xl font-bold text-green-600">${p.monto.toLocaleString()}</p><button onClick={() => openModal('pago', p)} className="text-blue-600 hover:text-blue-800"><Edit className="w-5 h-5" /></button><button onClick={() => eliminarPago(p.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-5 h-5" /></button></div></div></li>))}</ul></div>
-          </div>
+          <Pagos
+            pagos={pagos}
+            clientes={clientes}
+            getNombre={getNombre}
+            openModal={openModal}
+            eliminarPago={eliminarPago}
+          />
         )}
 
         {/* NUEVO: Tu componente de Recibos Gemini */}
