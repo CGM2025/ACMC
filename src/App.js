@@ -11,6 +11,7 @@ import { useCitas } from './hooks/useCitas';
 import { useModals } from './hooks/useModals';  // ← NUEVO
 import CalendarioCitas from './components/CalendarioCitas';
 import Reportes from './components/Reportes';
+import ModalPago from './components/ModalPago';
 
 const SistemaGestion = () => {
   // Hook de autenticación
@@ -34,6 +35,7 @@ const SistemaGestion = () => {
     pagos,
     citas,
     utilidadHistorica,
+    recibos,
     ordenClientes,
     ordenTerapeutas,
     cargarCitas,
@@ -118,7 +120,9 @@ const SistemaGestion = () => {
     generarReporteMensual,
     ordenarCitasReporte,
     renderIndicadorOrden,
-    descargarReporte
+    descargarReporte,
+    guardarRecibosEnFirebase,  // ← Necesitas esto
+    guardandoRecibos,          // ← Y esto
   } = useReportes(citas, clientes, meses);
 
   // Precios base por tipo de terapia (fallback si el cliente no tiene precio personalizado)
@@ -424,6 +428,13 @@ const SistemaGestion = () => {
       }
     }
   }, [citaForm.terapeuta, citaForm.tipoTerapia, citaForm.cliente, terapeutas, clientes, obtenerCostoTerapeuta]);
+
+  //useEffect para Generar automaticamente reportes cuando cambia el mes
+  useEffect(() => {
+    if (activeTab === 'reportes') {
+      generarReporteMensual();
+    }
+  }, [activeTab, mesReporte, terapeutaReporte, clienteReporte]);
 
   // Función para calcular contribución de ganancias por terapeuta
   const calcularContribucionPorTerapeuta = () => {
@@ -1542,6 +1553,9 @@ const SistemaGestion = () => {
               clientes={clientes}
               terapeutas={terapeutas}
               meses={meses}
+              guardarRecibosEnFirebase={guardarRecibosEnFirebase}  // ← AGREGAR
+              guardandoRecibos={guardandoRecibos}                  // ← AGREGAR
+              reporteGenerado={reporteGenerado}                    // ← AGREGAR
             />
           )}
 
@@ -2236,7 +2250,7 @@ const SistemaGestion = () => {
       )}
 
       {/* Modal de Pago */}
-      {modals.pago && (
+      {/* {modals.pago && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96">
             <h3 className="text-lg font-bold mb-4">{editingId ? 'Editar Pago' : 'Registrar Pago'}</h3>
@@ -2316,7 +2330,17 @@ const SistemaGestion = () => {
             </div>
           </div>
         </div>
-      )}
+      )} */}
+      <ModalPago
+        isOpen={modals.pago}
+        onClose={() => closeModal('pago')}
+        onSave={() => save('pago')}
+        pagoForm={pagoForm}
+        setPagoForm={setPagoForm}
+        clientes={clientes}
+        recibos={recibos}
+        editingId={editingId}
+      />
 
       {/* MODAL DE TERAPEUTA */}
       {modals.terapeuta && (

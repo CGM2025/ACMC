@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FileText, Download, Calendar, DollarSign, TrendingUp, User } from 'lucide-react';
+import { FileText, Download, Calendar, DollarSign, TrendingUp, User, Save } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -13,7 +13,15 @@ import autoTable from 'jspdf-autotable';
  * @param {Array} props.terapeutas - Lista de terapeutas
  * @param {Array} props.meses - Nombres de meses
  */
-const Reportes = ({ citas, clientes, terapeutas, meses }) => {
+const Reportes = ({ 
+  citas, 
+  clientes, 
+  terapeutas, 
+  meses,
+  guardarRecibosEnFirebase,
+  guardandoRecibos,
+  reporteGenerado
+}) => {
   // Estados
   const [mesReporte, setMesReporte] = useState(new Date().toISOString().slice(0, 7));
   const [terapeutaReporte, setTerapeutaReporte] = useState('todas');
@@ -61,6 +69,7 @@ const Reportes = ({ citas, clientes, terapeutas, meses }) => {
         reporte[cita.cliente] = {
           nombre: cita.cliente,
           codigo: clienteObj?.codigo || 'N/A',
+          clienteId: clienteObj?.id || null,  // ← NUEVA LÍNEA
           citas: [],
           totalHoras: 0,
           totalCitas: 0,
@@ -94,6 +103,12 @@ const Reportes = ({ citas, clientes, terapeutas, meses }) => {
       reporte[cita.cliente].totalCostoTerapeutas += costoTerapeuta;
     });
     
+    Object.values(reporte).forEach(cliente => {
+      cliente.gananciaTotal = cliente.totalGeneral - cliente.totalCostoTerapeutas;
+      cliente.margenPorcentaje = cliente.totalGeneral > 0 
+        ? (cliente.gananciaTotal / cliente.totalGeneral) * 100 
+        : 0;
+    });
     return Object.values(reporte);
   }, [citasDelMes, clientes]);
 
@@ -440,6 +455,32 @@ const Reportes = ({ citas, clientes, terapeutas, meses }) => {
           >
             <Download size={18} />
             Descargar TXT
+          </button>
+          <button
+            onClick={async () => {
+              const reporteParaGuardar = {
+                mes: mesReporte,
+                recibos: reportePorCliente
+              };
+              
+              const resultado = await guardarRecibosEnFirebase(reporteParaGuardar);
+              if (resultado.exito) {
+                alert(`✅ ${resultado.mensaje}`);
+              } else {
+                alert(`❌ ${resultado.mensaje}`);
+              }
+            }}
+            // disabled={guardandoRecibos || !reporteGenerado || !reporteGenerado.recibos || reporteGenerado.recibos.length === 0}
+            disabled={guardandoRecibos || reportePorCliente.length === 0}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+              // guardandoRecibos || !reporteGenerado || !reporteGenerado.recibos || reporteGenerado.recibos.length === 0
+              guardandoRecibos || reportePorCliente.length === 0
+                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            <Save size={18} />
+            {guardandoRecibos ? 'Guardando...' : 'Guardar Recibos'}
           </button>
         </div>
       </div>

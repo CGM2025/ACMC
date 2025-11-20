@@ -44,6 +44,18 @@ export {
   eliminarPago
 } from './pagos';
 
+// Recibos
+export {
+  obtenerRecibos,
+  obtenerRecibosPorCliente,
+  obtenerRecibosPorMes,
+  crearRecibo,
+  actualizarRecibo,
+  actualizarEstadoPagoRecibo,
+  eliminarRecibo,
+  generarReciboId
+} from './recibos';
+
 // Utilidad Histórica
 export {
   obtenerUtilidadHistorica,

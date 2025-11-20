@@ -32,6 +32,11 @@ import {
   actualizarPago as actualizarPagoAPI,
   eliminarPago as eliminarPagoAPI,
   
+  // Recibos
+  obtenerRecibos,
+  obtenerRecibosPorCliente,
+  actualizarEstadoPagoRecibo,
+  
   // Utilidad Histórica
   obtenerUtilidadHistorica
 } from '../api';
@@ -51,6 +56,7 @@ export const useData = (currentUser, isLoggedIn) => {
   const [pagos, setPagos] = useState([]);
   const [citas, setCitas] = useState([]);
   const [utilidadHistorica, setUtilidadHistorica] = useState([]);
+  const [recibos, setRecibos] = useState([]); // ← NUEVO
   
   // Estados para ordenamiento
   const [ordenClientes, setOrdenClientes] = useState('original');
@@ -79,20 +85,20 @@ export const useData = (currentUser, isLoggedIn) => {
   }, []);
 
   /**
-   * Carga los terapeutas desde Firestore usando la API
+   * Carga los terapeutas desde Firestore
    */
   const cargarTerapeutas = useCallback(async () => {
     try {
       const data = await obtenerTerapeutas();
       setTerapeutas(data);
-      console.log('✅ Terapeutas cargados:', data.length);
+      console.log('✅ Terapeutas cargadas:', data.length);
     } catch (error) {
       console.error('Error al cargar terapeutas:', error);
     }
   }, []);
 
   /**
-   * Carga los clientes desde Firestore usando la API
+   * Carga los clientes desde Firestore
    */
   const cargarClientes = useCallback(async () => {
     try {
@@ -105,22 +111,20 @@ export const useData = (currentUser, isLoggedIn) => {
   }, []);
 
   /**
-   * Carga las horas trabajadas desde Firestore usando la API
-   * Si el usuario es terapeuta, solo carga sus propias horas
+   * Carga las horas trabajadas desde Firestore
    */
   const cargarHorasTrabajadas = useCallback(async () => {
     try {
-      const terapeutaId = currentUser?.rol === 'terapeuta' ? currentUser.uid : null;
-      const data = await obtenerHorasTrabajadasAPI(terapeutaId);
+      const data = await obtenerHorasTrabajadasAPI();
       setHorasTrabajadas(data);
       console.log('✅ Horas trabajadas cargadas:', data.length);
     } catch (error) {
       console.error('Error al cargar horas trabajadas:', error);
     }
-  }, [currentUser]);
+  }, []);
 
   /**
-   * Carga los pagos desde Firestore usando la API
+   * Carga los pagos desde Firestore
    */
   const cargarPagos = useCallback(async () => {
     try {
@@ -133,20 +137,48 @@ export const useData = (currentUser, isLoggedIn) => {
   }, []);
 
   /**
-   * Carga la utilidad histórica desde Firestore usando la API
+   * Carga los recibos desde Firestore
+   * ← NUEVA FUNCIÓN
+   */
+  const cargarRecibos = useCallback(async () => {
+    try {
+      const data = await obtenerRecibos();
+      setRecibos(data);
+      console.log('✅ Recibos cargados:', data.length);
+    } catch (error) {
+      console.error('Error al cargar recibos:', error);
+    }
+  }, []);
+
+  /**
+   * Carga recibos de un cliente específico
+   * ← NUEVA FUNCIÓN
+   */
+  const cargarRecibosPorCliente = useCallback(async (clienteNombre) => {
+    try {
+      const data = await obtenerRecibosPorCliente(clienteNombre);
+      return data;
+    } catch (error) {
+      console.error('Error al cargar recibos por cliente:', error);
+      return [];
+    }
+  }, []);
+
+  /**
+   * Carga los datos históricos de utilidad
    */
   const cargarUtilidadHistorica = useCallback(async () => {
     try {
-      const datos = await obtenerUtilidadHistorica();
-      setUtilidadHistorica(datos);
-      console.log('✅ Utilidad histórica cargada:', datos.length, 'registros');
+      const data = await obtenerUtilidadHistorica();
+      setUtilidadHistorica(data);
+      console.log('✅ Utilidad histórica cargada:', data.length);
     } catch (error) {
       console.error('Error al cargar utilidad histórica:', error);
     }
   }, []);
 
   /**
-   * Carga todos los datos necesarios
+   * Carga todos los datos del sistema
    */
   const cargarTodosLosDatos = useCallback(async () => {
     setLoadingData(true);
@@ -157,6 +189,7 @@ export const useData = (currentUser, isLoggedIn) => {
         cargarClientes(),
         cargarHorasTrabajadas(),
         cargarPagos(),
+        cargarRecibos(), // ← NUEVO
         cargarUtilidadHistorica()
       ]);
       console.log('✅ Todos los datos cargados');
@@ -170,7 +203,8 @@ export const useData = (currentUser, isLoggedIn) => {
     cargarTerapeutas, 
     cargarClientes, 
     cargarHorasTrabajadas, 
-    cargarPagos, 
+    cargarPagos,
+    cargarRecibos,
     cargarUtilidadHistorica
   ]);
 
@@ -241,6 +275,8 @@ export const useData = (currentUser, isLoggedIn) => {
 
   /**
    * Guarda o actualiza un pago usando la API
+   * Ahora también actualiza el estado del recibo si está ligado
+   * ← FUNCIÓN MEJORADA
    */
   const guardarPago = async (pagoForm, editingId) => {
     try {
@@ -252,11 +288,52 @@ export const useData = (currentUser, isLoggedIn) => {
         await crearPagoAPI(data);
       }
       
+      // Si el pago está ligado a un recibo, actualizar el estado del recibo
+      if (data.reciboFirebaseId) {
+        await actualizarEstadoReciboConPagos(data.reciboFirebaseId);
+      }
+      
       await cargarPagos();
+      await cargarRecibos(); // Recargar recibos para ver el cambio de estado
       return { success: true };
     } catch (error) {
       console.error('Error al guardar pago:', error);
       return { success: false, error };
+    }
+  };
+
+  /**
+   * Actualiza el estado de pago de un recibo basándose en sus pagos
+   * ← NUEVA FUNCIÓN AUXILIAR
+   */
+  const actualizarEstadoReciboConPagos = async (reciboFirebaseId) => {
+    try {
+      // Buscar el recibo
+      const recibo = recibos.find(r => r.id === reciboFirebaseId);
+      if (!recibo) {
+        console.warn('Recibo no encontrado:', reciboFirebaseId);
+        return;
+      }
+
+      // Calcular el total pagado para este recibo
+      const pagosTotales = pagos
+        .filter(p => p.reciboFirebaseId === reciboFirebaseId)
+        .reduce((sum, p) => sum + parseFloat(p.monto || 0), 0);
+
+      // Actualizar el estado del recibo
+      await actualizarEstadoPagoRecibo(
+        reciboFirebaseId,
+        pagosTotales,
+        recibo.totalGeneral
+      );
+
+      console.log('✅ Estado del recibo actualizado:', {
+        reciboId: recibo.reciboId,
+        pagado: pagosTotales,
+        total: recibo.totalGeneral
+      });
+    } catch (error) {
+      console.error('Error al actualizar estado del recibo:', error);
     }
   };
 
@@ -285,15 +362,14 @@ export const useData = (currentUser, isLoggedIn) => {
    * Elimina un terapeuta usando la API
    */
   const eliminarTerapeuta = async (id) => {
-    if (!window.confirm('¿Eliminar terapeuta?')) return { success: false, cancelled: true };
+    if (!window.confirm('¿Eliminar terapeuta?')) return;
     
     try {
       await eliminarTerapeutaAPI(id);
       await cargarTerapeutas();
-      return { success: true };
     } catch (error) {
       console.error('Error al eliminar terapeuta:', error);
-      return { success: false, error };
+      alert('Error al eliminar terapeuta');
     }
   };
 
@@ -301,31 +377,41 @@ export const useData = (currentUser, isLoggedIn) => {
    * Elimina un cliente usando la API
    */
   const eliminarCliente = async (id) => {
-    if (!window.confirm('¿Eliminar cliente?')) return { success: false, cancelled: true };
+    if (!window.confirm('¿Eliminar cliente?')) return;
     
     try {
       await eliminarClienteAPI(id);
       await cargarClientes();
-      return { success: true };
     } catch (error) {
       console.error('Error al eliminar cliente:', error);
-      return { success: false, error };
+      alert('Error al eliminar cliente');
     }
   };
 
   /**
    * Elimina un pago usando la API
+   * Ahora también actualiza el estado del recibo si estaba ligado
+   * ← FUNCIÓN MEJORADA
    */
   const eliminarPago = async (id) => {
-    if (!window.confirm('¿Eliminar pago?')) return { success: false, cancelled: true };
+    if (!window.confirm('¿Eliminar pago?')) return;
     
     try {
+      // Buscar el pago antes de eliminarlo para saber si tiene recibo ligado
+      const pago = pagos.find(p => p.id === id);
+      const reciboId = pago?.reciboFirebaseId;
+
       await eliminarPagoAPI(id);
       await cargarPagos();
-      return { success: true };
+
+      // Si tenía recibo ligado, actualizar su estado
+      if (reciboId) {
+        await actualizarEstadoReciboConPagos(reciboId);
+        await cargarRecibos();
+      }
     } catch (error) {
       console.error('Error al eliminar pago:', error);
-      return { success: false, error };
+      alert('Error al eliminar pago');
     }
   };
 
@@ -333,25 +419,26 @@ export const useData = (currentUser, isLoggedIn) => {
    * Elimina una cita usando la API
    */
   const eliminarCita = async (id) => {
-    if (!window.confirm('¿Eliminar esta cita?')) return { success: false, cancelled: true };
+    if (!window.confirm('¿Eliminar cita?')) return;
     
     try {
       await eliminarCitaAPI(id);
       await cargarCitas();
-      return { success: true };
+      alert('✅ Cita eliminada correctamente');
     } catch (error) {
       console.error('Error al eliminar cita:', error);
-      return { success: false, error };
+      alert('Error al eliminar cita');
     }
   };
 
   // ==================== FUNCIONES DE ORDENAMIENTO ====================
 
   /**
-   * Ordena los clientes alfabéticamente o por orden original
+   * Ordena los clientes alfabéticamente
    */
   const ordenarClientes = (orden) => {
     setOrdenClientes(orden);
+    
     if (orden === 'alfabetico') {
       const clientesOrdenados = [...clientes].sort((a, b) => 
         a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
@@ -363,10 +450,11 @@ export const useData = (currentUser, isLoggedIn) => {
   };
 
   /**
-   * Ordena los terapeutas alfabéticamente o por orden original
+   * Ordena las terapeutas alfabéticamente
    */
   const ordenarTerapeutas = (orden) => {
     setOrdenTerapeutas(orden);
+    
     if (orden === 'alfabetico') {
       const terapeutasOrdenados = [...terapeutas].sort((a, b) => 
         a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
@@ -417,6 +505,7 @@ export const useData = (currentUser, isLoggedIn) => {
     pagos,
     citas,
     utilidadHistorica,
+    recibos, // ← NUEVO
     
     // Estados de UI
     loadingCitas,
@@ -435,6 +524,8 @@ export const useData = (currentUser, isLoggedIn) => {
     cargarClientes,
     cargarHorasTrabajadas,
     cargarPagos,
+    cargarRecibos, // ← NUEVO
+    cargarRecibosPorCliente, // ← NUEVO
     cargarUtilidadHistorica,
     cargarTodosLosDatos,
     
@@ -442,13 +533,13 @@ export const useData = (currentUser, isLoggedIn) => {
     guardarHorasTrabajadas,
     guardarTerapeuta,
     guardarCliente,
-    guardarPago,
+    guardarPago, // ← MEJORADO (ahora actualiza recibos)
     guardarCita,
     
     // Funciones de eliminación
     eliminarTerapeuta,
     eliminarCliente,
-    eliminarPago,
+    eliminarPago, // ← MEJORADO (ahora actualiza recibos)
     eliminarCita,
     
     // Funciones de ordenamiento

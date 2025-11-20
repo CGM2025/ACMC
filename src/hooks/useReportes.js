@@ -1,5 +1,9 @@
 import { useState, useCallback } from 'react';
-import { generarReporteMensual as generarReporte } from '../utils/reportLogic';
+import { 
+  generarReporteMensual as generarReporte,
+  prepararReciboParaFirebase 
+} from '../utils/reportLogic';
+import { crearRecibo, obtenerRecibosPorMes } from '../api/recibos';
 
 /**
  * Custom Hook para manejar la generación y gestión de reportes mensuales
@@ -16,6 +20,7 @@ export const useReportes = (citas, clientes, meses) => {
   const [terapeutaReporte, setTerapeutaReporte] = useState('todas');
   const [clienteReporte, setClienteReporte] = useState('todos');
   const [ordenColumna, setOrdenColumna] = useState({ campo: null, direccion: 'asc' });
+  const [guardandoRecibos, setGuardandoRecibos] = useState(false);
 
   /**
    * Genera el reporte mensual basado en las citas completadas
@@ -33,6 +38,103 @@ export const useReportes = (citas, clientes, meses) => {
     
     setReporteGenerado(reporte);
   }, [citas, clientes, meses, mesReporte, terapeutaReporte, clienteReporte]);
+
+  /**
+   * Guarda los recibos del reporte actual en Firebase
+   * Esta función se llama después de generar un reporte
+   * @param {Object} reporteCustom - Reporte personalizado (opcional). Si no se proporciona, usa reporteGenerado
+   * @param {string} reporteCustom.mes - Mes del reporte en formato YYYY-MM
+   * @param {Array} reporteCustom.recibos - Array de recibos a guardar
+   * @returns {Promise<Object>} - Resultado con cantidad de recibos guardados
+   */
+  const guardarRecibosEnFirebase = useCallback(async (reporteCustom = null) => {
+    // Usar reporte personalizado o el generado por el hook
+    const reporte = reporteCustom || reporteGenerado;
+    const mes = reporteCustom?.mes || mesReporte;
+    
+    if (!reporte || !reporte.recibos || reporte.recibos.length === 0) {
+      console.warn('⚠️ No hay recibos para guardar');
+      return { exito: false, mensaje: 'No hay recibos para guardar' };
+    }
+
+    try {
+      setGuardandoRecibos(true);
+      console.log('💾 Iniciando guardado de recibos en Firebase...');
+
+      // Verificar si ya existen recibos para este mes
+      const recibosExistentes = await obtenerRecibosPorMes(mes);
+      
+      if (recibosExistentes.length > 0) {
+        const confirmacion = window.confirm(
+          `Ya existen ${recibosExistentes.length} recibos guardados para este mes.\n\n` +
+          `¿Deseas continuar? Esto creará recibos duplicados.`
+        );
+        
+        if (!confirmacion) {
+          setGuardandoRecibos(false);
+          return { exito: false, mensaje: 'Guardado cancelado por el usuario' };
+        }
+      }
+
+      let recibosGuardados = 0;
+      const errores = [];
+
+      // Guardar cada recibo
+      for (const recibo of reporte.recibos) {
+        try {
+          const reciboParaFirebase = prepararReciboParaFirebase(recibo, mes);
+          await crearRecibo(reciboParaFirebase);
+          recibosGuardados++;
+          console.log(`✅ Recibo guardado: ${reciboParaFirebase.reciboId}`);
+        } catch (error) {
+          console.error(`❌ Error al guardar recibo de ${recibo.nombre}:`, error);
+          errores.push({ cliente: recibo.nombre, error: error.message });
+        }
+      }
+
+      setGuardandoRecibos(false);
+
+      if (errores.length === 0) {
+        console.log(`✅ ${recibosGuardados} recibos guardados exitosamente`);
+        return {
+          exito: true,
+          mensaje: `${recibosGuardados} recibos guardados exitosamente`,
+          recibosGuardados
+        };
+      } else {
+        console.warn(`⚠️ ${recibosGuardados} recibos guardados, ${errores.length} errores`);
+        return {
+          exito: true,
+          mensaje: `${recibosGuardados} recibos guardados, ${errores.length} con errores`,
+          recibosGuardados,
+          errores
+        };
+      }
+
+    } catch (error) {
+      console.error('❌ Error general al guardar recibos:', error);
+      setGuardandoRecibos(false);
+      return {
+        exito: false,
+        mensaje: 'Error al guardar recibos: ' + error.message
+      };
+    }
+  }, [reporteGenerado, mesReporte]);
+
+  /**
+   * Genera el reporte Y guarda los recibos en un solo paso
+   * @returns {Promise<Object>} - Resultado del guardado
+   */
+  const generarYGuardarRecibos = useCallback(async () => {
+    // Primero generar el reporte
+    generarReporteMensual();
+    
+    // Esperar un tick para que el estado se actualice
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Luego guardar los recibos
+    return await guardarRecibosEnFirebase();
+  }, [generarReporteMensual, guardarRecibosEnFirebase]);
 
   /**
    * Ordena las citas en los reportes por columna
@@ -71,24 +173,9 @@ export const useReportes = (citas, clientes, meses) => {
           return nuevaDireccion === 'asc' 
             ? valorA.localeCompare(valorB)
             : valorB.localeCompare(valorA);
-        case 'precio':
-          valorA = a.precio;
-          valorB = b.precio;
-          break;
-        case 'iva':
-          valorA = a.iva;
-          valorB = b.iva;
-          break;
-        case 'total':
-          valorA = a.total;
-          valorB = b.total;
-          break;
-        case 'costoTerapeuta':
-          valorA = a.costoTerapeuta || 0;
-          valorB = b.costoTerapeuta || 0;
-          break;
         default:
-          return 0;
+          valorA = a[campo] || 0;
+          valorB = b[campo] || 0;
       }
       
       if (nuevaDireccion === 'asc') {
@@ -176,9 +263,12 @@ export const useReportes = (citas, clientes, meses) => {
     clienteReporte,
     setClienteReporte,
     ordenColumna,
+    guardandoRecibos,
     
     // Funciones
     generarReporteMensual,
+    guardarRecibosEnFirebase,
+    generarYGuardarRecibos,
     ordenarCitasReporte,
     renderIndicadorOrden,
     descargarReporte

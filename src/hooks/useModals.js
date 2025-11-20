@@ -54,7 +54,9 @@ export const useModals = () => {
     monto: '',
     concepto: '',
     metodo: 'efectivo',
-    fecha: ''
+    fecha: '',
+    reciboFirebaseId: '',  // ← NUEVO: ID del recibo en Firebase
+    reciboId: ''           // ← NUEVO: ID único del recibo (ej: REC-2025-01-CLI001)
   });
 
   const [citaForm, setCitaForm] = useState({
@@ -85,6 +87,7 @@ export const useModals = () => {
     tipoTerapia: 'Sesión de ABA estándar',
     costo: 200
   });
+
   const [nuevoCostoPorCliente, setNuevoCostoPorCliente] = useState({
     clienteId: '',
     costo: 200
@@ -94,45 +97,61 @@ export const useModals = () => {
   // FUNCIÓN: ABRIR MODAL
   // ========================================
   const openModal = (type, item = null) => {
-    setEditingId(item?.id || null);
     setModals({ ...modals, [type]: true });
     
     if (item) {
+      setEditingId(item.id);
+      
       switch(type) {
         case 'horas':
           setHorasForm({
-            terapeutaId: item.terapeutaId,
-            clienteId: item.clienteId,
-            fecha: item.fecha,
-            horas: item.horas,
-            codigoCliente: item.codigoCliente,
+            terapeutaId: item.terapeutaId || '',
+            clienteId: item.clienteId || '',
+            fecha: item.fecha || '',
+            horas: item.horas || '',
+            codigoCliente: item.codigoCliente || '',
             notas: item.notas || ''
           });
           break;
         case 'terapeuta':
           setTerapeutaForm({
-            ...item,
+            nombre: item.nombre || '',
+            especialidad: item.especialidad || '',
+            telefono: item.telefono || '',
+            email: item.email || '',
             costosPorServicio: item.costosPorServicio || {},
             costosPorCliente: item.costosPorCliente || {}
           });
           break;
         case 'cliente':
           setClienteForm({
-            ...item,
+            nombre: item.nombre || '',
+            email: item.email || '',
+            telefono: item.telefono || '',
+            empresa: item.empresa || '',
+            codigo: item.codigo || '',
             preciosPersonalizados: item.preciosPersonalizados || {}
           });
           break;
         case 'pago':
-          setPagoForm(item);
+          setPagoForm({
+            clienteId: item.clienteId || '',
+            monto: item.monto || '',
+            concepto: item.concepto || '',
+            metodo: item.metodo || 'efectivo',
+            fecha: item.fecha || '',
+            reciboFirebaseId: item.reciboFirebaseId || '', // ← NUEVO
+            reciboId: item.reciboId || '' // ← NUEVO
+          });
           break;
         case 'cita':
           setCitaForm({
-            terapeuta: item.terapeuta,
-            cliente: item.cliente,
-            fecha: item.fecha,
-            horaInicio: item.horaInicio,
-            horaFin: item.horaFin,
-            estado: item.estado,
+            terapeuta: item.terapeuta || '',
+            cliente: item.cliente || '',
+            fecha: item.fecha || '',
+            horaInicio: item.horaInicio || '',
+            horaFin: item.horaFin || '',
+            estado: item.estado || 'pendiente',
             costoPorHora: item.costoPorHora || 300,
             costoTotal: item.costoTotal || 0,
             tipoTerapia: item.tipoTerapia || 'Sesión de ABA estándar',
@@ -186,7 +205,9 @@ export const useModals = () => {
       monto: '',
       concepto: '',
       metodo: 'efectivo',
-      fecha: ''
+      fecha: '',
+      reciboFirebaseId: '', // ← NUEVO
+      reciboId: '' // ← NUEVO
     });
     
     setCitaForm({
@@ -219,19 +240,17 @@ export const useModals = () => {
    * Agrega un precio personalizado al cliente
    */
   const agregarPrecioPersonalizado = () => {
-    if (!nuevoPrecio.tipoTerapia || !nuevoPrecio.precio) {
-      alert('Por favor completa todos los campos');
+    if (!nuevoPrecio.precio || nuevoPrecio.precio <= 0) {
+      alert('Por favor ingresa un precio válido');
       return;
     }
 
-    const preciosActualizados = {
-      ...clienteForm.preciosPersonalizados,
-      [nuevoPrecio.tipoTerapia]: parseFloat(nuevoPrecio.precio)
-    };
-
     setClienteForm({
       ...clienteForm,
-      preciosPersonalizados: preciosActualizados
+      preciosPersonalizados: {
+        ...clienteForm.preciosPersonalizados,
+        [nuevoPrecio.tipoTerapia]: parseFloat(nuevoPrecio.precio)
+      }
     });
 
     // Resetear el formulario de nuevo precio
@@ -242,35 +261,29 @@ export const useModals = () => {
    * Elimina un precio personalizado del cliente
    */
   const eliminarPrecioPersonalizado = (tipoTerapia) => {
-    const preciosActualizados = { ...clienteForm.preciosPersonalizados };
-    delete preciosActualizados[tipoTerapia];
-    
-    setClienteForm({
-      ...clienteForm,
-      preciosPersonalizados: preciosActualizados
-    });
+    const nuevosPrecios = { ...clienteForm.preciosPersonalizados };
+    delete nuevosPrecios[tipoTerapia];
+    setClienteForm({ ...clienteForm, preciosPersonalizados: nuevosPrecios });
   };
 
   /**
    * Agrega un costo por servicio a la terapeuta
    */
   const agregarCostoTerapeuta = () => {
-    if (!nuevoCostoTerapeuta.tipoTerapia || !nuevoCostoTerapeuta.costo) {
-      alert('Por favor completa todos los campos');
+    if (!nuevoCostoTerapeuta.costo || nuevoCostoTerapeuta.costo <= 0) {
+      alert('Por favor ingresa un costo válido');
       return;
     }
 
-    const costosActualizados = {
-      ...terapeutaForm.costosPorServicio,
-      [nuevoCostoTerapeuta.tipoTerapia]: parseFloat(nuevoCostoTerapeuta.costo)
-    };
-
     setTerapeutaForm({
       ...terapeutaForm,
-      costosPorServicio: costosActualizados
+      costosPorServicio: {
+        ...terapeutaForm.costosPorServicio,
+        [nuevoCostoTerapeuta.tipoTerapia]: parseFloat(nuevoCostoTerapeuta.costo)
+      }
     });
 
-    // Resetear el formulario de nuevo costo
+    // Resetear el formulario
     setNuevoCostoTerapeuta({ tipoTerapia: 'Sesión de ABA estándar', costo: 200 });
   };
 
@@ -278,32 +291,26 @@ export const useModals = () => {
    * Elimina un costo por servicio de la terapeuta
    */
   const eliminarCostoTerapeuta = (tipoTerapia) => {
-    const costosActualizados = { ...terapeutaForm.costosPorServicio };
-    delete costosActualizados[tipoTerapia];
-    
-    setTerapeutaForm({
-      ...terapeutaForm,
-      costosPorServicio: costosActualizados
-    });
+    const nuevosCostos = { ...terapeutaForm.costosPorServicio };
+    delete nuevosCostos[tipoTerapia];
+    setTerapeutaForm({ ...terapeutaForm, costosPorServicio: nuevosCostos });
   };
 
   /**
-   * Agrega un costo por cliente a la terapeuta
+   * Agrega un costo específico por cliente para la terapeuta
    */
   const agregarCostoPorCliente = () => {
-    if (!nuevoCostoPorCliente.clienteId || !nuevoCostoPorCliente.costo) {
-      alert('Por favor completa todos los campos');
+    if (!nuevoCostoPorCliente.clienteId || !nuevoCostoPorCliente.costo || nuevoCostoPorCliente.costo <= 0) {
+      alert('Por favor selecciona un cliente e ingresa un costo válido');
       return;
     }
 
-    const costosActualizados = {
-      ...terapeutaForm.costosPorCliente,
-      [nuevoCostoPorCliente.clienteId]: parseFloat(nuevoCostoPorCliente.costo)
-    };
-
     setTerapeutaForm({
       ...terapeutaForm,
-      costosPorCliente: costosActualizados
+      costosPorCliente: {
+        ...terapeutaForm.costosPorCliente,
+        [nuevoCostoPorCliente.clienteId]: parseFloat(nuevoCostoPorCliente.costo)
+      }
     });
 
     // Resetear el formulario
@@ -314,17 +321,13 @@ export const useModals = () => {
    * Elimina un costo por cliente de la terapeuta
    */
   const eliminarCostoPorCliente = (clienteId) => {
-    const costosActualizados = { ...terapeutaForm.costosPorCliente };
-    delete costosActualizados[clienteId];
-    
-    setTerapeutaForm({
-      ...terapeutaForm,
-      costosPorCliente: costosActualizados
-    });
+    const nuevosCostos = { ...terapeutaForm.costosPorCliente };
+    delete nuevosCostos[clienteId];
+    setTerapeutaForm({ ...terapeutaForm, costosPorCliente: nuevosCostos });
   };
 
   // ========================================
-  // RETURN: EXPORTAR TODO
+  // RETURN
   // ========================================
   return {
     // Estados de modales
@@ -355,11 +358,11 @@ export const useModals = () => {
     nuevoCostoPorCliente,
     setNuevoCostoPorCliente,
     
-    // Funciones principales
+    // Funciones de modales
     openModal,
     closeModal,
     
-    // Funciones auxiliares
+    // Funciones de precios y costos
     agregarPrecioPersonalizado,
     eliminarPrecioPersonalizado,
     agregarCostoTerapeuta,

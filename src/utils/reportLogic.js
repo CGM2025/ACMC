@@ -7,9 +7,10 @@ import {
   redondear
 } from './calculations';
 import { perteneceAlMes, parsearMesReporte, obtenerNombreMes } from './dateHelpers';
+import { generarReciboId } from '../api/recibos';
 
 /**
- * Lógica de negocio para generación de reportes
+ * Lógica de negocio para generación de reportes y recibos
  */
 
 /**
@@ -85,6 +86,7 @@ export const agruparCitasPorCliente = (citasDelMes, clientes) => {
       reportePorCliente[cita.cliente] = {
         nombre: cita.cliente,
         codigo: clienteObj?.codigo || 'N/A',
+        clienteId: clienteObj?.id || null,
         citas: [],
         totalHoras: 0,
         totalCitas: 0
@@ -143,6 +145,37 @@ export const generarRecibos = (reportePorCliente) => {
       ...totales
     };
   });
+};
+
+/**
+ * Prepara un recibo para guardar en Firebase
+ * @param {Object} recibo - Recibo generado
+ * @param {string} mesReporte - Mes en formato YYYY-MM
+ * @returns {Object} - Recibo formateado para Firebase
+ */
+export const prepararReciboParaFirebase = (recibo, mesReporte) => {
+  // Generar ID único del recibo
+  const reciboId = generarReciboId(mesReporte, recibo.codigo);
+  
+  return {
+    reciboId,
+    mes: mesReporte,
+    clienteNombre: recibo.nombre,
+    clienteCodigo: recibo.codigo,
+    clienteId: recibo.clienteId,
+    totalHoras: recibo.totalHoras,
+    totalCitas: recibo.totalCitas,
+    totalPrecio: recibo.totalPrecio,
+    totalIva: recibo.totalIva,
+    totalGeneral: recibo.totalGeneral,
+    totalCostoTerapeutas: recibo.totalCostoTerapeutas,
+    gananciaTotal: recibo.gananciaTotal,
+    margenPorcentaje: recibo.margenPorcentaje,
+    citas: recibo.citas,
+    fechaGeneracion: new Date().toISOString(),
+    montoPagado: 0,
+    estadoPago: 'pendiente'
+  };
 };
 
 /**
