@@ -4,11 +4,19 @@ import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianG
 import { importarUtilidadHistorica } from './api';
 import mammoth from 'mammoth';
 import moment from 'moment';
+
+// Firebase imports
+import { initializeApp } from 'firebase/app';
+import { getFirestore, updateDoc, doc } from 'firebase/firestore';
+
+// Hooks
 import { useAuth } from './hooks/useAuth';  
 import { useData } from './hooks/useData';   
 import { useReportes } from './hooks/useReportes';  // ← NUEVO IMPORT
 import { useCitas } from './hooks/useCitas';
 import { useModals } from './hooks/useModals';  // ← NUEVO
+
+// Components
 import CalendarioCitas from './components/CalendarioCitas';
 import Reportes from './components/Reportes';
 import ModalPago from './components/ModalPago';
@@ -26,6 +34,21 @@ import Clientes from './components/pages/Clientes';
 import BloquesCitas from './components/pages/BloquesCitas';
 import Citas from './components/pages/Citas';
 import Dashboard from './components/pages/Dashboard';
+
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 
 const SistemaGestion = () => {
@@ -70,6 +93,16 @@ const SistemaGestion = () => {
     getNombre,
     getTotales
   } = useData(currentUser, isLoggedIn);
+
+  // Función auxiliar para actualizar citas
+  const actualizarCita = async (citaId, datosActualizados) => {
+    try {
+      await updateDoc(doc(db, 'citas', citaId), datosActualizados);
+    } catch (error) {
+      console.error('Error al actualizar cita:', error);
+      throw error;
+    }
+  };
 
   // Hook de modales - NUEVO
   const {
