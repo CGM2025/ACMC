@@ -34,6 +34,8 @@ import Clientes from './components/pages/Clientes';
 import BloquesCitas from './components/pages/BloquesCitas';
 import Citas from './components/pages/Citas';
 import Dashboard from './components/pages/Dashboard';
+import EstadoCuentaClientes from './components/pages/EstadoCuentaClientes';
+// No necesitas importar ModalRecibo aquí, EstadoCuentaClientes ya lo hace
 
 // Firebase configuration
 const firebaseConfig = {
@@ -1081,12 +1083,40 @@ const SistemaGestion = () => {
         )}
 
         {activeTab === 'pagos' && hasPermission('pagos') && (
-          <Pagos
-            pagos={pagos}
+          <EstadoCuentaClientes
             clientes={clientes}
-            getNombre={getNombre}
-            openModal={openModal}
-            eliminarPago={eliminarPago}
+            recibos={recibos}
+            pagos={pagos}
+            onRegistrarPago={(cliente) => {
+              openModal('pago');
+              setPagoForm({
+                ...pagoForm,
+                cliente: cliente.nombre
+              });
+            }}
+            onEliminarRecibo={async (reciboId) => {
+              try {
+                // Importar función de eliminación
+                const { eliminarRecibo } = await import('./api/recibos');
+                
+                // Eliminar de Firebase
+                await eliminarRecibo(reciboId);
+                
+                // Recargar datos
+                // // Asumiendo que tienes una función para cargar recibos
+                // // Si no la tienes, avísame y la creamos
+                // if (typeof cargarRecibos === 'function') {
+                //   await cargarRecibos();
+                // }
+                // Recargar página para actualizar datos
+                window.location.reload();   
+                
+                return { success: true };
+              } catch (error) {
+                console.error('Error al eliminar recibo:', error);
+                throw error;
+              }
+            }}
           />
         )}
 
