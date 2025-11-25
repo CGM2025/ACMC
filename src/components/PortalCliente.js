@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   LogOut, 
   DollarSign, 
@@ -12,6 +12,9 @@ import {
   AlertCircle
 } from 'lucide-react';
 import ModalRecibo from './ModalRecibo';
+import SubirComprobante from './SubirComprobante';
+import { subirComprobante, obtenerComprobantesCliente } from '../api/comprobantes';
+import { storage } from '../firebase';
 
 /**
  * Dashboard del Portal de Clientes
@@ -26,6 +29,9 @@ const PortalCliente = ({
 }) => {
   const [reciboSeleccionado, setReciboSeleccionado] = useState(null);
   const [mostrarModalRecibo, setMostrarModalRecibo] = useState(false);
+  const [mostrarSubirComprobante, setMostrarSubirComprobante] = useState(false);
+  const [reciboParaPago, setReciboParaPago] = useState(null);
+  const [comprobantesCliente, setComprobantesCliente] = useState([]);
 
   // Filtrar datos del cliente actual
   const recibosCliente = useMemo(() => {
@@ -94,6 +100,27 @@ const PortalCliente = ({
       return { estado: 'parcial', texto: 'Pago Parcial', color: 'yellow' };
     } else {
       return { estado: 'pendiente', texto: 'Pendiente', color: 'red' };
+    }
+  };
+
+  useEffect(() => {
+    const cargarComprobantes = async () => {
+      if (clienteData?.id) {
+        const comps = await obtenerComprobantesCliente(clienteData.id);
+        setComprobantesCliente(comps);
+      }
+    };
+    cargarComprobantes();
+  }, [clienteData]);
+
+  const handleSubirComprobante = async (datos) => {
+    const resultado = await subirComprobante(datos, storage);
+    if (resultado.success) {
+      // Recargar comprobantes
+      const comps = await obtenerComprobantesCliente(clienteData.id);
+      setComprobantesCliente(comps);
+    } else {
+      throw new Error(resultado.error);
     }
   };
 
@@ -283,13 +310,27 @@ const PortalCliente = ({
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <button
-                              onClick={() => handleVerRecibo(recibo)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            >
-                              <Eye size={16} />
-                              <span className="text-sm font-medium">Ver</span>
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleVerRecibo(recibo)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              >
+                                <Eye size={16} />
+                                <span className="text-sm font-medium">Ver</span>
+                              </button>
+                              {getEstadoRecibo(recibo).estado !== 'pagado' && (
+                                <button
+                                  onClick={() => {
+                                    setReciboParaPago(recibo);
+                                    setMostrarSubirComprobante(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                >
+                                  <Upload size={16} />
+                                  <span className="text-sm font-medium">Pagar</span>
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -430,6 +471,18 @@ const PortalCliente = ({
           onCerrar={() => {
             setMostrarModalRecibo(false);
             setReciboSeleccionado(null);
+          }}
+        />
+      )}
+
+      {mostrarSubirComprobante && (
+        <SubirComprobante
+          recibo={reciboParaPago}
+          clienteId={clienteData?.id}
+          onSubir={handleSubirComprobante}
+          onCerrar={() => {
+            setMostrarSubirComprobante(false);
+            setReciboParaPago(null);
           }}
         />
       )}

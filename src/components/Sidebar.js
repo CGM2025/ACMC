@@ -9,6 +9,7 @@ import {
   ChevronRight, 
   FileText 
 } from 'lucide-react';
+import { FileCheck } from 'lucide-react';
 
 /**
  * Componente Sidebar - Barra lateral de navegación
@@ -161,6 +162,32 @@ const Sidebar = ({
           {!sidebarCollapsed && <span>Cerrar Sesión</span>}
         </button>
       </div>
+      {hasPermission('usuarios') && (
+        <button
+          onClick={() => setActiveTab('usuarios')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+            activeTab === 'usuarios'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'text-gray-700 hover:bg-gray-100'
+          } ${sidebarCollapsed ? 'justify-center' : ''}`}
+        >
+          <Users size={20} />
+          {!sidebarCollapsed && <span>Usuarios Portal</span>}
+        </button>
+      )}
+      {hasPermission('comprobantes') && (
+        <button
+          onClick={() => setActiveTab('comprobantes')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+            activeTab === 'comprobantes'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'text-gray-700 hover:bg-gray-100'
+          } ${sidebarCollapsed ? 'justify-center' : ''}`}
+        >
+          <FileCheck size={20} />
+          {!sidebarCollapsed && <span>Comprobantes</span>}
+        </button>
+      )}
     </aside>
   );
 };

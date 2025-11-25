@@ -41,6 +41,21 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Portal from './components/Portal';
 import Login from './components/Login';
 
+import GestionUsuarios from './components/pages/GestionUsuarios';
+import { obtenerUsuariosPortal } from './api/usuarios';
+import { 
+  crearUsuarioPortalCloud, 
+  activarDesactivarUsuarioCloud, 
+  enviarResetPasswordCloud 
+} from './api/cloudFunctions';
+
+import GestionComprobantes from './components/pages/GestionComprobantes';
+import { 
+  obtenerComprobantes, 
+  aprobarComprobante, 
+  rechazarComprobante 
+} from './api/comprobantes';
+
 // Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -55,7 +70,6 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
 
 const SistemaGestion = () => {
   // Hook de autenticación
@@ -100,6 +114,20 @@ const SistemaGestion = () => {
     getTotales
   } = useData(currentUser, isLoggedIn);
 
+  // ← AQUÍ DEBE IR el useState de usuariosPortal
+  const [usuariosPortal, setUsuariosPortal] = useState([]);
+
+  //Funcion para cargar clientes
+  // 
+  const cargarUsuariosPortal = async () => {
+    try {
+      const usuarios = await obtenerUsuariosPortal();
+      setUsuariosPortal(usuarios);
+    } catch (error) {
+      console.error('Error cargando usuarios del portal:', error);
+    }
+  }; 
+
   // Función auxiliar para actualizar citas
   const actualizarCita = async (citaId, datosActualizados) => {
     try {
@@ -107,6 +135,17 @@ const SistemaGestion = () => {
     } catch (error) {
       console.error('Error al actualizar cita:', error);
       throw error;
+    }
+  };
+
+  const [comprobantes, setComprobantes] = useState([]);
+
+  const cargarComprobantes = async () => {
+    try {
+      const comps = await obtenerComprobantes();
+      setComprobantes(comps);
+    } catch (error) {
+      console.error('Error cargando comprobantes:', error);
     }
   };
 
@@ -382,6 +421,7 @@ const SistemaGestion = () => {
     if (isLoggedIn && currentUser) {
       setActiveTab(currentUser.rol === 'terapeuta' ? 'horas' : 'dashboard');
     }
+    cargarComprobantes();
   }, [isLoggedIn, currentUser]);
 
     // Función para obtener precio de un cliente para un tipo de terapia
@@ -1145,6 +1185,52 @@ const SistemaGestion = () => {
                         citas={citas}
                         clientes={clientes}
                         meses={meses} />
+                    )}
+
+                    {/* NUEVO: Tu componente de Gestion de Usuarios */}
+                    {activeTab === 'usuarios' && hasPermission('usuarios') && (
+                      <GestionUsuarios
+                        clientes={clientes}
+                        usuarios={usuariosPortal}
+                        onCrearUsuario={async (datos) => {
+                          const resultado = await crearUsuarioPortalCloud(datos);
+                          if (resultado.success) {
+                            await cargarUsuariosPortal();
+                          }
+                          return resultado;
+                        }}
+                        onActivarDesactivar={async (userId, activo) => {
+                          const resultado = await activarDesactivarUsuarioCloud(userId, activo);
+                          if (resultado.success) {
+                            await cargarUsuariosPortal();
+                          }
+                          return resultado;
+                        }}
+                        onResetPassword={enviarResetPasswordCloud}
+                      />
+                    )}
+
+                    {activeTab === 'comprobantes' && hasPermission('comprobantes') && (
+                      <GestionComprobantes
+                        comprobantes={comprobantes}
+                        clientes={clientes}
+                        recibos={recibos}
+                        onAprobar={async (comprobante) => {
+                          const resultado = await aprobarComprobante(comprobante, currentUser.uid);
+                          if (resultado.success) {
+                            await cargarComprobantes();
+                          }
+                          return resultado;
+                        }}
+                        onRechazar={async (comprobante, motivo) => {
+                          const resultado = await rechazarComprobante(comprobante, motivo, currentUser.uid);
+                          if (resultado.success) {
+                            await cargarComprobantes();
+                          }
+                          return resultado;
+                        }}
+                        onRecargar={cargarComprobantes}
+                      />
                     )}
                   </main>
 
