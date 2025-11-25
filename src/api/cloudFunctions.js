@@ -16,14 +16,18 @@ export const crearUsuarioPortalCloud = async ({ email, password, clienteId }) =>
     
     console.log('Usuario:', auth.currentUser.email);
     console.log('Token obtenido:', idToken ? 'Sí' : 'No');
+    
+    // DEBUG: Ver qué datos se envían
+    const datosEnviar = { 
+      email: email, 
+      password: password, 
+      clienteId: clienteId,
+      idToken: idToken
+    };
+    console.log('Datos a enviar:', JSON.stringify(datosEnviar, null, 2));
 
     const crearUsuario = httpsCallable(functions, 'crearUsuarioPortal');
-    const result = await crearUsuario({ 
-      email, 
-      password, 
-      clienteId,
-      idToken
-    });
+    const result = await crearUsuario(datosEnviar);
     
     console.log('Resultado:', result.data);
     return result.data;

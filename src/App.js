@@ -120,11 +120,13 @@ const SistemaGestion = () => {
   //Funcion para cargar clientes
   // 
   const cargarUsuariosPortal = async () => {
+    console.log(">>> cargarUsuariosPortal INICIADO");
     try {
       const usuarios = await obtenerUsuariosPortal();
+      console.log(">>> Usuarios obtenidos:", usuarios);
       setUsuariosPortal(usuarios);
     } catch (error) {
-      console.error('Error cargando usuarios del portal:', error);
+      console.error('>>> ERROR cargando usuarios del portal:', error);
     }
   }; 
 
@@ -530,6 +532,15 @@ const SistemaGestion = () => {
       generarReporteMensual();
     }
   }, [activeTab, mesReporte, terapeutaReporte, clienteReporte]);
+
+  // Cargar usuarios del portal cuando se muestra ese tab
+  useEffect(() => {
+    console.log("useEffect usuarios - activeTab:", activeTab, "isLoggedIn:", isLoggedIn);
+    if (activeTab === 'usuarios' && isLoggedIn) {
+      console.log("Llamando a cargarUsuariosPortal...");
+      cargarUsuariosPortal();
+    }
+  }, [activeTab, isLoggedIn]);
 
   // Función para calcular contribución de ganancias por terapeuta
   const calcularContribucionPorTerapeuta = () => {

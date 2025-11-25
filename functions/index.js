@@ -2,165 +2,141 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 admin.initializeApp();
 
-exports.crearUsuarioPortal = functions.https.onCall(async (data) => {
-  const {email, password, clienteId, idToken} = data;
+exports.crearUsuarioPortal = functions.https.onCall((data, context) => {
+  console.log("=== INICIO ===");
+  console.log("Tipo de data:", typeof data);
+  console.log("Keys en data:", data ? Object.keys(data) : "data es null");
 
-  console.log("Datos recibidos - email:", email, "clienteId:", clienteId);
-  console.log("Token recibido:", idToken ? "Sí" : "No");
+  // Extraer datos
+  // Extraer datos (pueden estar en data directamente o en data.data)
+  const realData = data?.data || data;
+  const email = realData?.email;
+  const password = realData?.password;
+  const clienteId = realData?.clienteId;
+  const idToken = realData?.idToken;
 
-  // Verificar token manualmente
+  console.log("Email:", email);
+  console.log("ClienteId:", clienteId);
+  console.log("idToken existe:", !!idToken);
+
+  // Si no hay token, error
   if (!idToken) {
+    console.log("ERROR: No hay idToken");
     throw new functions.https.HttpsError(
         "unauthenticated",
-        "No se recibió token de autenticación",
+        "No se recibio token",
     );
   }
 
-  let decodedToken;
-  try {
-    decodedToken = await admin.auth().verifyIdToken(idToken);
-    console.log("Token válido, UID:", decodedToken.uid);
-  } catch (err) {
-    console.error("Token inválido:", err.message);
-    throw new functions.https.HttpsError(
-        "unauthenticated",
-        "Token inválido",
-    );
-  }
+  // Verificar token y continuar
+  return admin.auth().verifyIdToken(idToken)
+      .then((decodedToken) => {
+        console.log("Token valido, UID:", decodedToken.uid);
+        return admin.firestore().collection("usuarios").doc(decodedToken.uid).get();
+      })
+      .then((adminDoc) => {
+        if (!adminDoc.exists) {
+          throw new functions.https.HttpsError("permission-denied", "Usuario no encontrado");
+        }
 
-  const adminUid = decodedToken.uid;
+        const rol = adminDoc.data().rol;
+        console.log("Rol:", rol);
 
-  // Verificar rol admin
-  const adminDoc = await admin.firestore()
-      .collection("usuarios").doc(adminUid).get();
+        if (rol !== "admin") {
+          throw new functions.https.HttpsError("permission-denied", "No eres admin");
+        }
 
-  if (!adminDoc.exists) {
-    console.log("Usuario no existe en Firestore");
-    throw new functions.https.HttpsError(
-        "permission-denied",
-        "Usuario no encontrado",
-    );
-  }
+        // Validar datos
+        if (!email || !password || !clienteId) {
+          throw new functions.https.HttpsError("invalid-argument", "Faltan datos");
+        }
 
-  const adminData = adminDoc.data();
-  console.log("Rol del usuario:", adminData.rol);
+        // Crear usuario
+        return admin.auth().createUser({
+          email: email,
+          password: password,
+          disabled: false,
+        });
+      })
+      .then((userRecord) => {
+        console.log("Usuario creado:", userRecord.uid);
 
-  if (adminData.rol !== "admin") {
-    throw new functions.https.HttpsError(
-        "permission-denied",
-        "No tienes permisos de administrador",
-    );
-  }
-
-  // Validaciones
-  if (!email || !password || !clienteId) {
-    throw new functions.https.HttpsError(
-        "invalid-argument",
-        "Faltan datos",
-    );
-  }
-
-  // Verificar cliente existe
-  const clienteDoc = await admin.firestore()
-      .collection("clientes").doc(clienteId).get();
-
-  if (!clienteDoc.exists) {
-    throw new functions.https.HttpsError("not-found", "Cliente no existe");
-  }
-
-  // Verificar no existe usuario para este cliente
-  const existing = await admin.firestore()
-      .collection("usuarios")
-      .where("clienteId", "==", clienteId)
-      .where("rol", "==", "cliente")
-      .get();
-
-  if (!existing.empty) {
-    throw new functions.https.HttpsError(
-        "already-exists",
-        "Ya existe usuario para este cliente",
-    );
-  }
-
-  // Crear usuario en Auth
-  let userRecord;
-  try {
-    userRecord = await admin.auth().createUser({
-      email: email,
-      password: password,
-      emailVerified: false,
-      disabled: false,
-    });
-    console.log("Usuario creado:", userRecord.uid);
-  } catch (err) {
-    if (err.code === "auth/email-already-exists") {
-      throw new functions.https.HttpsError(
-          "already-exists",
-          "Email ya existe",
-      );
-    }
-    throw new functions.https.HttpsError("internal", err.message);
-  }
-
-  // Crear documento en Firestore
-  await admin.firestore().collection("usuarios").doc(userRecord.uid).set({
-    email: email,
-    rol: "cliente",
-    clienteId: clienteId,
-    activo: true,
-    fechaCreacion: admin.firestore.FieldValue.serverTimestamp(),
-    creadoPor: adminUid,
-  });
-
-  console.log("Documento creado exitosamente");
-
-  return {
-    success: true,
-    uid: userRecord.uid,
-    email: email,
-    message: "Usuario creado exitosamente",
-  };
+        // Crear documento
+        return admin.firestore().collection("usuarios").doc(userRecord.uid).set({
+          email: email,
+          rol: "cliente",
+          clienteId: clienteId,
+          activo: true,
+          fechaCreacion: admin.firestore.FieldValue.serverTimestamp(),
+        }).then(() => userRecord);
+      })
+      .then((userRecord) => {
+        console.log("=== EXITO ===");
+        return {
+          success: true,
+          uid: userRecord.uid,
+          email: email,
+          message: "Usuario creado exitosamente",
+        };
+      })
+      .catch((error) => {
+        console.error("Error:", error.code, error.message);
+        if (error instanceof functions.https.HttpsError) {
+          throw error;
+        }
+        if (error.code === "auth/email-already-exists") {
+          throw new functions.https.HttpsError("already-exists", "Email ya existe");
+        }
+        throw new functions.https.HttpsError("internal", error.message);
+      });
 });
 
-exports.activarDesactivarUsuario = functions.https.onCall(async (data) => {
-  const {userId, activo, idToken} = data;
+exports.activarDesactivarUsuario = functions.https.onCall((data) => {
+  const idToken = data?.idToken;
+  const userId = data?.userId;
+  const activo = data?.activo;
 
   if (!idToken) {
     throw new functions.https.HttpsError("unauthenticated", "Sin token");
   }
 
-  const decoded = await admin.auth().verifyIdToken(idToken);
-  const adminDoc = await admin.firestore()
-      .collection("usuarios").doc(decoded.uid).get();
-
-  if (!adminDoc.exists || adminDoc.data().rol !== "admin") {
-    throw new functions.https.HttpsError("permission-denied", "Sin permisos");
-  }
-
-  await admin.firestore().collection("usuarios").doc(userId).update({
-    activo: activo,
-  });
-
-  await admin.auth().updateUser(userId, {disabled: !activo});
-
-  return {success: true, message: activo ? "Activado" : "Desactivado"};
+  return admin.auth().verifyIdToken(idToken)
+      .then((decoded) => {
+        return admin.firestore().collection("usuarios").doc(decoded.uid).get();
+      })
+      .then((doc) => {
+        if (!doc.exists || doc.data().rol !== "admin") {
+          throw new functions.https.HttpsError("permission-denied", "Sin permisos");
+        }
+        return admin.firestore().collection("usuarios").doc(userId).update({activo});
+      })
+      .then(() => {
+        return admin.auth().updateUser(userId, {disabled: !activo});
+      })
+      .then(() => {
+        return {success: true, message: activo ? "Activado" : "Desactivado"};
+      });
 });
 
-exports.enviarResetPassword = functions.https.onCall(async (data) => {
-  const {email, idToken} = data;
+exports.enviarResetPassword = functions.https.onCall((data) => {
+  const idToken = data?.idToken;
+  const email = data?.email;
 
   if (!idToken) {
     throw new functions.https.HttpsError("unauthenticated", "Sin token");
   }
 
-  const decoded = await admin.auth().verifyIdToken(idToken);
-  const adminDoc = await admin.firestore()
-      .collection("usuarios").doc(decoded.uid).get();
-
-  if (!adminDoc.exists || adminDoc.data().rol !== "admin") {
-    throw new functions.https.HttpsError("permission-denied", "Sin permisos");
-  }
-
-  const link = await admin.auth().generatePasswordResetLink(email);
-  return {success: true, link: link};
+  return admin.auth().verifyIdToken(idToken)
+      .then((decoded) => {
+        return admin.firestore().collection("usuarios").doc(decoded.uid).get();
+      })
+      .then((doc) => {
+        if (!doc.exists || doc.data().rol !== "admin") {
+          throw new functions.https.HttpsError("permission-denied", "Sin permisos");
+        }
+        return admin.auth().generatePasswordResetLink(email);
+      })
+      .then((link) => {
+        return {success: true, link: link};
+      });
 });

@@ -28,21 +28,30 @@ import { auth, db } from '../firebase'; // Ajusta la ruta según tu estructura
  */
 export const obtenerUsuariosPortal = async () => {
   try {
+    console.log("=== CARGANDO USUARIOS DEL PORTAL ===");
+    
     const usuariosRef = collection(db, 'usuarios');
-    const q = query(usuariosRef, where('rol', '==', 'cliente'), orderBy('fechaCreacion', 'desc'));
+    console.log("Colección referenciada");
+    
+    const q = query(usuariosRef, where('rol', '==', 'cliente'));
+    console.log("Query creada");
+    
     const snapshot = await getDocs(q);
+    console.log("Documentos encontrados:", snapshot.size);
     
     const usuarios = [];
     snapshot.forEach((doc) => {
+      console.log("Usuario encontrado:", doc.id, doc.data());
       usuarios.push({
         id: doc.id,
         ...doc.data()
       });
     });
 
+    console.log("Total usuarios:", usuarios.length);
     return usuarios;
   } catch (error) {
-    console.error('Error obteniendo usuarios:', error);
+    console.error('ERROR obteniendo usuarios:', error);
     throw error;
   }
 };

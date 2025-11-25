@@ -21,11 +21,12 @@ import {
  */
 const GestionUsuarios = ({ 
   clientes,
+  usuarios = [],  // ← AGREGAR AQUÍ
   onCrearUsuario,
   onActivarDesactivar,
   onResetPassword
 }) => {
-  const [usuarios, setUsuarios] = useState([]);
+  // const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [credencialesMostrar, setCredencialesMostrar] = useState(null);
@@ -53,7 +54,7 @@ const GestionUsuarios = ({
       const response = await fetch('/api/usuarios'); // Implementaremos esta función
       // Por ahora, simulamos datos
       // En producción, esto vendría de Firestore
-      setUsuarios([]);
+      // setUsuarios([]);
     } catch (err) {
       console.error('Error cargando usuarios:', err);
     } finally {
