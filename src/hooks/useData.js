@@ -43,7 +43,16 @@ import {
   actualizarEstadoPagoRecibo,
   
   // Utilidad Histórica
-  obtenerUtilidadHistorica
+  obtenerUtilidadHistorica,
+
+    // Servicios
+  obtenerServicios,
+  crearServicio as crearServicioAPI,
+  actualizarServicio as actualizarServicioAPI,
+  eliminarServicio as eliminarServicioAPI,
+  activarServicio as activarServicioAPI,
+  desactivarServicio as desactivarServicioAPI,
+  serviciosAPreciosBase
 } from '../api';
 
 /**
@@ -54,6 +63,9 @@ import {
  * @returns {Object} Estados y funciones para gestionar datos
  */
 export const useData = (currentUser, isLoggedIn) => {
+  
+  const [servicios, setServicios] = useState([]);
+
   // Estados para datos
   const [clientes, setClientes] = useState([]);
   const [terapeutas, setTerapeutas] = useState([]);
@@ -183,6 +195,19 @@ export const useData = (currentUser, isLoggedIn) => {
   }, []);
 
   /**
+   * Carga los servicios desde Firestore
+   */
+  const cargarServicios = useCallback(async () => {
+    try {
+      const data = await obtenerServicios();
+      setServicios(data);
+      console.log('✅ Servicios cargados:', data.length);
+    } catch (error) {
+      console.error('Error al cargar servicios:', error);
+    }
+  }, []);
+
+  /**
    * Carga todos los datos del sistema
    */
   const cargarTodosLosDatos = useCallback(async () => {
@@ -195,7 +220,8 @@ export const useData = (currentUser, isLoggedIn) => {
         cargarHorasTrabajadas(),
         cargarPagos(),
         cargarRecibos(), // ← NUEVO
-        cargarUtilidadHistorica()
+        cargarUtilidadHistorica(),
+        cargarServicios()  // ← AGREGAR ESTO
       ]);
       console.log('✅ Todos los datos cargados');
     } catch (error) {
@@ -210,8 +236,75 @@ export const useData = (currentUser, isLoggedIn) => {
     cargarHorasTrabajadas, 
     cargarPagos,
     cargarRecibos,
-    cargarUtilidadHistorica
+    cargarUtilidadHistorica,
+    cargarServicios  // ← AGREGAR ESTO
   ]);
+
+  // ==================== FUNCIONES DE TIPOS DE TERAPIA ====================
+
+  /**
+   * Guarda o actualiza un servicio
+   */
+  const guardarServicio = async (servicioForm, editingId) => {
+    try {
+      if (editingId) {
+        await actualizarServicioAPI(editingId, servicioForm);
+      } else {
+        await crearServicioAPI(servicioForm);
+      }
+      await cargarServicios();
+      return { success: true };
+    } catch (error) {
+      console.error('Error al guardar servicio:', error);
+      return { success: false, error };
+    }
+  };
+
+  /**
+   * Elimina un servicio
+   */
+  const eliminarServicio = async (id) => {
+    try {
+      await eliminarServicioAPI(id);
+      await cargarServicios();
+    } catch (error) {
+      console.error('Error al eliminar servicio:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Activa un servicio
+   */
+  const activarServicio = async (id) => {
+    try {
+      await activarServicioAPI(id);
+      await cargarServicios();
+    } catch (error) {
+      console.error('Error al activar servicio:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Desactiva un servicio
+   */
+  const desactivarServicio = async (id) => {
+    try {
+      await desactivarServicioAPI(id);
+      await cargarServicios();
+    } catch (error) {
+      console.error('Error al desactivar servicio:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Obtiene los precios base como objeto
+   */
+  const obtenerPreciosBase = useCallback(() => {
+    return serviciosAPreciosBase(servicios);
+  }, [servicios]);
 
   // ==================== FUNCIONES DE GUARDADO ====================
 
@@ -610,6 +703,15 @@ export const useData = (currentUser, isLoggedIn) => {
     
     // Funciones auxiliares
     getNombre,
-    getTotales
+    getTotales,
+
+      // Servicios
+    servicios,
+    cargarServicios,
+    guardarServicio,
+    eliminarServicio,
+    activarServicio,
+    desactivarServicio,
+    obtenerPreciosBase
   };
 };

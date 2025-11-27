@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { FileCheck } from 'lucide-react';
 import { Calculator } from 'lucide-react';
+import { Package } from 'lucide-react';
 
 /**
  * Componente Sidebar - Barra lateral de navegación
@@ -164,6 +165,19 @@ const Sidebar = ({
           {!sidebarCollapsed && <span>Cerrar Sesión</span>}
         </button>
       </div>
+      {hasPermission('servicios') && (
+        <button
+          onClick={() => setActiveTab('servicios')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+            activeTab === 'servicios'
+              ? 'bg-purple-600 text-white shadow-lg'
+              : 'text-gray-700 hover:bg-gray-100'
+          } ${sidebarCollapsed ? 'justify-center' : ''}`}
+        >
+          <Package size={20} />
+          {!sidebarCollapsed && <span>Servicios</span>}
+        </button>
+      )}
       {hasPermission('usuarios') && (
         <button
           onClick={() => setActiveTab('usuarios')}

@@ -9,6 +9,10 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
+const PERMISOS = {
+  admin: ['dashboard', 'horas', 'reportes', 'terapeutas', 'bloques', 'citas', 'clientes', 'pagos', 'usuarios', 'comprobantes', 'utilidad', 'servicios'],
+  // ... otros roles
+};
 /**
  * Custom Hook para manejar la autenticación de usuarios
  * 

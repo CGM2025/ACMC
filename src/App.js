@@ -25,6 +25,7 @@ import {
   actualizarPagoVinculado,
   eliminarPagoVinculado 
 } from './api/transacciones';
+import { crearRecibo } from './api/recibos';
 import RecibosGemini from './components/RecibosGemini';
 import Sidebar from './components/Sidebar';
 import Pagos from './components/pages/Pagos';
@@ -58,6 +59,9 @@ import {
 
 import CerrarMes from './components/CerrarMes';
 import { guardarCierreMes } from './api/utilidadHistorica';
+import GestionServicios from './components/pages/GestionServicios';
+
+import { actualizarCita as actualizarCitaDirecta } from './api/citas';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -97,6 +101,7 @@ const SistemaGestion = () => {
     citas,
     utilidadHistorica,
     recibos,
+    cargarRecibos,
     ordenClientes,
     ordenTerapeutas,
     cargarCitas,
@@ -114,7 +119,14 @@ const SistemaGestion = () => {
     ordenarClientes,
     ordenarTerapeutas,
     getNombre,
-    getTotales
+    getTotales,
+    servicios,
+    cargarServicios,
+    guardarServicio,
+    eliminarServicio: eliminarServicioFn,
+    activarServicio,
+    desactivarServicio,
+    obtenerPreciosBase
   } = useData(currentUser, isLoggedIn);
 
   const [mostrarCerrarMes, setMostrarCerrarMes] = useState(false);
@@ -227,17 +239,31 @@ const SistemaGestion = () => {
   } = useReportes(citas, clientes, meses);
 
   // Precios base por tipo de terapia (fallback si el cliente no tiene precio personalizado)
-  const preciosBasePorTerapia = useMemo(() => ({
-    'Terapia Ocupacional': 950,
-    'Servicios de Sombra': 150,
-    'Sesión de ABA estándar': 450,
-    'Sesión de ABA precio especial': 900,
-    'Servicios Administrativos y Reportes': 1200,
-    'Servicios de Apoyo y Entrenamiento': 1200,
-    'Paquete 4hr/semana': 274,
-    'Sesión en casa': 640,
-    'Otro': 450
-  }), []);
+  // Precios base ahora vienen de Firestore
+  const preciosBasePorTerapia = useMemo(() => {
+    if (servicios.length === 0) {
+      // Fallback mientras cargan los servicios
+      return {
+        'Terapia Ocupacional': 950,
+        'Servicios de Sombra': 150,
+        'Sesión de ABA estándar': 450,
+        'Sesión de ABA precio especial': 900,
+        'Servicios Administrativos y Reportes': 1200,
+        'Servicios de Apoyo y Entrenamiento': 1200,
+        'Paquete 4hr/semana': 274,
+        'Sesión en casa': 640,
+        'Otro': 450
+      };
+    }
+    // Convertir array de servicios a objeto { nombre: precio }
+    const precios = {};
+    servicios.forEach(s => {
+      if (s.activo !== false) {
+        precios[s.nombre] = s.precio;
+      }
+    });
+    return precios;
+  }, [servicios]);
 
   // Hook de citas - NUEVO
   const {
@@ -1070,6 +1096,29 @@ const SistemaGestion = () => {
                         />
                     )}
 
+                    {activeTab === 'servicios' && hasPermission('servicios') && (
+                      <GestionServicios
+                        servicios={servicios}
+                        onCrear={async (datos) => {
+                          const result = await guardarServicio(datos);
+                          return result;
+                        }}
+                        onActualizar={async (id, datos) => {
+                          const result = await guardarServicio(datos, id);
+                          return result;
+                        }}
+                        onEliminar={async (id) => {
+                          await eliminarServicioFn(id);
+                        }}
+                        onActivar={async (id) => {
+                          await activarServicio(id);
+                        }}
+                        onDesactivar={async (id) => {
+                          await desactivarServicio(id);
+                        }}
+                      />
+                    )}
+
                     {/* SECCIÓN DE HORAS (código igual que antes, omitido por brevedad) */}
                     {activeTab === 'horas' && hasPermission('horas') && (
                       <Horas
@@ -1077,8 +1126,8 @@ const SistemaGestion = () => {
                     )}
 
                     {/* ============================================
-      PESTAÑA: REPORTES
-    ============================================ */}
+                        PESTAÑA: REPORTES
+                      ============================================ */}
                     {activeTab === 'reportes' && (
                       <Reportes
                         citas={citas}
@@ -1204,7 +1253,48 @@ const SistemaGestion = () => {
                       <RecibosGemini
                         citas={citas}
                         clientes={clientes}
-                        meses={meses} />
+                        terapeutas={terapeutas}
+                        servicios={servicios}
+                        recibos={recibos}  // ← AGREGAR
+                        meses={meses}
+                        onAgregarCita={async (datosCita) => {
+                          try {
+                            await guardarCita(datosCita);
+                            await cargarCitas();
+                          } catch (error) {
+                            console.error('Error agregando cita:', error);
+                            throw error;
+                          }
+                        }}
+                        onEditarCita={async (citaId, datosCita) => {
+                          try {
+                            await actualizarCitaDirecta(citaId, datosCita);
+                            await cargarCitas();
+                          } catch (error) {
+                            console.error('Error editando cita:', error);
+                            throw error;
+                          }
+                        }}
+                        onEliminarCita={async (citaId) => {
+                          try {
+                            await eliminarCita(citaId);
+                            await cargarCitas();
+                          } catch (error) {
+                            console.error('Error eliminando cita:', error);
+                            throw error;
+                          }
+                        }}
+                        onGenerarRecibo={async (datosRecibo) => {  // ← AGREGAR
+                          try {
+                            await crearRecibo(datosRecibo);
+                            await cargarRecibos();  // Recargar recibos
+                            console.log('✅ Recibo generado:', datosRecibo.reciboId);
+                          } catch (error) {
+                            console.error('Error generando recibo:', error);
+                            throw error;
+                          }
+                        }}
+                      />
                     )}
 
                     {/* NUEVO: Tu componente de Gestion de Usuarios */}
@@ -1321,7 +1411,7 @@ const SistemaGestion = () => {
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                               required
                             >
-                              <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                              {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
                               <option value="Servicios de Sombra">Servicios de Sombra</option>
                               <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
                               <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
@@ -1329,7 +1419,16 @@ const SistemaGestion = () => {
                               <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
                               <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
                               <option value="Sesión en casa">Sesión en casa</option>
-                              <option value="Otro">Otro</option>
+                              <option value="Otro">Otro</option> */}
+                              {servicios
+                                .filter(s => s.activo !== false)
+                                .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                .map(servicio => (
+                                  <option key={servicio.id} value={servicio.nombre}>
+                                    {servicio.nombre}
+                                  </option>
+                                ))
+                              }
                             </select>
                           </div>
 
@@ -1710,7 +1809,7 @@ const SistemaGestion = () => {
                                     onChange={(e) => setNuevoCostoTerapeuta({ ...nuevoCostoTerapeuta, tipoTerapia: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                   >
-                                    <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                                    {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
                                     <option value="Servicios de Sombra">Servicios de Sombra</option>
                                     <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
                                     <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
@@ -1718,7 +1817,16 @@ const SistemaGestion = () => {
                                     <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
                                     <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
                                     <option value="Sesión en casa">Sesión en casa</option>
-                                    <option value="Otro">Otro</option>
+                                    <option value="Otro">Otro</option> */}
+                                    {servicios
+                                      .filter(s => s.activo !== false)
+                                      .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                      .map(servicio => (
+                                        <option key={servicio.id} value={servicio.nombre}>
+                                          {servicio.nombre}
+                                        </option>
+                                      ))
+                                    }
                                   </select>
                                 </div>
                                 <div>
@@ -2000,7 +2108,7 @@ const SistemaGestion = () => {
                                     onChange={(e) => setNuevoPrecio({ ...nuevoPrecio, tipoTerapia: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                   >
-                                    <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                                    {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
                                     <option value="Servicios de Sombra">Servicios de Sombra</option>
                                     <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
                                     <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
@@ -2008,7 +2116,16 @@ const SistemaGestion = () => {
                                     <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
                                     <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
                                     <option value="Sesión en casa">Sesión en casa</option>
-                                    <option value="Otro">Otro</option>
+                                    <option value="Otro">Otro</option> */}
+                                      {servicios
+                                        .filter(s => s.activo !== false)
+                                        .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                        .map(servicio => (
+                                          <option key={servicio.id} value={servicio.nombre}>
+                                            {servicio.nombre}
+                                          </option>
+                                        ))
+                                      }
                                   </select>
                                 </div>
                                 <div>

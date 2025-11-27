@@ -61,3 +61,16 @@ export {
   obtenerUtilidadHistorica,
   importarUtilidadHistorica
 } from './utilidadHistorica';
+
+// Servicios
+export {
+  obtenerServicios,
+  obtenerServiciosActivos,
+  crearServicio,
+  actualizarServicio,
+  eliminarServicio,
+  activarServicio,
+  desactivarServicio,
+  inicializarServiciosPorDefecto,
+  serviciosAPreciosBase
+} from './servicios';
