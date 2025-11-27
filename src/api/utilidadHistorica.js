@@ -2,8 +2,12 @@ import { db } from '../firebase';
 import { 
   collection, 
   getDocs,
+  addDoc,
   writeBatch,
-  doc
+  doc,
+  query,
+  where,
+  orderBy
 } from 'firebase/firestore';
 
 /**
@@ -13,21 +17,159 @@ import {
 const COLLECTION_NAME = 'utilidadHistorica';
 
 /**
- * Obtiene toda la utilidad histórica
+ * Obtiene toda la utilidad histórica ordenada por fecha
  * @returns {Promise<Array>} - Array de registros históricos
  */
 export const obtenerUtilidadHistorica = async () => {
   try {
-    const snapshot = await getDocs(collection(db, COLLECTION_NAME));
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      orderBy('año', 'desc'),
+      orderBy('mes', 'desc')
+    );
+    const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
-    console.error('Error al obtener utilidad histórica:', error);
+    // Si falla por índice, intentar sin ordenar
+    console.warn('Intentando sin orderBy:', error.message);
+    try {
+      const snapshot = await getDocs(collection(db, COLLECTION_NAME));
+      const datos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Ordenar en JavaScript
+      return datos.sort((a, b) => {
+        if (a.año !== b.año) return b.año - a.año;
+        return b.mes - a.mes;
+      });
+    } catch (err) {
+      console.error('Error al obtener utilidad histórica:', err);
+      throw err;
+    }
+  }
+};
+
+/**
+ * Guarda el cierre de mes con todos los detalles
+ * @param {Object} datosCierre - Datos del cierre de mes
+ * @returns {Promise<Object>} - Resultado de la operación
+ */
+export const guardarCierreMes = async (datosCierre) => {
+  try {
+    const {
+      año,
+      mes,
+      mesNombre,
+      ingresos,
+      cantidadPagos,
+      gastos,
+      totalGastos,
+      utilidad,
+      notas,
+      fechaCierre
+    } = datosCierre;
+
+    // Verificar que no exista ya un registro para este mes
+    const existente = await verificarMesCerrado(año, mes);
+    if (existente) {
+      throw new Error(`El mes ${mesNombre} ${año} ya ha sido cerrado`);
+    }
+
+    // Crear documento con toda la información
+    const docData = {
+      año,
+      mes,
+      mesNombre,
+      ingresos,
+      cantidadPagos,
+      gastos: {
+        nomina: gastos.nomina || 0,
+        pagoTerapeutas: gastos.pagoTerapeutas || 0,
+        renta: gastos.renta || 0,
+        servicios: gastos.servicios || 0,
+        otros: gastos.otros || 0
+      },
+      totalGastos,
+      utilidad,
+      notas: notas || '',
+      fechaCierre,
+      // Campo legacy para compatibilidad
+      fechaImportacion: fechaCierre
+    };
+
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), docData);
+
+    return {
+      success: true,
+      id: docRef.id,
+      message: `Cierre de ${mesNombre} ${año} guardado exitosamente`
+    };
+
+  } catch (error) {
+    console.error('Error al guardar cierre de mes:', error);
     throw error;
   }
 };
 
 /**
- * Importa datos históricos en batch
+ * Verifica si un mes ya ha sido cerrado
+ * @param {number} año - Año
+ * @param {number} mes - Mes (1-12)
+ * @returns {Promise<boolean>} - True si ya está cerrado
+ */
+export const verificarMesCerrado = async (año, mes) => {
+  try {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('año', '==', año),
+      where('mes', '==', mes)
+    );
+    const snapshot = await getDocs(q);
+    return !snapshot.empty;
+  } catch (error) {
+    console.error('Error verificando mes cerrado:', error);
+    return false;
+  }
+};
+
+/**
+ * Obtiene el resumen de utilidad por año
+ * @param {number} año - Año a consultar
+ * @returns {Promise<Object>} - Resumen del año
+ */
+export const obtenerResumenAnual = async (año) => {
+  try {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('año', '==', año)
+    );
+    const snapshot = await getDocs(q);
+    
+    const meses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    const resumen = {
+      año,
+      mesesCerrados: meses.length,
+      totalIngresos: meses.reduce((sum, m) => sum + (m.ingresos || 0), 0),
+      totalGastos: meses.reduce((sum, m) => sum + (m.totalGastos || 0), 0),
+      totalUtilidad: meses.reduce((sum, m) => sum + (m.utilidad || 0), 0),
+      detalleGastos: {
+        nomina: meses.reduce((sum, m) => sum + (m.gastos?.nomina || 0), 0),
+        pagoTerapeutas: meses.reduce((sum, m) => sum + (m.gastos?.pagoTerapeutas || 0), 0),
+        renta: meses.reduce((sum, m) => sum + (m.gastos?.renta || 0), 0),
+        servicios: meses.reduce((sum, m) => sum + (m.gastos?.servicios || 0), 0),
+        otros: meses.reduce((sum, m) => sum + (m.gastos?.otros || 0), 0)
+      },
+      meses: meses.sort((a, b) => a.mes - b.mes)
+    };
+
+    return resumen;
+  } catch (error) {
+    console.error('Error obteniendo resumen anual:', error);
+    throw error;
+  }
+};
+
+/**
+ * Importa datos históricos en batch (función legacy)
  * @param {Array} datosHistoricos - Array de registros históricos
  * @returns {Promise<number>} - Número de registros importados
  */
@@ -41,6 +183,10 @@ export const importarUtilidadHistorica = async (datosHistoricos) => {
         año: dato.año,
         mes: dato.mes,
         utilidad: dato.utilidad,
+        // Campos adicionales si vienen
+        ingresos: dato.ingresos || null,
+        totalGastos: dato.totalGastos || null,
+        gastos: dato.gastos || null,
         fechaImportacion: new Date().toISOString()
       });
     });

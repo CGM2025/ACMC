@@ -56,6 +56,9 @@ import {
   rechazarComprobante 
 } from './api/comprobantes';
 
+import CerrarMes from './components/CerrarMes';
+import { guardarCierreMes } from './api/utilidadHistorica';
+
 // Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -113,6 +116,8 @@ const SistemaGestion = () => {
     getNombre,
     getTotales
   } = useData(currentUser, isLoggedIn);
+
+  const [mostrarCerrarMes, setMostrarCerrarMes] = useState(false);
 
   // ← AQUÍ DEBE IR el useState de usuariosPortal
   const [usuariosPortal, setUsuariosPortal] = useState([]);
@@ -1043,7 +1048,9 @@ const SistemaGestion = () => {
                     sidebarCollapsed={sidebarCollapsed}
                     setSidebarCollapsed={setSidebarCollapsed}
                     hasPermission={hasPermission}
-                    handleLogout={handleLogout} />
+                    handleLogout={handleLogout} 
+                    onCerrarMes={() => setMostrarCerrarMes(true)}
+                  />
 
                   {/* Contenido Principal - Se ajusta según el sidebar */}
                   <main className={`${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex-1 p-8 transition-all duration-300`}>
@@ -1058,7 +1065,9 @@ const SistemaGestion = () => {
                         setRangoMeses={setRangoMeses}
                         refreshKey={refreshKey}
                         setRefreshKey={setRefreshKey}
-                        cargarUtilidadHistorica={cargarUtilidadHistorica} />
+                        cargarUtilidadHistorica={cargarUtilidadHistorica} 
+                        onCerrarMes={() => setMostrarCerrarMes(true)}
+                        />
                     )}
 
                     {/* SECCIÓN DE HORAS (código igual que antes, omitido por brevedad) */}
@@ -2055,6 +2064,21 @@ const SistemaGestion = () => {
                     </div>
                   )}
               </div>
+            )}
+            {/* Modal Cerrar Mes */}
+            {mostrarCerrarMes && (
+              <CerrarMes
+                pagos={pagos}
+                utilidadHistorica={utilidadHistorica}
+                onGuardar={async (datos) => {
+                  const resultado = await guardarCierreMes(datos);
+                  if (resultado.success) {
+                    await cargarUtilidadHistorica();
+                  }
+                  return resultado;
+                }}
+                onCerrar={() => setMostrarCerrarMes(false)}
+              />
             )}
           </div>
         } 
