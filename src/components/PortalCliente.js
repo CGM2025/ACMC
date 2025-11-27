@@ -73,12 +73,17 @@ const PortalCliente = ({
     const totalPagado = pagosCliente.reduce((sum, p) => sum + (parseFloat(p.monto) || 0), 0);
     const saldoPendiente = totalFacturado - totalPagado;
     const porcentajePagado = totalFacturado > 0 ? (totalPagado / totalFacturado) * 100 : 0;
+    
+    // Tolerancia de $1 para diferencias de centavos
+    const TOLERANCIA = 1;
+    const tieneSaldoPendiente = saldoPendiente > TOLERANCIA;
 
     return {
       totalFacturado,
       totalPagado,
-      saldoPendiente,
-      porcentajePagado
+      saldoPendiente: tieneSaldoPendiente ? saldoPendiente : 0, // Mostrar $0 si es menor a $1
+      porcentajePagado: tieneSaldoPendiente ? porcentajePagado : 100, // Mostrar 100% si está pagado
+      tieneSaldoPendiente
     };
   }, [recibosCliente, pagosCliente]);
 
@@ -94,7 +99,9 @@ const PortalCliente = ({
     );
     const totalPagadoRecibo = pagosRecibo.reduce((sum, p) => sum + parseFloat(p.monto), 0);
 
-    if (totalPagadoRecibo >= recibo.totalGeneral) {
+    // Tolerancia de $1 para diferencias de centavos
+    const TOLERANCIA = 1;
+    if (totalPagadoRecibo >= (recibo.totalGeneral - TOLERANCIA)) {
       return { estado: 'pagado', texto: 'Pagado', color: 'green' };
     } else if (totalPagadoRecibo > 0) {
       return { estado: 'parcial', texto: 'Pago Parcial', color: 'yellow' };
@@ -189,29 +196,29 @@ const PortalCliente = ({
 
             {/* Saldo Pendiente */}
             <div className={`${
-              resumenFinanciero.saldoPendiente > 0 
+              resumenFinanciero.tieneSaldoPendiente 
                 ? 'bg-red-50 border-red-200' 
                 : 'bg-blue-50 border-blue-200'
             } border rounded-xl p-6`}>
               <div className="flex items-center justify-between mb-3">
                 <span className={`text-sm font-medium ${
-                  resumenFinanciero.saldoPendiente > 0 ? 'text-red-700' : 'text-blue-700'
+                  resumenFinanciero.tieneSaldoPendiente ? 'text-red-700' : 'text-blue-700'
                 }`}>
                   Saldo Pendiente
                 </span>
                 <DollarSign size={24} className={
-                  resumenFinanciero.saldoPendiente > 0 ? 'text-red-600' : 'text-blue-600'
+                  resumenFinanciero.tieneSaldoPendiente ? 'text-red-600' : 'text-blue-600'
                 } />
               </div>
               <p className={`text-3xl font-bold ${
-                resumenFinanciero.saldoPendiente > 0 ? 'text-red-900' : 'text-blue-900'
+                resumenFinanciero.tieneSaldoPendiente ? 'text-red-900' : 'text-blue-900'
               }`}>
                 ${Math.round(Math.abs(resumenFinanciero.saldoPendiente)).toLocaleString()}
               </p>
               <p className={`text-sm mt-1 ${
-                resumenFinanciero.saldoPendiente > 0 ? 'text-red-600' : 'text-blue-600'
+                resumenFinanciero.tieneSaldoPendiente ? 'text-red-600' : 'text-blue-600'
               }`}>
-                {resumenFinanciero.saldoPendiente > 0 ? 'Por pagar' : 'Al corriente'}
+                {resumenFinanciero.tieneSaldoPendiente ? 'Por pagar' : 'Al corriente'}
               </p>
             </div>
           </div>
@@ -468,7 +475,6 @@ const PortalCliente = ({
         <ModalRecibo
           recibo={reciboSeleccionado}
           nombreCliente={clienteData.nombre}
-          esPortalCliente={true}
           onCerrar={() => {
             setMostrarModalRecibo(false);
             setReciboSeleccionado(null);

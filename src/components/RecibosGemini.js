@@ -17,7 +17,10 @@ import {
   DollarSign,
   Gift,
   FileText,
-  CheckCircle
+  CheckCircle,
+  Square,
+  CheckSquare,
+  Layers
 } from 'lucide-react';
 
 /**
@@ -66,6 +69,9 @@ const RecibosGemini = ({
   const [mostrarModalRecibo, setMostrarModalRecibo] = useState(false);
   const [numeroRecibo, setNumeroRecibo] = useState('');
   const [generandoRecibo, setGenerandoRecibo] = useState(false);
+
+  // Estados para selección de citas
+  const [citasSeleccionadas, setCitasSeleccionadas] = useState(new Set());
 
   // Tipos de terapia desde servicios (prop) con fallback
   const tiposTerapia = useMemo(() => {
@@ -243,6 +249,99 @@ const RecibosGemini = ({
   }, [clientesConCitas]); // Solo cuando cambian los clientes con citas
 
   /**
+   * Limpiar selección cuando cambia el cliente o el mes
+   */
+  useEffect(() => {
+    setCitasSeleccionadas(new Set());
+  }, [clienteSeleccionado?.nombre, mesSeleccionado]);
+
+  /**
+   * Calcula totales de citas seleccionadas
+   */
+  const totalesSeleccionados = useMemo(() => {
+    if (!clienteSeleccionado || citasSeleccionadas.size === 0) {
+      return null;
+    }
+
+    let totalCitas = 0;
+    let totalHoras = 0;
+    let totalPrecio = 0;
+    let totalIva = 0;
+
+    clienteSeleccionado.citas.forEach(cita => {
+      if (citasSeleccionadas.has(cita.id) && !cita.cortesia) {
+        totalCitas++;
+        totalHoras += cita.duracion;
+        totalPrecio += cita.precio;
+        totalIva += cita.iva;
+      }
+    });
+
+    return {
+      totalCitas,
+      totalHoras,
+      totalPrecio,
+      totalIva,
+      totalGeneral: totalPrecio + totalIva
+    };
+  }, [clienteSeleccionado, citasSeleccionadas]);
+
+  /**
+   * Toggle selección de una cita
+   */
+  const toggleSeleccionCita = (citaId) => {
+    setCitasSeleccionadas(prev => {
+      const nuevo = new Set(prev);
+      if (nuevo.has(citaId)) {
+        nuevo.delete(citaId);
+      } else {
+        nuevo.add(citaId);
+      }
+      return nuevo;
+    });
+  };
+
+  /**
+   * Seleccionar todas las citas (no cortesía)
+   */
+  const seleccionarTodas = () => {
+    if (!clienteSeleccionado) return;
+    const ids = clienteSeleccionado.citas
+      .filter(c => !c.cortesia)
+      .map(c => c.id);
+    setCitasSeleccionadas(new Set(ids));
+  };
+
+  /**
+   * Deseleccionar todas las citas
+   */
+  const deseleccionarTodas = () => {
+    setCitasSeleccionadas(new Set());
+  };
+
+  /**
+   * Seleccionar solo citas de Sombra
+   */
+  const seleccionarSoloSombra = () => {
+    if (!clienteSeleccionado) return;
+    const ids = clienteSeleccionado.citas
+      .filter(c => !c.cortesia && c.tipoTerapia === 'Servicios de Sombra')
+      .map(c => c.id);
+    setCitasSeleccionadas(new Set(ids));
+  };
+
+  /**
+   * Seleccionar todo excepto Sombra
+   */
+  const seleccionarExceptoSombra = () => {
+    if (!clienteSeleccionado) return;
+    const ids = clienteSeleccionado.citas
+      .filter(c => !c.cortesia && c.tipoTerapia !== 'Servicios de Sombra')
+      .map(c => c.id);
+    setCitasSeleccionadas(new Set(ids));
+  };
+
+  /**
    * Filtra clientes por búsqueda
    */
   const clientesFiltrados = useMemo(() => {
@@ -324,9 +423,26 @@ const RecibosGemini = ({
    * Abre el modal para generar recibo
    */
   const abrirModalGenerarRecibo = () => {
-    if (!clienteSeleccionado || clienteSeleccionado.totalCitas === 0) {
-      alert('No hay citas facturables para generar el recibo');
+    if (!clienteSeleccionado) {
+      alert('Selecciona un cliente primero');
       return;
+    }
+
+    // Si hay citas seleccionadas, verificar que haya al menos una
+    if (citasSeleccionadas.size > 0) {
+      const citasValidas = clienteSeleccionado.citas.filter(
+        c => citasSeleccionadas.has(c.id) && !c.cortesia
+      );
+      if (citasValidas.length === 0) {
+        alert('No hay citas facturables seleccionadas (las cortesías no cuentan)');
+        return;
+      }
+    } else {
+      // Si no hay selección, verificar que haya citas facturables
+      if (clienteSeleccionado.totalCitas === 0) {
+        alert('No hay citas facturables para generar el recibo');
+        return;
+      }
     }
 
     const codigo = clienteSeleccionado.codigo || '000';
@@ -351,8 +467,24 @@ const RecibosGemini = ({
       const [year, month] = mesSeleccionado.split('-');
       const mesNombre = meses[parseInt(month) - 1];
 
-      // Filtrar solo citas NO cortesía para el recibo
-      const citasFacturables = clienteSeleccionado.citas.filter(c => !c.cortesia);
+      // Determinar qué citas incluir
+      let citasParaRecibo;
+      if (citasSeleccionadas.size > 0) {
+        // Usar solo las seleccionadas (y que no sean cortesía)
+        citasParaRecibo = clienteSeleccionado.citas.filter(
+          c => citasSeleccionadas.has(c.id) && !c.cortesia
+        );
+      } else {
+        // Usar todas las facturables
+        citasParaRecibo = clienteSeleccionado.citas.filter(c => !c.cortesia);
+      }
+
+      // Calcular totales de las citas a incluir
+      const totalCitas = citasParaRecibo.length;
+      const totalHoras = citasParaRecibo.reduce((sum, c) => sum + c.duracion, 0);
+      const totalPrecio = citasParaRecibo.reduce((sum, c) => sum + c.precio, 0);
+      const totalIva = citasParaRecibo.reduce((sum, c) => sum + c.iva, 0);
+      const totalGeneral = totalPrecio + totalIva;
 
       // Preparar datos del recibo
       const datosRecibo = {
@@ -365,19 +497,18 @@ const RecibosGemini = ({
         mesNumero: parseInt(month),
         periodoISO: mesSeleccionado,
         
-        // Totales (solo citas facturables, no cortesías)
-        totalCitas: clienteSeleccionado.totalCitas,
-        totalHoras: clienteSeleccionado.totalHoras,
-        totalPrecio: clienteSeleccionado.totalPrecio,
-        totalIva: clienteSeleccionado.totalIva,
-        totalGeneral: clienteSeleccionado.totalGeneral,
+        // Totales de las citas incluidas
+        totalCitas,
+        totalHoras,
+        totalPrecio,
+        totalIva,
+        totalGeneral,
         
-        // Info de cortesías para referencia
-        totalCortesias: clienteSeleccionado.totalCortesias || 0,
-        totalHorasCortesia: clienteSeleccionado.totalHorasCortesia || 0,
+        // Info adicional
+        esReciboPartial: citasSeleccionadas.size > 0,
         
-        // Citas incluidas (solo facturables)
-        citas: citasFacturables.map(c => ({
+        // Citas incluidas
+        citas: citasParaRecibo.map(c => ({
           id: c.id,
           fecha: c.fecha,
           horaInicio: c.horaInicio,
@@ -388,6 +519,9 @@ const RecibosGemini = ({
           precio: c.precio
         })),
         
+        // IDs de citas para referencia
+        citasIds: citasParaRecibo.map(c => c.id),
+        
         // Metadata
         fechaGeneracion: new Date().toISOString(),
         estadoPago: 'pendiente',
@@ -396,8 +530,11 @@ const RecibosGemini = ({
 
       await onGenerarRecibo(datosRecibo);
       
+      // Limpiar selección después de generar
+      setCitasSeleccionadas(new Set());
+      
       setMostrarModalRecibo(false);
-      alert(`✅ Recibo ${reciboId} generado exitosamente`);
+      alert(`✅ Recibo ${reciboId} generado con ${totalCitas} citas`);
       
     } catch (error) {
       console.error('Error generando recibo:', error);
@@ -723,14 +860,96 @@ const RecibosGemini = ({
 
             {/* Tabla de Citas */}
             <div className="flex-1 overflow-y-auto bg-white p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Detalle de Citas
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Detalle de Citas
+                </h2>
+                
+                {/* Barra de selección */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500 mr-2">
+                    <Layers size={16} className="inline mr-1" />
+                    Selección:
+                  </span>
+                  <button
+                    onClick={seleccionarTodas}
+                    className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                  >
+                    Todas
+                  </button>
+                  <button
+                    onClick={deseleccionarTodas}
+                    className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Ninguna
+                  </button>
+                  <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                  <button
+                    onClick={seleccionarSoloSombra}
+                    className="px-3 py-1.5 text-xs bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors"
+                  >
+                    Solo Sombra
+                  </button>
+                  <button
+                    onClick={seleccionarExceptoSombra}
+                    className="px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                  >
+                    Excepto Sombra
+                  </button>
+                </div>
+              </div>
+
+              {/* Indicador de selección */}
+              {citasSeleccionadas.size > 0 && totalesSeleccionados && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="font-medium text-blue-900">
+                      <CheckSquare size={16} className="inline mr-1" />
+                      {citasSeleccionadas.size} citas seleccionadas
+                    </span>
+                    <span className="text-blue-700">
+                      {totalesSeleccionados.totalHoras.toFixed(1)}h
+                    </span>
+                    <span className="text-blue-700">
+                      Subtotal: ${totalesSeleccionados.totalPrecio.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                    </span>
+                    <span className="font-semibold text-blue-900">
+                      Total: ${totalesSeleccionados.totalGeneral.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <button
+                    onClick={abrirModalGenerarRecibo}
+                    className="px-4 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 flex items-center gap-2"
+                  >
+                    <FileText size={16} />
+                    Generar Recibo con Selección
+                  </button>
+                </div>
+              )}
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="border-b-2 border-gray-200 bg-gray-50">
                     <tr className="text-left text-gray-600">
+                      <th className="py-3 px-2 font-semibold text-center w-10">
+                        <button
+                          onClick={() => {
+                            if (citasSeleccionadas.size === clienteSeleccionado.citas.filter(c => !c.cortesia).length) {
+                              deseleccionarTodas();
+                            } else {
+                              seleccionarTodas();
+                            }
+                          }}
+                          className="p-1 hover:bg-gray-200 rounded"
+                          title="Seleccionar/Deseleccionar todas"
+                        >
+                          {citasSeleccionadas.size === clienteSeleccionado.citas.filter(c => !c.cortesia).length ? (
+                            <CheckSquare size={18} className="text-blue-600" />
+                          ) : (
+                            <Square size={18} className="text-gray-400" />
+                          )}
+                        </button>
+                      </th>
                       <th className="py-3 px-3 font-semibold">Fecha</th>
                       <th className="py-3 px-3 font-semibold">Horario</th>
                       <th className="py-3 px-3 font-semibold">Terapeuta</th>
@@ -751,9 +970,27 @@ const RecibosGemini = ({
                         className={`border-b border-gray-100 ${
                           cita.cortesia 
                             ? 'bg-gray-50 text-gray-400' 
+                            : citasSeleccionadas.has(cita.id)
+                            ? 'bg-blue-50'
                             : 'hover:bg-gray-50'
                         }`}
                       >
+                        <td className="py-3 px-2 text-center">
+                          {!cita.cortesia ? (
+                            <button
+                              onClick={() => toggleSeleccionCita(cita.id)}
+                              className="p-1 hover:bg-gray-200 rounded"
+                            >
+                              {citasSeleccionadas.has(cita.id) ? (
+                                <CheckSquare size={18} className="text-blue-600" />
+                              ) : (
+                                <Square size={18} className="text-gray-400" />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-2">
                             {formatearFecha(cita.fecha)}
@@ -809,6 +1046,7 @@ const RecibosGemini = ({
                     {/* Fila de cortesías si hay alguna */}
                     {clienteSeleccionado.totalCortesias > 0 && (
                       <tr className="text-gray-400 text-sm">
+                        <td></td>
                         <td className="py-2 px-3" colSpan="4">
                           <span className="flex items-center gap-1">
                             <Gift size={14} />
@@ -832,6 +1070,7 @@ const RecibosGemini = ({
                     )}
                     {/* Fila de totales facturables */}
                     <tr className="font-semibold">
+                      <td></td>
                       <td className="py-3 px-3" colSpan="4">
                         Total Facturable: {clienteSeleccionado.totalCitas} citas
                       </td>
@@ -1155,32 +1394,64 @@ const RecibosGemini = ({
 
               {/* Resumen del recibo */}
               <div className="border border-gray-200 rounded-lg p-4 space-y-2">
-                <h4 className="font-medium text-gray-900 mb-3">Resumen del Recibo</h4>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Citas facturables:</span>
-                  <span className="font-medium">{clienteSeleccionado.totalCitas}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total horas:</span>
-                  <span className="font-medium">{clienteSeleccionado.totalHoras.toFixed(2)}h</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">${clienteSeleccionado.totalPrecio.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">IVA (16%):</span>
-                  <span className="font-medium">${clienteSeleccionado.totalIva.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
-                </div>
-                <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
-                  <span className="font-semibold text-gray-900">Total:</span>
-                  <span className="font-bold text-green-600 text-lg">
-                    ${clienteSeleccionado.totalGeneral.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
-                  </span>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-gray-900">Resumen del Recibo</h4>
+                  {citasSeleccionadas.size > 0 && (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                      Selección parcial
+                    </span>
+                  )}
                 </div>
                 
-                {/* Info de cortesías si hay */}
-                {clienteSeleccionado.totalCortesias > 0 && (
+                {/* Usar totales de selección si hay, si no usar todos */}
+                {(() => {
+                  const datos = citasSeleccionadas.size > 0 && totalesSeleccionados
+                    ? totalesSeleccionados
+                    : clienteSeleccionado;
+                  
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Citas a incluir:</span>
+                        <span className="font-medium">{datos.totalCitas}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total horas:</span>
+                        <span className="font-medium">{datos.totalHoras.toFixed(2)}h</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium">${datos.totalPrecio.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">IVA (16%):</span>
+                        <span className="font-medium">${datos.totalIva.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
+                        <span className="font-semibold text-gray-900">Total:</span>
+                        <span className="font-bold text-green-600 text-lg">
+                          ${datos.totalGeneral.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
+                
+                {/* Info de citas seleccionadas */}
+                {citasSeleccionadas.size > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-xs text-blue-600 flex items-center gap-1">
+                      <CheckSquare size={14} />
+                      Solo se incluirán las {citasSeleccionadas.size} citas seleccionadas
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Las citas restantes podrán incluirse en otro recibo
+                    </p>
+                  </div>
+                )}
+                
+                {/* Info de cortesías si hay y no hay selección */}
+                {citasSeleccionadas.size === 0 && clienteSeleccionado.totalCortesias > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
                     <p className="text-xs text-purple-600 flex items-center gap-1">
                       <Gift size={14} />

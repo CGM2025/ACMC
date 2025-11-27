@@ -51,12 +51,16 @@ const EstadoCuentaClientes = ({
       );
       
       // Calcular saldo pendiente
-      const saldoPendiente = totalFacturado - totalPagado;
+      const saldoPendienteReal = totalFacturado - totalPagado;
       
-      // Determinar estado
+      // Determinar estado (con tolerancia de $1 para centavos)
+      const TOLERANCIA = 1;
       let estado = 'al-corriente';
-      if (saldoPendiente > 0) estado = 'pendiente';
-      if (saldoPendiente < 0) estado = 'adelantado';
+      if (saldoPendienteReal > TOLERANCIA) estado = 'pendiente';
+      if (saldoPendienteReal < -TOLERANCIA) estado = 'adelantado';
+      
+      // Ajustar saldo para mostrar $0 si la diferencia es menor a $1
+      const saldoPendiente = Math.abs(saldoPendienteReal) <= TOLERANCIA ? 0 : saldoPendienteReal;
       
       return {
         ...cliente,
@@ -481,8 +485,10 @@ const EstadoCuentaClientes = ({
                               p.reciboId === recibo.reciboId
                             )
                             .reduce((sum, p) => sum + parseFloat(p.monto), 0);
-                          const estaPagado = montoPagado >= recibo.totalGeneral;
-                          const esParcial = montoPagado > 0 && montoPagado < recibo.totalGeneral;
+                          // Tolerancia de $1 para diferencias de centavos
+                          const TOLERANCIA = 1;
+                          const estaPagado = montoPagado >= (recibo.totalGeneral - TOLERANCIA);
+                          const esParcial = montoPagado > 0 && montoPagado < (recibo.totalGeneral - TOLERANCIA);
 
                           return (
                             <tr key={recibo.id || index} className="hover:bg-gray-50">
