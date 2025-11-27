@@ -4,8 +4,13 @@ import { X, FileText, Calendar, DollarSign, Clock, User, TrendingUp } from 'luci
 /**
  * Modal para visualizar el detalle completo de un recibo
  * Muestra información del cliente, citas incluidas, totales y cálculos
+ * 
+ * @param {Object} recibo - Datos del recibo
+ * @param {Function} onCerrar - Función para cerrar el modal
+ * @param {string} nombreCliente - Nombre del cliente
+ * @param {boolean} esPortalCliente - Si es true, oculta ganancia, margen y costo terapeutas
  */
-const ModalRecibo = ({ recibo, onCerrar, nombreCliente }) => {
+const ModalRecibo = ({ recibo, onCerrar, nombreCliente, esPortalCliente = false }) => {
   if (!recibo) return null;
 
   // Calcular totales si no vienen en el recibo
@@ -103,9 +108,9 @@ const ModalRecibo = ({ recibo, onCerrar, nombreCliente }) => {
             </div>
           </div>
 
-          {/* Resumen de Servicios */}
+          {/* Resumen de Servicios - Vista diferente para cliente vs admin */}
           {totales && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className={`grid ${esPortalCliente ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'} gap-4`}>
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-purple-700">Horas</span>
@@ -126,25 +131,30 @@ const ModalRecibo = ({ recibo, onCerrar, nombreCliente }) => {
                 </p>
               </div>
 
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-green-700">Ganancia</span>
-                  <TrendingUp size={18} className="text-green-600" />
-                </div>
-                <p className="text-2xl font-bold text-green-900">
-                  ${Math.round(totales.ganancia).toLocaleString()}
-                </p>
-              </div>
+              {/* Solo mostrar Ganancia y Margen si NO es portal de cliente */}
+              {!esPortalCliente && (
+                <>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-green-700">Ganancia</span>
+                      <TrendingUp size={18} className="text-green-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-green-900">
+                      ${Math.round(totales.ganancia).toLocaleString()}
+                    </p>
+                  </div>
 
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-amber-700">Margen</span>
-                  <TrendingUp size={18} className="text-amber-600" />
-                </div>
-                <p className="text-2xl font-bold text-amber-900">
-                  {totales.margen.toFixed(1)}%
-                </p>
-              </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-amber-700">Margen</span>
+                      <TrendingUp size={18} className="text-amber-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-amber-900">
+                      {totales.margen.toFixed(1)}%
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -248,7 +258,8 @@ const ModalRecibo = ({ recibo, onCerrar, nombreCliente }) => {
                   </span>
                 </div>
 
-                {totales.costo > 0 && (
+                {/* Solo mostrar Costo Terapeutas y Ganancia si NO es portal de cliente */}
+                {!esPortalCliente && totales.costo > 0 && (
                   <>
                     <div className="flex justify-between items-center pt-2">
                       <span className="text-sm text-gray-600">Costo Terapeutas</span>

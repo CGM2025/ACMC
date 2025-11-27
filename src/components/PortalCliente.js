@@ -468,6 +468,7 @@ const PortalCliente = ({
         <ModalRecibo
           recibo={reciboSeleccionado}
           nombreCliente={clienteData.nombre}
+          esPortalCliente={true}
           onCerrar={() => {
             setMostrarModalRecibo(false);
             setReciboSeleccionado(null);
