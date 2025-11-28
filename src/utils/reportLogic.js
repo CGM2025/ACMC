@@ -8,7 +8,6 @@ import {
 } from './calculations';
 import { perteneceAlMes, parsearMesReporte, obtenerNombreMes } from './dateHelpers';
 import { generarReciboId } from '../api/recibos';
-
 /**
  * Lógica de negocio para generación de reportes y recibos
  */
@@ -22,6 +21,7 @@ import { generarReciboId } from '../api/recibos';
  * @returns {Array} - Citas filtradas
  */
 export const filtrarCitasDelMes = (citas, mesReporte, terapeutaReporte, clienteReporte) => {
+  console.log('🔎 filtrarCitasDelMes llamada con:', { mesReporte, terapeutaReporte, clienteReporte });
   const { year, month } = parsearMesReporte(mesReporte);
   
   return citas.filter(cita => {

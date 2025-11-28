@@ -32,6 +32,7 @@ const Reportes = ({
 
   /**
    * Filtra las citas completadas del mes seleccionado
+   * ARREGLADO: Compara strings directamente para evitar problemas de timezone
    */
   const citasDelMes = useMemo(() => {
     const [year, month] = mesReporte.split('-');
@@ -39,9 +40,10 @@ const Reportes = ({
     return citas.filter(cita => {
       if (cita.estado !== 'completada') return false;
       
-      const fecha = new Date(cita.fecha);
-      if (fecha.getFullYear() !== parseInt(year)) return false;
-      if (fecha.getMonth() !== parseInt(month) - 1) return false;
+      // Comparar directamente con el string para evitar timezone
+      const [fechaYear, fechaMonth] = cita.fecha.split('-');
+      if (parseInt(fechaYear) !== parseInt(year)) return false;
+      if (parseInt(fechaMonth) !== parseInt(month)) return false;
       
       if (terapeutaReporte !== 'todas' && cita.terapeuta !== terapeutaReporte) return false;
       if (clienteReporte !== 'todos' && cita.cliente !== clienteReporte) return false;

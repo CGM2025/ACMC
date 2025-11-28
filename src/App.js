@@ -560,6 +560,7 @@ const SistemaGestion = () => {
   //useEffect para Generar automaticamente reportes cuando cambia el mes
   useEffect(() => {
     if (activeTab === 'reportes') {
+      console.log('🔄 Regenerando reporte para:', mesReporte);  // DEBUG
       generarReporteMensual();
     }
   }, [activeTab, mesReporte, terapeutaReporte, clienteReporte]);
