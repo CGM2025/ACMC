@@ -52,7 +52,11 @@ import {
   eliminarServicio as eliminarServicioAPI,
   activarServicio as activarServicioAPI,
   desactivarServicio as desactivarServicioAPI,
-  serviciosAPreciosBase
+  serviciosAPreciosBase,
+
+  // Usuarios
+  obtenerUsuarios,
+  vincularUsuarioTerapeuta as vincularUsuarioTerapeutaAPI
 } from '../api';
 
 /**
@@ -82,6 +86,9 @@ export const useData = (currentUser, isLoggedIn) => {
   // Estado de carga
   const [loadingCitas, setLoadingCitas] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+
+  // Usuarios
+  const [usuarios, setUsuarios] = useState([]);
 
   // ==================== FUNCIONES DE CARGA ====================
 
@@ -193,6 +200,33 @@ export const useData = (currentUser, isLoggedIn) => {
       console.error('Error al cargar utilidad histórica:', error);
     }
   }, []);
+
+  /**
+   * Carga los usuarios desde Firestore
+   */
+  const cargarUsuarios = useCallback(async () => {
+    try {
+      const data = await obtenerUsuarios();
+      setUsuarios(data);
+      console.log('✅ Usuarios cargados:', data.length);
+    } catch (error) {
+      console.error('Error al cargar usuarios:', error);
+    }
+  }, []);
+
+  /**
+   * Vincula un usuario con un terapeuta
+   */
+  const vincularUsuario = async (usuarioId, terapeutaId) => {
+    try {
+      await vincularUsuarioTerapeutaAPI(usuarioId, terapeutaId);
+      await cargarUsuarios();
+      return { success: true };
+    } catch (error) {
+      console.error('Error al vincular usuario:', error);
+      return { success: false, error };
+    }
+  };
 
   /**
    * Carga los servicios desde Firestore
@@ -650,6 +684,13 @@ export const useData = (currentUser, isLoggedIn) => {
     }
   }, [isLoggedIn, cargarTodosLosDatos]);
 
+  useEffect(() => {
+    if (isLoggedIn && currentUser?.rol === 'admin') {
+      // ... otras cargas existentes ...
+      cargarUsuarios();  // ← AGREGAR ESTA LÍNEA
+    }
+  }, [isLoggedIn, currentUser]);
+
   // ==================== RETURN ====================
 
   return {
@@ -712,6 +753,11 @@ export const useData = (currentUser, isLoggedIn) => {
     eliminarServicio,
     activarServicio,
     desactivarServicio,
-    obtenerPreciosBase
+    obtenerPreciosBase,
+
+      // Usuarios
+    usuarios,
+    cargarUsuarios,
+    vincularUsuario
   };
 };

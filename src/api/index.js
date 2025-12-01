@@ -74,3 +74,9 @@ export {
   inicializarServiciosPorDefecto,
   serviciosAPreciosBase
 } from './servicios';
+
+// Usuarios - Vinculación de terapeutas
+export {
+  obtenerUsuarios,
+  vincularUsuarioTerapeuta
+} from './usuarios';

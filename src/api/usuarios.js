@@ -285,3 +285,38 @@ export const marcarPasswordCambiada = async (userId) => {
     console.error('Error marcando password cambiada:', error);
   }
 };
+
+// ========================================
+// FUNCIONES PARA VINCULACIÓN DE TERAPEUTAS
+// ========================================
+
+/**
+ * Obtiene todos los usuarios (para admin)
+ * @returns {Promise<Array>} - Array de usuarios
+ */
+export const obtenerUsuarios = async () => {
+  try {
+    const snapshot = await getDocs(collection(db, 'usuarios'));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error('Error al obtener usuarios:', error);
+    throw error;
+  }
+};
+
+/**
+ * Vincula un usuario con un terapeuta
+ * @param {string} usuarioId - ID del usuario
+ * @param {string} terapeutaId - ID del terapeuta (o null para desvincular)
+ * @returns {Promise<void>}
+ */
+export const vincularUsuarioTerapeuta = async (usuarioId, terapeutaId) => {
+  try {
+    await updateDoc(doc(db, 'usuarios', usuarioId), { 
+      terapeutaId: terapeutaId || null 
+    });
+  } catch (error) {
+    console.error('Error al vincular usuario con terapeuta:', error);
+    throw error;
+  }
+};

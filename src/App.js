@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload } from 'lucide-react';
+import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload, Link2 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { importarUtilidadHistorica } from './api';
 import mammoth from 'mammoth';
@@ -62,6 +62,7 @@ import { guardarCierreMes } from './api/utilidadHistorica';
 import GestionServicios from './components/pages/GestionServicios';
 
 import { actualizarCita as actualizarCitaDirecta } from './api/citas';
+import PortalTerapeuta from './components/PortalTerapeuta';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -100,6 +101,8 @@ const SistemaGestion = () => {
     pagos,
     citas,
     utilidadHistorica,
+    usuarios,              // ← AGREGAR
+    vincularUsuario,       // ← AGREGAR
     recibos,
     cargarRecibos,
     ordenClientes,
@@ -203,6 +206,7 @@ const SistemaGestion = () => {
   } = useModals();
   
   const [activeTab, setActiveTab] = useState('dashboard');  
+  const [mostrarVinculacion, setMostrarVinculacion] = useState(false);
 
   const [rangoMeses, setRangoMeses] = useState(12); // 6, 12, 24, o 'todo'
   // const [loadingBatch, setLoadingBatch] = useState(false); 
@@ -237,6 +241,12 @@ const SistemaGestion = () => {
     eliminarRecibosPorMes,  // ← AGREGAR ESTA LÍNEA
     guardandoRecibos,          // ← Y esto
   } = useReportes(citas, clientes, meses);
+
+  // Obtener el terapeuta vinculado al usuario actual
+  const terapeutaVinculado = useMemo(() => {
+    if (!currentUser?.terapeutaId) return null;
+    return terapeutas.find(t => t.id === currentUser.terapeutaId) || null;
+  }, [currentUser, terapeutas]);
 
   // Precios base por tipo de terapia (fallback si el cliente no tiene precio personalizado)
   // Precios base ahora vienen de Firestore
@@ -1012,6 +1022,25 @@ const SistemaGestion = () => {
     );
   }
 
+  // Si es terapeuta, mostrar el portal simplificado
+  if (isLoggedIn && currentUser?.rol === 'terapeuta') {
+    return (
+      <PortalTerapeuta
+        currentUser={currentUser}
+        terapeuta={terapeutaVinculado}
+        citas={citas}
+        clientes={clientes}
+        onActualizarCita={async (citaId, datos) => {
+          await actualizarCitaDirecta(citaId, datos);
+          await cargarCitas();
+        }}
+        onImportarWord={importarDesdeWord}
+        onLogout={handleLogout}
+        importandoWord={importandoWord}
+      />
+    );
+  }
+
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600">
@@ -1191,6 +1220,94 @@ const SistemaGestion = () => {
                         handleCalendarioSelectSlot={handleCalendarioSelectSlot}
                         handleCalendarioEventDrop={handleCalendarioEventDrop} />
                     )}
+
+                    {/* Sección de Vinculación de Usuarios */}
+                    <div className="bg-white rounded-lg shadow mb-6">
+                      <button
+                        onClick={() => setMostrarVinculacion(!mostrarVinculacion)}
+                        className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Link2 size={20} className="text-blue-600" />
+                          <div>
+                            <h3 className="font-semibold text-gray-800">Vincular Usuarios con Terapeutas</h3>
+                            <p className="text-sm text-gray-500">
+                              {usuarios.filter(u => u.rol === 'terapeuta' && !u.terapeutaId).length} usuarios sin vincular
+                            </p>
+                          </div>
+                        </div>
+                        <ChevronRight 
+                          size={20} 
+                          className={`text-gray-400 transition-transform ${mostrarVinculacion ? 'rotate-90' : ''}`} 
+                        />
+                      </button>
+                      
+                      {mostrarVinculacion && (
+                        <div className="px-6 pb-6 border-t">
+                          <p className="text-sm text-gray-600 my-4">
+                            Vincula cada cuenta de usuario con su perfil de terapeuta para que puedan acceder al portal.
+                          </p>
+                          
+                          <div className="space-y-3">
+                            {usuarios
+                              .filter(u => u.rol === 'terapeuta')
+                              .map(usuario => {
+                                const terapeutaActual = terapeutas.find(t => t.id === usuario.terapeutaId);
+                                
+                                return (
+                                  <div 
+                                    key={usuario.id} 
+                                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                                  >
+                                    <div className="flex-1">
+                                      <p className="font-medium text-gray-800">{usuario.nombre}</p>
+                                      <p className="text-sm text-gray-500">{usuario.email}</p>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-3">
+                                      <select
+                                        value={usuario.terapeutaId || ''}
+                                        onChange={async (e) => {
+                                          const result = await vincularUsuario(usuario.id, e.target.value || null);
+                                          if (result.success) {
+                                            alert(e.target.value 
+                                              ? '✅ Usuario vinculado correctamente' 
+                                              : '✅ Usuario desvinculado'
+                                            );
+                                          } else {
+                                            alert('❌ Error al vincular usuario');
+                                          }
+                                        }}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+                                      >
+                                        <option value="">-- Sin vincular --</option>
+                                        {terapeutas.map(t => (
+                                          <option key={t.id} value={t.id}>
+                                            {t.nombre}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      
+                                      {terapeutaActual && (
+                                        <span className="flex items-center gap-1 text-green-600 text-sm">
+                                          <CheckCircle size={16} />
+                                          Vinculado
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            
+                            {usuarios.filter(u => u.rol === 'terapeuta').length === 0 && (
+                              <p className="text-center text-gray-500 py-4">
+                                No hay usuarios con rol de terapeuta registrados.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     {/* RESTO DE SECCIONES (omitidas por brevedad - igual que antes) */}
                     {activeTab === 'terapeutas' && hasPermission('terapeutas') && (
@@ -1581,88 +1698,6 @@ const SistemaGestion = () => {
                     </div>
                   )}
 
-                  {/* Modal de Pago */}
-                  {/* {modals.pago && (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 w-96">
-          <h3 className="text-lg font-bold mb-4">{editingId ? 'Editar Pago' : 'Registrar Pago'}</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
-              <select
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                value={pagoForm.clienteId}
-                onChange={(e) => setPagoForm({...pagoForm, clienteId: e.target.value})}
-              >
-                <option value="">Seleccionar cliente</option>
-                {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Monto ($)</label>
-              <input
-                type="number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                value={pagoForm.monto}
-                onChange={(e) => setPagoForm({...pagoForm, monto: e.target.value})}
-                placeholder="0.00"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Concepto</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                value={pagoForm.concepto}
-                onChange={(e) => setPagoForm({...pagoForm, concepto: e.target.value})}
-                placeholder="Descripción del pago"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Método de Pago</label>
-              <select
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                value={pagoForm.metodo}
-                onChange={(e) => setPagoForm({...pagoForm, metodo: e.target.value})}
-              >
-                <option value="efectivo">Efectivo</option>
-                <option value="transferencia">Transferencia</option>
-                <option value="cheque">Cheque</option>
-                <option value="tarjeta">Tarjeta</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fecha</label>
-              <input
-                type="date"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                value={pagoForm.fecha}
-                onChange={(e) => setPagoForm({...pagoForm, fecha: e.target.value})}
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-2 mt-6">
-            <button
-              onClick={() => closeModal('pago')}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={() => save('pago')}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              {editingId ? 'Actualizar' : 'Guardar'}
-            </button>
-          </div>
-        </div>
-      </div>
-    )} */}
                   <ModalPago
                     isOpen={modals.pago}
                     onClose={() => closeModal('pago')}
@@ -1752,6 +1787,46 @@ const SistemaGestion = () => {
                                 value={terapeutaForm.email}
                                 onChange={(e) => setTerapeutaForm({ ...terapeutaForm, email: e.target.value })} />
                             </div>
+                            {/* Tipo de Pago */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Tipo de Pago
+                              </label>
+                              <select
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                value={terapeutaForm.tipoPago}
+                                onChange={(e) => setTerapeutaForm({
+                                  ...terapeutaForm, 
+                                  tipoPago: e.target.value,
+                                  salarioMensual: e.target.value === 'variable' ? '' : terapeutaForm.salarioMensual
+                                })}
+                              >
+                                <option value="variable">Variable (pago por hora)</option>
+                                <option value="fijo">Fijo (nómina mensual)</option>
+                              </select>
+                            </div>
+
+                            {/* Salario Mensual - Solo visible si es pago fijo */}
+                            {terapeutaForm.tipoPago === 'fijo' && (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Salario Mensual
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                                  <input 
+                                    type="number"
+                                    placeholder="15000"
+                                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
+                                    value={terapeutaForm.salarioMensual} 
+                                    onChange={(e) => setTerapeutaForm({...terapeutaForm, salarioMensual: e.target.value})} 
+                                  />
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Este monto se usará para calcular el margen de ganancia
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
 

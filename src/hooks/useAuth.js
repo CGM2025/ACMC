@@ -50,7 +50,8 @@ export const useAuth = () => {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               nombre: userData.nombre,
-              rol: userData.rol
+              rol: userData.rol,
+              terapeutaId: userData.terapeutaId || null  // ← AGREGAR ESTA LÍNEA
             });
             setIsLoggedIn(true);
           } else {

@@ -36,6 +36,8 @@ export const useModals = () => {
     especialidad: '',
     telefono: '',
     email: '',
+    tipoPago: 'variable',      // 'variable' o 'fijo'
+    salarioMensual: '',        // Solo aplica si tipoPago es 'fijo'
     costosPorServicio: {},
     costosPorCliente: {}
   });
@@ -119,6 +121,8 @@ export const useModals = () => {
             especialidad: item.especialidad || '',
             telefono: item.telefono || '',
             email: item.email || '',
+            tipoPago: item.tipoPago || 'variable',
+            salarioMensual: item.salarioMensual || '',
             costosPorServicio: item.costosPorServicio || {},
             costosPorCliente: item.costosPorCliente || {}
           });
@@ -187,6 +191,8 @@ export const useModals = () => {
       especialidad: '',
       telefono: '',
       email: '',
+      tipoPago: 'variable',
+      salarioMensual: '',
       costosPorServicio: {},
       costosPorCliente: {}
     });
