@@ -65,7 +65,7 @@ import GestionServicios from './components/pages/GestionServicios';
 import { actualizarCita as actualizarCitaDirecta, crearCita } from './api/citas';
 import PortalTerapeuta from './components/PortalTerapeuta';
 import ConfiguracionEmpresa from './components/ConfiguracionEmpresa';
-import { useConfiguracion } from './contexts/ConfiguracionContext';
+import { ConfiguracionProvider } from './contexts/ConfiguracionContext';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -136,8 +136,6 @@ const SistemaGestion = () => {
   } = useData(currentUser, isLoggedIn);
 
   const [mostrarCerrarMes, setMostrarCerrarMes] = useState(false);
-
-  const { configuracion, cargarConfiguracion } = useConfiguracion();
 
   // ← AQUÍ DEBE IR el useState de usuariosPortal
   const [usuariosPortal, setUsuariosPortal] = useState([]);
@@ -1086,1240 +1084,1242 @@ const SistemaGestion = () => {
   const horasDesdeCitasObj = calcularHorasDesdeCitas();
 
   return (
+    <ConfiguracionProvider currentUser={currentUser} isLoggedIn={isLoggedIn}>
       <Router>
-    <Routes>
-      {/* Ruta del Portal de Clientes */}
-      <Route 
-        path="/portal" 
-        element={
-          <Portal 
-            recibos={recibos}
-            pagos={pagos}
-            citas={citas}
+        <Routes>
+          {/* Ruta del Portal de Clientes */}
+          <Route 
+            path="/portal" 
+            element={
+              <Portal 
+                recibos={recibos}
+                pagos={pagos}
+                citas={citas}
+              />
+            } 
           />
-        } 
-      />
 
-      {/* Ruta principal - Sistema Administrativo */}
-      <Route 
-        path="/*" 
-        element={
-          <div className="min-h-screen bg-gray-50">
-            {/* TODO tu código actual va aquí */}
-            {!isLoggedIn ? (
-              <Login onLogin={handleLogin} />
-            ) : (
-              <div className="min-h-screen bg-gray-100 flex">
-                  {/* Sidebar Colapsable */}
-                  <Sidebar
-                    currentUser={currentUser}
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    sidebarCollapsed={sidebarCollapsed}
-                    setSidebarCollapsed={setSidebarCollapsed}
-                    hasPermission={hasPermission}
-                    handleLogout={handleLogout} 
-                    onCerrarMes={() => setMostrarCerrarMes(true)}
-                  />
-
-                  {/* Contenido Principal - Se ajusta según el sidebar */}
-                  <main className={`${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex-1 p-8 transition-all duration-300`}>
-                    {activeTab === 'migracion' && currentUser?.rol === 'admin' && (
-                      <MigracionOrganization />
-                    )}
-
-                    {activeTab === 'dashboard' && hasPermission('dashboard') && (
-                      <Dashboard
-                        citas={citas}
-                        clientes={clientes}
-                        utilidadHistorica={utilidadHistorica}
-                        totalHoras={totalHoras}
-                        totalPagos={totalPagos}
-                        rangoMeses={rangoMeses}
-                        setRangoMeses={setRangoMeses}
-                        refreshKey={refreshKey}
-                        setRefreshKey={setRefreshKey}
-                        cargarUtilidadHistorica={cargarUtilidadHistorica} 
+          {/* Ruta principal - Sistema Administrativo */}
+          <Route 
+            path="/*" 
+            element={
+              <div className="min-h-screen bg-gray-50">
+                {/* TODO tu código actual va aquí */}
+                {!isLoggedIn ? (
+                  <Login onLogin={handleLogin} />
+                ) : (
+                  <div className="min-h-screen bg-gray-100 flex">
+                      {/* Sidebar Colapsable */}
+                      <Sidebar
+                        currentUser={currentUser}
+                        activeTab={activeTab}
+                        setActiveTab={setActiveTab}
+                        sidebarCollapsed={sidebarCollapsed}
+                        setSidebarCollapsed={setSidebarCollapsed}
+                        hasPermission={hasPermission}
+                        handleLogout={handleLogout} 
                         onCerrarMes={() => setMostrarCerrarMes(true)}
-                        />
-                    )}
-
-                    {activeTab === 'servicios' && hasPermission('servicios') && (
-                      <GestionServicios
-                        servicios={servicios}
-                        onCrear={async (datos) => {
-                          const result = await guardarServicio(datos);
-                          return result;
-                        }}
-                        onActualizar={async (id, datos) => {
-                          const result = await guardarServicio(datos, id);
-                          return result;
-                        }}
-                        onEliminar={async (id) => {
-                          await eliminarServicioFn(id);
-                        }}
-                        onActivar={async (id) => {
-                          await activarServicio(id);
-                        }}
-                        onDesactivar={async (id) => {
-                          await desactivarServicio(id);
-                        }}
                       />
-                    )}
 
-                    {/* SECCIÓN DE HORAS (código igual que antes, omitido por brevedad) */}
-                    {activeTab === 'horas' && hasPermission('horas') && (
-                      <Horas
-                        horasDesdeCitas={horasDesdeCitas} />
-                    )}
+                      {/* Contenido Principal - Se ajusta según el sidebar */}
+                      <main className={`${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex-1 p-8 transition-all duration-300`}>
+                        {activeTab === 'migracion' && currentUser?.rol === 'admin' && (
+                          <MigracionOrganization />
+                        )}
 
-                    {/* ============================================
-                        PESTAÑA: REPORTES
-                      ============================================ */}
-                    {activeTab === 'reportes' && (
-                      <Reportes
-                        citas={citas}
-                        clientes={clientes}
-                        terapeutas={terapeutas}
-                        meses={meses}
-                        guardarRecibosEnFirebase={guardarRecibosEnFirebase} // ← AGREGAR
-                        eliminarRecibosPorMes={eliminarRecibosPorMes} // ← AGREGAR ESTA LÍNEA
-                        guardandoRecibos={guardandoRecibos} // ← AGREGAR
-                        reporteGenerado={reporteGenerado} // ← AGREGAR
-                      />
-                    )}
+                        {activeTab === 'dashboard' && hasPermission('dashboard') && (
+                          <Dashboard
+                            citas={citas}
+                            clientes={clientes}
+                            utilidadHistorica={utilidadHistorica}
+                            totalHoras={totalHoras}
+                            totalPagos={totalPagos}
+                            rangoMeses={rangoMeses}
+                            setRangoMeses={setRangoMeses}
+                            refreshKey={refreshKey}
+                            setRefreshKey={setRefreshKey}
+                            cargarUtilidadHistorica={cargarUtilidadHistorica} 
+                            onCerrarMes={() => setMostrarCerrarMes(true)}
+                            />
+                        )}
 
-                    {activeTab === 'bloques' && hasPermission('bloques') && (
-                      <BloquesCitas
-                        terapeutas={terapeutas}
-                        clientes={clientes}
-                        diasSemanaOptions={diasSemanaOptions}
-                        nuevoHorario={nuevoHorario}
-                        setNuevoHorario={setNuevoHorario}
-                        horarios={horarios}
-                        fechaInicio={fechaInicio}
-                        setFechaInicio={setFechaInicio}
-                        fechaFin={fechaFin}
-                        setFechaFin={setFechaFin}
-                        citasGeneradas={citasGeneradas}
-                        mostrarResultado={mostrarResultado}
-                        toggleDia={toggleDia}
-                        agregarHorario={agregarHorario}
-                        eliminarHorario={eliminarHorario}
-                        generarCitas={generarCitas}
-                        guardarCitas={guardarCitas} />
-                    )}
+                        {activeTab === 'servicios' && hasPermission('servicios') && (
+                          <GestionServicios
+                            servicios={servicios}
+                            onCrear={async (datos) => {
+                              const result = await guardarServicio(datos);
+                              return result;
+                            }}
+                            onActualizar={async (id, datos) => {
+                              const result = await guardarServicio(datos, id);
+                              return result;
+                            }}
+                            onEliminar={async (id) => {
+                              await eliminarServicioFn(id);
+                            }}
+                            onActivar={async (id) => {
+                              await activarServicio(id);
+                            }}
+                            onDesactivar={async (id) => {
+                              await desactivarServicio(id);
+                            }}
+                          />
+                        )}
 
-                    {activeTab === 'citas' && hasPermission('citas') && (
-                      <Citas
-                        citas={citas}
-                        searchTerm={searchTerm}
-                        setSearchTerm={setSearchTerm}
-                        showFilters={showFilters}
-                        setShowFilters={setShowFilters}
-                        filterEstado={filterEstado}
-                        setFilterEstado={setFilterEstado}
-                        filterTerapeuta={filterTerapeuta}
-                        setFilterTerapeuta={setFilterTerapeuta}
-                        filterFechaInicio={filterFechaInicio}
-                        setFilterFechaInicio={setFilterFechaInicio}
-                        filterFechaFin={filterFechaFin}
-                        setFilterFechaFin={setFilterFechaFin}
-                        vistaCalendario={vistaCalendario}
-                        setVistaCalendario={setVistaCalendario}
-                        importandoWord={importandoWord}
-                        filtrarCitas={filtrarCitas}
-                        contarFiltrosActivos={contarFiltrosActivos}
-                        limpiarFiltros={limpiarFiltros}
-                        openModal={openModal}
-                        eliminarCita={eliminarCita}
-                        importarDesdeWord={importarDesdeWord}
-                        handleCalendarioSelectCita={handleCalendarioSelectCita}
-                        handleCalendarioSelectSlot={handleCalendarioSelectSlot}
-                        handleCalendarioEventDrop={handleCalendarioEventDrop} />
-                    )}
+                        {/* SECCIÓN DE HORAS (código igual que antes, omitido por brevedad) */}
+                        {activeTab === 'horas' && hasPermission('horas') && (
+                          <Horas
+                            horasDesdeCitas={horasDesdeCitas} />
+                        )}
 
-                    {/* Sección de Vinculación de Usuarios */}
-                    <div className="bg-white rounded-lg shadow mb-6">
-                      <button
-                        onClick={() => setMostrarVinculacion(!mostrarVinculacion)}
-                        className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Link2 size={20} className="text-blue-600" />
-                          <div>
-                            <h3 className="font-semibold text-gray-800">Vincular Usuarios con Terapeutas</h3>
-                            <p className="text-sm text-gray-500">
-                              {usuarios.filter(u => u.rol === 'terapeuta' && !u.terapeutaId).length} usuarios sin vincular
-                            </p>
-                          </div>
-                        </div>
-                        <ChevronRight 
-                          size={20} 
-                          className={`text-gray-400 transition-transform ${mostrarVinculacion ? 'rotate-90' : ''}`} 
-                        />
-                      </button>
-                      
-                      {mostrarVinculacion && (
-                        <div className="px-6 pb-6 border-t">
-                          <p className="text-sm text-gray-600 my-4">
-                            Vincula cada cuenta de usuario con su perfil de terapeuta para que puedan acceder al portal.
-                          </p>
+                        {/* ============================================
+                            PESTAÑA: REPORTES
+                          ============================================ */}
+                        {activeTab === 'reportes' && (
+                          <Reportes
+                            citas={citas}
+                            clientes={clientes}
+                            terapeutas={terapeutas}
+                            meses={meses}
+                            guardarRecibosEnFirebase={guardarRecibosEnFirebase} // ← AGREGAR
+                            eliminarRecibosPorMes={eliminarRecibosPorMes} // ← AGREGAR ESTA LÍNEA
+                            guardandoRecibos={guardandoRecibos} // ← AGREGAR
+                            reporteGenerado={reporteGenerado} // ← AGREGAR
+                          />
+                        )}
+
+                        {activeTab === 'bloques' && hasPermission('bloques') && (
+                          <BloquesCitas
+                            terapeutas={terapeutas}
+                            clientes={clientes}
+                            diasSemanaOptions={diasSemanaOptions}
+                            nuevoHorario={nuevoHorario}
+                            setNuevoHorario={setNuevoHorario}
+                            horarios={horarios}
+                            fechaInicio={fechaInicio}
+                            setFechaInicio={setFechaInicio}
+                            fechaFin={fechaFin}
+                            setFechaFin={setFechaFin}
+                            citasGeneradas={citasGeneradas}
+                            mostrarResultado={mostrarResultado}
+                            toggleDia={toggleDia}
+                            agregarHorario={agregarHorario}
+                            eliminarHorario={eliminarHorario}
+                            generarCitas={generarCitas}
+                            guardarCitas={guardarCitas} />
+                        )}
+
+                        {activeTab === 'citas' && hasPermission('citas') && (
+                          <Citas
+                            citas={citas}
+                            searchTerm={searchTerm}
+                            setSearchTerm={setSearchTerm}
+                            showFilters={showFilters}
+                            setShowFilters={setShowFilters}
+                            filterEstado={filterEstado}
+                            setFilterEstado={setFilterEstado}
+                            filterTerapeuta={filterTerapeuta}
+                            setFilterTerapeuta={setFilterTerapeuta}
+                            filterFechaInicio={filterFechaInicio}
+                            setFilterFechaInicio={setFilterFechaInicio}
+                            filterFechaFin={filterFechaFin}
+                            setFilterFechaFin={setFilterFechaFin}
+                            vistaCalendario={vistaCalendario}
+                            setVistaCalendario={setVistaCalendario}
+                            importandoWord={importandoWord}
+                            filtrarCitas={filtrarCitas}
+                            contarFiltrosActivos={contarFiltrosActivos}
+                            limpiarFiltros={limpiarFiltros}
+                            openModal={openModal}
+                            eliminarCita={eliminarCita}
+                            importarDesdeWord={importarDesdeWord}
+                            handleCalendarioSelectCita={handleCalendarioSelectCita}
+                            handleCalendarioSelectSlot={handleCalendarioSelectSlot}
+                            handleCalendarioEventDrop={handleCalendarioEventDrop} />
+                        )}
+
+                        {/* Sección de Vinculación de Usuarios */}
+                        <div className="bg-white rounded-lg shadow mb-6">
+                          <button
+                            onClick={() => setMostrarVinculacion(!mostrarVinculacion)}
+                            className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Link2 size={20} className="text-blue-600" />
+                              <div>
+                                <h3 className="font-semibold text-gray-800">Vincular Usuarios con Terapeutas</h3>
+                                <p className="text-sm text-gray-500">
+                                  {usuarios.filter(u => u.rol === 'terapeuta' && !u.terapeutaId).length} usuarios sin vincular
+                                </p>
+                              </div>
+                            </div>
+                            <ChevronRight 
+                              size={20} 
+                              className={`text-gray-400 transition-transform ${mostrarVinculacion ? 'rotate-90' : ''}`} 
+                            />
+                          </button>
                           
-                          <div className="space-y-3">
-                            {usuarios
-                              .filter(u => u.rol === 'terapeuta')
-                              .map(usuario => {
-                                const terapeutaActual = terapeutas.find(t => t.id === usuario.terapeutaId);
-                                
-                                return (
-                                  <div 
-                                    key={usuario.id} 
-                                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                                  >
-                                    <div className="flex-1">
-                                      <p className="font-medium text-gray-800">{usuario.nombre}</p>
-                                      <p className="text-sm text-gray-500">{usuario.email}</p>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-3">
-                                      <select
-                                        value={usuario.terapeutaId || ''}
-                                        onChange={async (e) => {
-                                          const result = await vincularUsuario(usuario.id, e.target.value || null);
-                                          if (result.success) {
-                                            alert(e.target.value 
-                                              ? '✅ Usuario vinculado correctamente' 
-                                              : '✅ Usuario desvinculado'
-                                            );
-                                          } else {
-                                            alert('❌ Error al vincular usuario');
-                                          }
-                                        }}
-                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 min-w-[200px]"
-                                      >
-                                        <option value="">-- Sin vincular --</option>
-                                        {terapeutas.map(t => (
-                                          <option key={t.id} value={t.id}>
-                                            {t.nombre}
-                                          </option>
-                                        ))}
-                                      </select>
-                                      
-                                      {terapeutaActual && (
-                                        <span className="flex items-center gap-1 text-green-600 text-sm">
-                                          <CheckCircle size={16} />
-                                          Vinculado
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            
-                            {usuarios.filter(u => u.rol === 'terapeuta').length === 0 && (
-                              <p className="text-center text-gray-500 py-4">
-                                No hay usuarios con rol de terapeuta registrados.
+                          {mostrarVinculacion && (
+                            <div className="px-6 pb-6 border-t">
+                              <p className="text-sm text-gray-600 my-4">
+                                Vincula cada cuenta de usuario con su perfil de terapeuta para que puedan acceder al portal.
                               </p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* RESTO DE SECCIONES (omitidas por brevedad - igual que antes) */}
-                    {activeTab === 'terapeutas' && hasPermission('terapeutas') && (
-                      <Terapeutas
-                        terapeutas={terapeutas}
-                        ordenTerapeutas={ordenTerapeutas}
-                        ordenarTerapeutas={ordenarTerapeutas}
-                        openModal={openModal}
-                        eliminarTerapeuta={eliminarTerapeuta} />
-                    )}
-
-                    {activeTab === 'clientes' && hasPermission('clientes') && (
-                      <Clientes
-                        clientes={clientes}
-                        ordenClientes={ordenClientes}
-                        ordenarClientes={ordenarClientes}
-                        openModal={openModal}
-                        eliminarCliente={eliminarCliente}
-                        importarPreciosAutomaticamente={importarPreciosAutomaticamente} />
-                    )}
-
-                    {activeTab === 'pagos' && hasPermission('pagos') && (
-                      <EstadoCuentaClientes
-                        clientes={clientes}
-                        recibos={recibos}
-                        pagos={pagos}
-                        onRegistrarPago={(cliente) => {
-                          openModal('pago');
-                          setPagoForm({
-                            ...pagoForm,
-                            cliente: cliente.nombre
-                          });
-                        } }
-                        onEliminarRecibo={async (reciboId) => {
-                          try {
-                            // Importar función de eliminación
-                            const { eliminarRecibo } = await import('./api/recibos');
-
-                            // Eliminar de Firebase
-                            await eliminarRecibo(reciboId);
-
-                            // Recargar datos
-                            // // Asumiendo que tienes una función para cargar recibos
-                            // // Si no la tienes, avísame y la creamos
-                            // if (typeof cargarRecibos === 'function') {
-                            //   await cargarRecibos();
-                            // }
-                            // Recargar página para actualizar datos
-                            window.location.reload();
-
-                            return { success: true };
-                          } catch (error) {
-                            console.error('Error al eliminar recibo:', error);
-                            throw error;
-                          }
-                        } } />
-                    )}
-
-                    {/* Pestaña de Configuración */}
-                    {activeTab === 'configuracion' && currentUser?.rol === 'admin' && (
-                      <div className="space-y-6">
-                        <h2 className="text-2xl font-bold text-gray-800">Configuración de Empresa</h2>
-                        <ConfiguracionEmpresa onConfiguracionActualizada={cargarConfiguracion} />
-                      </div>
-                    )}
-
-                    {/* NUEVO: Tu componente de Recibos Gemini */}
-                    {activeTab === 'recibos-gemini' && (
-                      <RecibosGemini
-                        citas={citas}
-                        clientes={clientes}
-                        terapeutas={terapeutas}
-                        servicios={servicios}
-                        recibos={recibos}  // ← AGREGAR
-                        meses={meses}
-                        onAgregarCita={async (datosCita) => {
-                          try {
-                            await guardarCita(datosCita);
-                            await cargarCitas();
-                          } catch (error) {
-                            console.error('Error agregando cita:', error);
-                            throw error;
-                          }
-                        }}
-                        onEditarCita={async (citaId, datosCita) => {
-                          try {
-                            await actualizarCitaDirecta(citaId, datosCita);
-                            await cargarCitas();
-                          } catch (error) {
-                            console.error('Error editando cita:', error);
-                            throw error;
-                          }
-                        }}
-                        onEliminarCita={async (citaId) => {
-                          try {
-                            await eliminarCita(citaId);
-                            await cargarCitas();
-                          } catch (error) {
-                            console.error('Error eliminando cita:', error);
-                            throw error;
-                          }
-                        }}
-                        onGenerarRecibo={async (datosRecibo) => {  // ← AGREGAR
-                          try {
-                            await crearRecibo(datosRecibo);
-                            await cargarRecibos();  // Recargar recibos
-                            console.log('✅ Recibo generado:', datosRecibo.reciboId);
-                          } catch (error) {
-                            console.error('Error generando recibo:', error);
-                            throw error;
-                          }
-                        }}
-                      />
-                    )}
-
-                    {hasPermission('configuracion') && (
-                      <button 
-                        onClick={() => setActiveTab('configuracion')} 
-                        className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
-                          activeTab === 'configuracion' 
-                            ? 'bg-blue-600 text-white shadow-md' 
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                        title={sidebarCollapsed ? 'Configuración' : ''}
-                      >
-                        <Settings size={20} />
-                        {!sidebarCollapsed && <span>Configuración</span>}
-                      </button>
-                    )}
-
-                    {/* NUEVO: Tu componente de Gestion de Usuarios */}
-                    {activeTab === 'usuarios' && hasPermission('usuarios') && (
-                      <GestionUsuarios
-                        clientes={clientes}
-                        usuarios={usuariosPortal}
-                        onCrearUsuario={async (datos) => {
-                          const resultado = await crearUsuarioPortalCloud(datos);
-                          if (resultado.success) {
-                            await cargarUsuariosPortal();
-                          }
-                          return resultado;
-                        }}
-                        onActivarDesactivar={async (userId, activo) => {
-                          const resultado = await activarDesactivarUsuarioCloud(userId, activo);
-                          if (resultado.success) {
-                            await cargarUsuariosPortal();
-                          }
-                          return resultado;
-                        }}
-                        onResetPassword={enviarResetPasswordCloud}
-                      />
-                    )}
-
-                    {activeTab === 'comprobantes' && hasPermission('comprobantes') && (
-                      <GestionComprobantes
-                        comprobantes={comprobantes}
-                        clientes={clientes}
-                        recibos={recibos}
-                        onAprobar={async (comprobante) => {
-                          const resultado = await aprobarComprobante(comprobante, currentUser.uid);
-                          if (resultado.success) {
-                            await cargarComprobantes();
-                          }
-                          return resultado;
-                        }}
-                        onRechazar={async (comprobante, motivo) => {
-                          const resultado = await rechazarComprobante(comprobante, motivo, currentUser.uid);
-                          if (resultado.success) {
-                            await cargarComprobantes();
-                          }
-                          return resultado;
-                        }}
-                        onRecargar={cargarComprobantes}
-                      />
-                    )}
-
-                  </main>
-
-                  {/* MODALES (igual que antes - código omitido) */}
-                  {modals.cita && (
-                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-                      <div className="bg-white rounded-lg p-6 w-96 max-h-screen overflow-y-auto">
-                        <h3 className="text-lg font-bold mb-4">{editingId ? 'Editar Cita' : 'Nueva Cita'}</h3>
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Terapeuta</label>
-                            <select
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                              value={citaForm.terapeuta}
-                              onChange={(e) => setCitaForm({ ...citaForm, terapeuta: e.target.value })}
-                            >
-                              <option value="">Seleccionar terapeuta</option>
-                              {terapeutas.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
-                            <select
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                              value={citaForm.cliente}
-                              onChange={(e) => setCitaForm({ ...citaForm, cliente: e.target.value })}
-                            >
-                              <option value="">Seleccionar cliente</option>
-                              {clientes.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Fecha</label>
-                            <input
-                              type="date"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                              value={citaForm.fecha}
-                              onChange={(e) => setCitaForm({ ...citaForm, fecha: e.target.value })} />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Hora inicio</label>
-                              <input
-                                type="time"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={citaForm.horaInicio}
-                                onChange={(e) => setCitaForm({ ...citaForm, horaInicio: e.target.value })} />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Hora fin</label>
-                              <input
-                                type="time"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={citaForm.horaFin}
-                                onChange={(e) => setCitaForm({ ...citaForm, horaFin: e.target.value })} />
-                            </div>
-                          </div>
-
-                          {/* Nuevo campo: Tipo de Terapia */}
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Terapia</label>
-                            <select
-                              value={citaForm.tipoTerapia || 'Sesión de ABA estándar'}
-                              onChange={(e) => setCitaForm({ ...citaForm, tipoTerapia: e.target.value })}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                              required
-                            >
-                              {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
-                              <option value="Servicios de Sombra">Servicios de Sombra</option>
-                              <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
-                              <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
-                              <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
-                              <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
-                              <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
-                              <option value="Sesión en casa">Sesión en casa</option>
-                              <option value="Otro">Otro</option> */}
-                              {servicios
-                                .filter(s => s.activo !== false)
-                                .sort((a, b) => (a.orden || 99) - (b.orden || 99))
-                                .map(servicio => (
-                                  <option key={servicio.id} value={servicio.nombre}>
-                                    {servicio.nombre}
-                                  </option>
-                                ))
-                              }
-                            </select>
-                          </div>
-
-                          {/* Campos de Precio */}
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Precio por hora ($)
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={citaForm.costoPorHora}
-                                onChange={(e) => setCitaForm({
-                                  ...citaForm,
-                                  costoPorHora: parseFloat(e.target.value) || 0
-                                })} />
-                              {/* Indicador de precio personalizado */}
-                              {citaForm.cliente && citaForm.tipoTerapia && (() => {
-                                const precioInfo = obtenerPrecioCliente(citaForm.cliente, citaForm.tipoTerapia);
-                                return (
-                                  <p className={`text-xs mt-1 ${precioInfo.esPersonalizado ? 'text-green-600' : 'text-gray-500'}`}>
-                                    {precioInfo.esPersonalizado ? (
-                                      <>✅ Precio personalizado del cliente</>
-                                    ) : (
-                                      <>💡 Usando precio base</>
-                                    )}
-                                  </p>
-                                );
-                              })()}
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Precio total ($)
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={citaForm.costoTotal}
-                                onChange={(e) => setCitaForm({
-                                  ...citaForm,
-                                  costoTotal: parseFloat(e.target.value) || 0
-                                })} />
-                            </div>
-                          </div>
-
-                          {/* Separador visual */}
-                          <div className="border-t pt-4 mt-2"></div>
-
-                          {/* Campos de Costo Terapeuta */}
-                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                            <h4 className="text-sm font-semibold text-orange-900 mb-3">
-                              💼 Costo Terapeuta (Lo que pagas)
-                            </h4>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Costo por hora ($)
-                                </label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                  value={citaForm.costoTerapeuta}
-                                  onChange={(e) => setCitaForm({
-                                    ...citaForm,
-                                    costoTerapeuta: parseFloat(e.target.value) || 0
+                              
+                              <div className="space-y-3">
+                                {usuarios
+                                  .filter(u => u.rol === 'terapeuta')
+                                  .map(usuario => {
+                                    const terapeutaActual = terapeutas.find(t => t.id === usuario.terapeutaId);
+                                    
+                                    return (
+                                      <div 
+                                        key={usuario.id} 
+                                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                                      >
+                                        <div className="flex-1">
+                                          <p className="font-medium text-gray-800">{usuario.nombre}</p>
+                                          <p className="text-sm text-gray-500">{usuario.email}</p>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-3">
+                                          <select
+                                            value={usuario.terapeutaId || ''}
+                                            onChange={async (e) => {
+                                              const result = await vincularUsuario(usuario.id, e.target.value || null);
+                                              if (result.success) {
+                                                alert(e.target.value 
+                                                  ? '✅ Usuario vinculado correctamente' 
+                                                  : '✅ Usuario desvinculado'
+                                                );
+                                              } else {
+                                                alert('❌ Error al vincular usuario');
+                                              }
+                                            }}
+                                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+                                          >
+                                            <option value="">-- Sin vincular --</option>
+                                            {terapeutas.map(t => (
+                                              <option key={t.id} value={t.id}>
+                                                {t.nombre}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          
+                                          {terapeutaActual && (
+                                            <span className="flex items-center gap-1 text-green-600 text-sm">
+                                              <CheckCircle size={16} />
+                                              Vinculado
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
                                   })}
-                                  placeholder="200" />
-                                {/* Indicador de costo de terapeuta */}
-                                {citaForm.terapeuta && citaForm.tipoTerapia && (() => {
-                                  const costoInfo = obtenerCostoTerapeuta(citaForm.terapeuta, citaForm.tipoTerapia);
-                                  return (
-                                    <p className={`text-xs mt-1 ${costoInfo.esPersonalizado ? 'text-green-600' : 'text-gray-500'}`}>
-                                      {costoInfo.esPersonalizado ? (
-                                        <>✅ Costo configurado para esta terapeuta</>
-                                      ) : (
-                                        <>💡 Sin costo configurado - ingresar manualmente</>
-                                      )}
-                                    </p>
-                                  );
-                                })()}
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Costo total ($)
-                                </label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100"
-                                  value={citaForm.costoTerapeutaTotal}
-                                  readOnly
-                                  placeholder="Se calcula automáticamente" />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Cálculo de Margen de Ganancia */}
-                          {citaForm.costoTotal > 0 && citaForm.costoTerapeutaTotal > 0 && (
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                              <h4 className="text-sm font-semibold text-green-900 mb-3">
-                                💰 Margen de Ganancia
-                              </h4>
-                              <div className="grid grid-cols-3 gap-4 text-center">
-                                <div>
-                                  <p className="text-xs text-gray-600 mb-1">Ganancia por hora</p>
-                                  <p className="text-lg font-bold text-green-700">
-                                    ${(citaForm.costoPorHora - citaForm.costoTerapeuta).toFixed(2)}
+                                
+                                {usuarios.filter(u => u.rol === 'terapeuta').length === 0 && (
+                                  <p className="text-center text-gray-500 py-4">
+                                    No hay usuarios con rol de terapeuta registrados.
                                   </p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-600 mb-1">Ganancia total</p>
-                                  <p className="text-lg font-bold text-green-700">
-                                    ${(citaForm.costoTotal - citaForm.costoTerapeutaTotal).toFixed(2)}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-600 mb-1">Margen %</p>
-                                  <p className="text-lg font-bold text-green-700">
-                                    {citaForm.costoTotal > 0 ? (((citaForm.costoTotal - citaForm.costoTerapeutaTotal) / citaForm.costoTotal) * 100).toFixed(1) : 0}%
-                                  </p>
-                                </div>
+                                )}
                               </div>
                             </div>
                           )}
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
-                            <select
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                              value={citaForm.estado}
-                              onChange={(e) => setCitaForm({ ...citaForm, estado: e.target.value })}
-                            >
-                              <option value="pendiente">Pendiente</option>
-                              <option value="confirmada">Confirmada</option>
-                              <option value="cancelada">Cancelada</option>
-                              <option value="completada">Completada</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="flex justify-end space-x-2 mt-6">
-                          <button onClick={() => closeModal('cita')} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Cancelar</button>
-                          <button onClick={() => save('cita')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">{editingId ? 'Actualizar' : 'Crear'}</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <ModalPago
-                    isOpen={modals.pago}
-                    onClose={() => closeModal('pago')}
-                    onSave={() => save('pago')}
-                    pagoForm={pagoForm}
-                    setPagoForm={setPagoForm}
-                    clientes={clientes}
-                    recibos={recibos}
-                    editingId={editingId} />
-
-                  {/* MODAL DE TERAPEUTA */}
-                  {modals.terapeuta && (
-                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-                      <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-
-                        {/* Pestañas */}
-                        <div className="flex border-b mb-6">
-                          <button
-                            onClick={() => setPestanaTerapeuta('datos')}
-                            className={`px-6 py-3 font-medium transition-colors ${pestanaTerapeuta === 'datos'
-                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                : 'text-gray-500 hover:text-gray-700'}`}
-                          >
-                            Datos Básicos
-                          </button>
-                          <button
-                            onClick={() => setPestanaTerapeuta('costos')}
-                            className={`px-6 py-3 font-medium transition-colors ${pestanaTerapeuta === 'costos'
-                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                : 'text-gray-500 hover:text-gray-700'}`}
-                          >
-                            Costos por Servicio
-                          </button>
                         </div>
 
-                        <h3 className="text-lg font-bold mb-4">
-                          {editingId ? 'Editar Terapeuta' : 'Nueva Terapeuta'}
-                        </h3>
+                        {/* RESTO DE SECCIONES (omitidas por brevedad - igual que antes) */}
+                        {activeTab === 'terapeutas' && hasPermission('terapeutas') && (
+                          <Terapeutas
+                            terapeutas={terapeutas}
+                            ordenTerapeutas={ordenTerapeutas}
+                            ordenarTerapeutas={ordenarTerapeutas}
+                            openModal={openModal}
+                            eliminarTerapeuta={eliminarTerapeuta} />
+                        )}
 
-                        {/* Pestaña de Datos Básicos */}
-                        {pestanaTerapeuta === 'datos' && (
-                          <div className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Nombre completo
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Nombre completo"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={terapeutaForm.nombre}
-                                onChange={(e) => setTerapeutaForm({ ...terapeutaForm, nombre: e.target.value })} />
-                            </div>
+                        {activeTab === 'clientes' && hasPermission('clientes') && (
+                          <Clientes
+                            clientes={clientes}
+                            ordenClientes={ordenClientes}
+                            ordenarClientes={ordenarClientes}
+                            openModal={openModal}
+                            eliminarCliente={eliminarCliente}
+                            importarPreciosAutomaticamente={importarPreciosAutomaticamente} />
+                        )}
 
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Especialidad
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Ej: Terapia ABA"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={terapeutaForm.especialidad}
-                                onChange={(e) => setTerapeutaForm({ ...terapeutaForm, especialidad: e.target.value })} />
-                            </div>
+                        {activeTab === 'pagos' && hasPermission('pagos') && (
+                          <EstadoCuentaClientes
+                            clientes={clientes}
+                            recibos={recibos}
+                            pagos={pagos}
+                            onRegistrarPago={(cliente) => {
+                              openModal('pago');
+                              setPagoForm({
+                                ...pagoForm,
+                                cliente: cliente.nombre
+                              });
+                            } }
+                            onEliminarRecibo={async (reciboId) => {
+                              try {
+                                // Importar función de eliminación
+                                const { eliminarRecibo } = await import('./api/recibos');
 
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Teléfono
-                              </label>
-                              <input
-                                type="tel"
-                                placeholder="5512345678"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={terapeutaForm.telefono}
-                                onChange={(e) => setTerapeutaForm({ ...terapeutaForm, telefono: e.target.value })} />
-                            </div>
+                                // Eliminar de Firebase
+                                await eliminarRecibo(reciboId);
 
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Email
-                              </label>
-                              <input
-                                type="email"
-                                placeholder="terapeuta@ejemplo.com"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={terapeutaForm.email}
-                                onChange={(e) => setTerapeutaForm({ ...terapeutaForm, email: e.target.value })} />
-                            </div>
-                            {/* Tipo de Pago */}
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Tipo de Pago
-                              </label>
-                              <select
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                value={terapeutaForm.tipoPago}
-                                onChange={(e) => setTerapeutaForm({
-                                  ...terapeutaForm, 
-                                  tipoPago: e.target.value,
-                                  salarioMensual: e.target.value === 'variable' ? '' : terapeutaForm.salarioMensual
-                                })}
-                              >
-                                <option value="variable">Variable (pago por hora)</option>
-                                <option value="fijo">Fijo (nómina mensual)</option>
-                              </select>
-                            </div>
+                                // Recargar datos
+                                // // Asumiendo que tienes una función para cargar recibos
+                                // // Si no la tienes, avísame y la creamos
+                                // if (typeof cargarRecibos === 'function') {
+                                //   await cargarRecibos();
+                                // }
+                                // Recargar página para actualizar datos
+                                window.location.reload();
 
-                            {/* Salario Mensual - Solo visible si es pago fijo */}
-                            {terapeutaForm.tipoPago === 'fijo' && (
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Salario Mensual
-                                </label>
-                                <div className="relative">
-                                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
-                                  <input 
-                                    type="number"
-                                    placeholder="15000"
-                                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
-                                    value={terapeutaForm.salarioMensual} 
-                                    onChange={(e) => setTerapeutaForm({...terapeutaForm, salarioMensual: e.target.value})} 
-                                  />
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Este monto se usará para calcular el margen de ganancia
-                                </p>
-                              </div>
-                            )}
+                                return { success: true };
+                              } catch (error) {
+                                console.error('Error al eliminar recibo:', error);
+                                throw error;
+                              }
+                            } } />
+                        )}
+
+                        {/* Pestaña de Configuración */}
+                        {activeTab === 'configuracion' && currentUser?.rol === 'admin' && (
+                          <div className="space-y-6">
+                            <h2 className="text-2xl font-bold text-gray-800">Configuración de Empresa</h2>
+                            <ConfiguracionEmpresa />
                           </div>
                         )}
 
-                        {/* Pestaña de Costos por Servicio */}
-                        {pestanaTerapeuta === 'costos' && (
-                          <div className="space-y-4">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                              Costos por Servicio para {terapeutaForm.nombre || 'esta terapeuta'}
-                            </h3>
+                        {/* NUEVO: Tu componente de Recibos Gemini */}
+                        {activeTab === 'recibos-gemini' && (
+                          <RecibosGemini
+                            citas={citas}
+                            clientes={clientes}
+                            terapeutas={terapeutas}
+                            servicios={servicios}
+                            recibos={recibos}  // ← AGREGAR
+                            meses={meses}
+                            onAgregarCita={async (datosCita) => {
+                              try {
+                                await guardarCita(datosCita);
+                                await cargarCitas();
+                              } catch (error) {
+                                console.error('Error agregando cita:', error);
+                                throw error;
+                              }
+                            }}
+                            onEditarCita={async (citaId, datosCita) => {
+                              try {
+                                await actualizarCitaDirecta(citaId, datosCita);
+                                await cargarCitas();
+                              } catch (error) {
+                                console.error('Error editando cita:', error);
+                                throw error;
+                              }
+                            }}
+                            onEliminarCita={async (citaId) => {
+                              try {
+                                await eliminarCita(citaId);
+                                await cargarCitas();
+                              } catch (error) {
+                                console.error('Error eliminando cita:', error);
+                                throw error;
+                              }
+                            }}
+                            onGenerarRecibo={async (datosRecibo) => {  // ← AGREGAR
+                              try {
+                                await crearRecibo(datosRecibo);
+                                await cargarRecibos();  // Recargar recibos
+                                console.log('✅ Recibo generado:', datosRecibo.reciboId);
+                              } catch (error) {
+                                console.error('Error generando recibo:', error);
+                                throw error;
+                              }
+                            }}
+                          />
+                        )}
 
-                            {/* Lista de costos actuales */}
-                            {Object.keys(terapeutaForm.costosPorServicio || {}).length > 0 ? (
-                              <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                                <table className="w-full">
-                                  <thead>
-                                    <tr className="border-b">
-                                      <th className="text-left py-2 text-sm font-semibold text-gray-700">Tipo de Servicio</th>
-                                      <th className="text-right py-2 text-sm font-semibold text-gray-700">Costo/Hora</th>
-                                      <th className="text-center py-2 text-sm font-semibold text-gray-700">Acción</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {Object.entries(terapeutaForm.costosPorServicio || {}).map(([tipo, costo]) => (
-                                      <tr key={tipo} className="border-b last:border-0">
-                                        <td className="py-3 text-sm text-gray-900">{tipo}</td>
-                                        <td className="py-3 text-sm text-right text-gray-900 font-medium">${costo}</td>
-                                        <td className="py-3 text-center">
-                                          <button
-                                            onClick={() => eliminarCostoTerapeuta(tipo)}
-                                            className="text-red-600 hover:text-red-800 text-sm"
-                                          >
-                                            <Trash2 size={16} />
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : (
-                              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                                <p className="text-sm text-yellow-800">
-                                  Esta terapeuta no tiene costos configurados. Los costos deberán ingresarse manualmente en cada cita.
-                                </p>
-                              </div>
-                            )}
+                        {hasPermission('configuracion') && (
+                          <button 
+                            onClick={() => setActiveTab('configuracion')} 
+                            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                              activeTab === 'configuracion' 
+                                ? 'bg-blue-600 text-white shadow-md' 
+                                : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                            title={sidebarCollapsed ? 'Configuración' : ''}
+                          >
+                            <Settings size={20} />
+                            {!sidebarCollapsed && <span>Configuración</span>}
+                          </button>
+                        )}
 
-                            {/* Formulario para agregar nuevo costo */}
-                            <div className="border-t pt-4">
-                              <h4 className="text-md font-medium text-gray-700 mb-3">Agregar Costo por Servicio</h4>
+                        {/* NUEVO: Tu componente de Gestion de Usuarios */}
+                        {activeTab === 'usuarios' && hasPermission('usuarios') && (
+                          <GestionUsuarios
+                            clientes={clientes}
+                            usuarios={usuariosPortal}
+                            onCrearUsuario={async (datos) => {
+                              const resultado = await crearUsuarioPortalCloud(datos);
+                              if (resultado.success) {
+                                await cargarUsuariosPortal();
+                              }
+                              return resultado;
+                            }}
+                            onActivarDesactivar={async (userId, activo) => {
+                              const resultado = await activarDesactivarUsuarioCloud(userId, activo);
+                              if (resultado.success) {
+                                await cargarUsuariosPortal();
+                              }
+                              return resultado;
+                            }}
+                            onResetPassword={enviarResetPasswordCloud}
+                          />
+                        )}
+
+                        {activeTab === 'comprobantes' && hasPermission('comprobantes') && (
+                          <GestionComprobantes
+                            comprobantes={comprobantes}
+                            clientes={clientes}
+                            recibos={recibos}
+                            onAprobar={async (comprobante) => {
+                              const resultado = await aprobarComprobante(comprobante, currentUser.uid);
+                              if (resultado.success) {
+                                await cargarComprobantes();
+                              }
+                              return resultado;
+                            }}
+                            onRechazar={async (comprobante, motivo) => {
+                              const resultado = await rechazarComprobante(comprobante, motivo, currentUser.uid);
+                              if (resultado.success) {
+                                await cargarComprobantes();
+                              }
+                              return resultado;
+                            }}
+                            onRecargar={cargarComprobantes}
+                          />
+                        )}
+
+                      </main>
+
+                      {/* MODALES (igual que antes - código omitido) */}
+                      {modals.cita && (
+                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+                          <div className="bg-white rounded-lg p-6 w-96 max-h-screen overflow-y-auto">
+                            <h3 className="text-lg font-bold mb-4">{editingId ? 'Editar Cita' : 'Nueva Cita'}</h3>
+                            <div className="space-y-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Terapeuta</label>
+                                <select
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                  value={citaForm.terapeuta}
+                                  onChange={(e) => setCitaForm({ ...citaForm, terapeuta: e.target.value })}
+                                >
+                                  <option value="">Seleccionar terapeuta</option>
+                                  {terapeutas.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
+                                <select
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                  value={citaForm.cliente}
+                                  onChange={(e) => setCitaForm({ ...citaForm, cliente: e.target.value })}
+                                >
+                                  <option value="">Seleccionar cliente</option>
+                                  {clientes.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Fecha</label>
+                                <input
+                                  type="date"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                  value={citaForm.fecha}
+                                  onChange={(e) => setCitaForm({ ...citaForm, fecha: e.target.value })} />
+                              </div>
+
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Servicio</label>
-                                  <select
-                                    value={nuevoCostoTerapeuta.tipoTerapia}
-                                    onChange={(e) => setNuevoCostoTerapeuta({ ...nuevoCostoTerapeuta, tipoTerapia: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                  >
-                                    {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
-                                    <option value="Servicios de Sombra">Servicios de Sombra</option>
-                                    <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
-                                    <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
-                                    <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
-                                    <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
-                                    <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
-                                    <option value="Sesión en casa">Sesión en casa</option>
-                                    <option value="Otro">Otro</option> */}
-                                    {servicios
-                                      .filter(s => s.activo !== false)
-                                      .sort((a, b) => (a.orden || 99) - (b.orden || 99))
-                                      .map(servicio => (
-                                        <option key={servicio.id} value={servicio.nombre}>
-                                          {servicio.nombre}
-                                        </option>
-                                      ))
-                                    }
-                                  </select>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Hora inicio</label>
+                                  <input
+                                    type="time"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={citaForm.horaInicio}
+                                    onChange={(e) => setCitaForm({ ...citaForm, horaInicio: e.target.value })} />
                                 </div>
                                 <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">Costo por Hora ($)</label>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Hora fin</label>
                                   <input
-                                    type="number"
-                                    value={nuevoCostoTerapeuta.costo}
-                                    onChange={(e) => setNuevoCostoTerapeuta({ ...nuevoCostoTerapeuta, costo: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    placeholder="200" />
+                                    type="time"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={citaForm.horaFin}
+                                    onChange={(e) => setCitaForm({ ...citaForm, horaFin: e.target.value })} />
                                 </div>
                               </div>
+
+                              {/* Nuevo campo: Tipo de Terapia */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Terapia</label>
+                                <select
+                                  value={citaForm.tipoTerapia || 'Sesión de ABA estándar'}
+                                  onChange={(e) => setCitaForm({ ...citaForm, tipoTerapia: e.target.value })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                  required
+                                >
+                                  {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                                  <option value="Servicios de Sombra">Servicios de Sombra</option>
+                                  <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
+                                  <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
+                                  <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
+                                  <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
+                                  <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
+                                  <option value="Sesión en casa">Sesión en casa</option>
+                                  <option value="Otro">Otro</option> */}
+                                  {servicios
+                                    .filter(s => s.activo !== false)
+                                    .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                    .map(servicio => (
+                                      <option key={servicio.id} value={servicio.nombre}>
+                                        {servicio.nombre}
+                                      </option>
+                                    ))
+                                  }
+                                </select>
+                              </div>
+
+                              {/* Campos de Precio */}
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Precio por hora ($)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={citaForm.costoPorHora}
+                                    onChange={(e) => setCitaForm({
+                                      ...citaForm,
+                                      costoPorHora: parseFloat(e.target.value) || 0
+                                    })} />
+                                  {/* Indicador de precio personalizado */}
+                                  {citaForm.cliente && citaForm.tipoTerapia && (() => {
+                                    const precioInfo = obtenerPrecioCliente(citaForm.cliente, citaForm.tipoTerapia);
+                                    return (
+                                      <p className={`text-xs mt-1 ${precioInfo.esPersonalizado ? 'text-green-600' : 'text-gray-500'}`}>
+                                        {precioInfo.esPersonalizado ? (
+                                          <>✅ Precio personalizado del cliente</>
+                                        ) : (
+                                          <>💡 Usando precio base</>
+                                        )}
+                                      </p>
+                                    );
+                                  })()}
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Precio total ($)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={citaForm.costoTotal}
+                                    onChange={(e) => setCitaForm({
+                                      ...citaForm,
+                                      costoTotal: parseFloat(e.target.value) || 0
+                                    })} />
+                                </div>
+                              </div>
+
+                              {/* Separador visual */}
+                              <div className="border-t pt-4 mt-2"></div>
+
+                              {/* Campos de Costo Terapeuta */}
+                              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                                <h4 className="text-sm font-semibold text-orange-900 mb-3">
+                                  💼 Costo Terapeuta (Lo que pagas)
+                                </h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                      Costo por hora ($)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                      value={citaForm.costoTerapeuta}
+                                      onChange={(e) => setCitaForm({
+                                        ...citaForm,
+                                        costoTerapeuta: parseFloat(e.target.value) || 0
+                                      })}
+                                      placeholder="200" />
+                                    {/* Indicador de costo de terapeuta */}
+                                    {citaForm.terapeuta && citaForm.tipoTerapia && (() => {
+                                      const costoInfo = obtenerCostoTerapeuta(citaForm.terapeuta, citaForm.tipoTerapia);
+                                      return (
+                                        <p className={`text-xs mt-1 ${costoInfo.esPersonalizado ? 'text-green-600' : 'text-gray-500'}`}>
+                                          {costoInfo.esPersonalizado ? (
+                                            <>✅ Costo configurado para esta terapeuta</>
+                                          ) : (
+                                            <>💡 Sin costo configurado - ingresar manualmente</>
+                                          )}
+                                        </p>
+                                      );
+                                    })()}
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                      Costo total ($)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100"
+                                      value={citaForm.costoTerapeutaTotal}
+                                      readOnly
+                                      placeholder="Se calcula automáticamente" />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Cálculo de Margen de Ganancia */}
+                              {citaForm.costoTotal > 0 && citaForm.costoTerapeutaTotal > 0 && (
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                  <h4 className="text-sm font-semibold text-green-900 mb-3">
+                                    💰 Margen de Ganancia
+                                  </h4>
+                                  <div className="grid grid-cols-3 gap-4 text-center">
+                                    <div>
+                                      <p className="text-xs text-gray-600 mb-1">Ganancia por hora</p>
+                                      <p className="text-lg font-bold text-green-700">
+                                        ${(citaForm.costoPorHora - citaForm.costoTerapeuta).toFixed(2)}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs text-gray-600 mb-1">Ganancia total</p>
+                                      <p className="text-lg font-bold text-green-700">
+                                        ${(citaForm.costoTotal - citaForm.costoTerapeutaTotal).toFixed(2)}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs text-gray-600 mb-1">Margen %</p>
+                                      <p className="text-lg font-bold text-green-700">
+                                        {citaForm.costoTotal > 0 ? (((citaForm.costoTotal - citaForm.costoTerapeutaTotal) / citaForm.costoTotal) * 100).toFixed(1) : 0}%
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+                                <select
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                  value={citaForm.estado}
+                                  onChange={(e) => setCitaForm({ ...citaForm, estado: e.target.value })}
+                                >
+                                  <option value="pendiente">Pendiente</option>
+                                  <option value="confirmada">Confirmada</option>
+                                  <option value="cancelada">Cancelada</option>
+                                  <option value="completada">Completada</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex justify-end space-x-2 mt-6">
+                              <button onClick={() => closeModal('cita')} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Cancelar</button>
+                              <button onClick={() => save('cita')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">{editingId ? 'Actualizar' : 'Crear'}</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <ModalPago
+                        isOpen={modals.pago}
+                        onClose={() => closeModal('pago')}
+                        onSave={() => save('pago')}
+                        pagoForm={pagoForm}
+                        setPagoForm={setPagoForm}
+                        clientes={clientes}
+                        recibos={recibos}
+                        editingId={editingId} />
+
+                      {/* MODAL DE TERAPEUTA */}
+                      {modals.terapeuta && (
+                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+                          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+
+                            {/* Pestañas */}
+                            <div className="flex border-b mb-6">
                               <button
-                                onClick={agregarCostoTerapeuta}
-                                className="mt-3 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                                onClick={() => setPestanaTerapeuta('datos')}
+                                className={`px-6 py-3 font-medium transition-colors ${pestanaTerapeuta === 'datos'
+                                    ? 'border-b-2 border-blue-600 text-blue-600'
+                                    : 'text-gray-500 hover:text-gray-700'}`}
                               >
-                                <Plus size={16} />
-                                Agregar Costo
+                                Datos Básicos
+                              </button>
+                              <button
+                                onClick={() => setPestanaTerapeuta('costos')}
+                                className={`px-6 py-3 font-medium transition-colors ${pestanaTerapeuta === 'costos'
+                                    ? 'border-b-2 border-blue-600 text-blue-600'
+                                    : 'text-gray-500 hover:text-gray-700'}`}
+                              >
+                                Costos por Servicio
                               </button>
                             </div>
 
-                            {/* Sección de Costos por Cliente */}
-                            <div className="mt-6 pt-6 border-t">
-                              <h4 className="text-md font-medium text-gray-700 mb-3">💰 Costos Personalizados por Cliente</h4>
-                              <p className="text-sm text-gray-600 mb-4">
-                                Define cuánto le pagas a esta terapeuta por cada cliente específico. Estos costos tienen prioridad sobre los costos por servicio.
-                              </p>
+                            <h3 className="text-lg font-bold mb-4">
+                              {editingId ? 'Editar Terapeuta' : 'Nueva Terapeuta'}
+                            </h3>
 
-                              {/* Tabla de costos por cliente existentes */}
-                              {terapeutaForm.costosPorCliente && Object.keys(terapeutaForm.costosPorCliente).length > 0 ? (
-                                <div className="mb-4 border rounded-lg overflow-hidden">
-                                  <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
-                                      <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Costo por Hora</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                      {Object.entries(terapeutaForm.costosPorCliente).map(([clienteId, costo]) => {
-                                        const cliente = clientes.find(c => c.id === clienteId);
-                                        return (
-                                          <tr key={clienteId}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                              {cliente ? cliente.nombre : 'Cliente no encontrado'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                              ${costo}/hora
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            {/* Pestaña de Datos Básicos */}
+                            {pestanaTerapeuta === 'datos' && (
+                              <div className="space-y-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Nombre completo
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Nombre completo"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={terapeutaForm.nombre}
+                                    onChange={(e) => setTerapeutaForm({ ...terapeutaForm, nombre: e.target.value })} />
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Especialidad
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ej: Terapia ABA"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={terapeutaForm.especialidad}
+                                    onChange={(e) => setTerapeutaForm({ ...terapeutaForm, especialidad: e.target.value })} />
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Teléfono
+                                  </label>
+                                  <input
+                                    type="tel"
+                                    placeholder="5512345678"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={terapeutaForm.telefono}
+                                    onChange={(e) => setTerapeutaForm({ ...terapeutaForm, telefono: e.target.value })} />
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Email
+                                  </label>
+                                  <input
+                                    type="email"
+                                    placeholder="terapeuta@ejemplo.com"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={terapeutaForm.email}
+                                    onChange={(e) => setTerapeutaForm({ ...terapeutaForm, email: e.target.value })} />
+                                </div>
+                                {/* Tipo de Pago */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Tipo de Pago
+                                  </label>
+                                  <select
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    value={terapeutaForm.tipoPago}
+                                    onChange={(e) => setTerapeutaForm({
+                                      ...terapeutaForm, 
+                                      tipoPago: e.target.value,
+                                      salarioMensual: e.target.value === 'variable' ? '' : terapeutaForm.salarioMensual
+                                    })}
+                                  >
+                                    <option value="variable">Variable (pago por hora)</option>
+                                    <option value="fijo">Fijo (nómina mensual)</option>
+                                  </select>
+                                </div>
+
+                                {/* Salario Mensual - Solo visible si es pago fijo */}
+                                {terapeutaForm.tipoPago === 'fijo' && (
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                      Salario Mensual
+                                    </label>
+                                    <div className="relative">
+                                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                                      <input 
+                                        type="number"
+                                        placeholder="15000"
+                                        className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
+                                        value={terapeutaForm.salarioMensual} 
+                                        onChange={(e) => setTerapeutaForm({...terapeutaForm, salarioMensual: e.target.value})} 
+                                      />
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Este monto se usará para calcular el margen de ganancia
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Pestaña de Costos por Servicio */}
+                            {pestanaTerapeuta === 'costos' && (
+                              <div className="space-y-4">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                                  Costos por Servicio para {terapeutaForm.nombre || 'esta terapeuta'}
+                                </h3>
+
+                                {/* Lista de costos actuales */}
+                                {Object.keys(terapeutaForm.costosPorServicio || {}).length > 0 ? (
+                                  <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                                    <table className="w-full">
+                                      <thead>
+                                        <tr className="border-b">
+                                          <th className="text-left py-2 text-sm font-semibold text-gray-700">Tipo de Servicio</th>
+                                          <th className="text-right py-2 text-sm font-semibold text-gray-700">Costo/Hora</th>
+                                          <th className="text-center py-2 text-sm font-semibold text-gray-700">Acción</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {Object.entries(terapeutaForm.costosPorServicio || {}).map(([tipo, costo]) => (
+                                          <tr key={tipo} className="border-b last:border-0">
+                                            <td className="py-3 text-sm text-gray-900">{tipo}</td>
+                                            <td className="py-3 text-sm text-right text-gray-900 font-medium">${costo}</td>
+                                            <td className="py-3 text-center">
                                               <button
-                                                onClick={() => eliminarCostoPorCliente(clienteId)}
-                                                className="text-red-600 hover:text-red-800"
+                                                onClick={() => eliminarCostoTerapeuta(tipo)}
+                                                className="text-red-600 hover:text-red-800 text-sm"
                                               >
                                                 <Trash2 size={16} />
                                               </button>
                                             </td>
                                           </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                                    <p className="text-sm text-yellow-800">
+                                      Esta terapeuta no tiene costos configurados. Los costos deberán ingresarse manualmente en cada cita.
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Formulario para agregar nuevo costo */}
+                                <div className="border-t pt-4">
+                                  <h4 className="text-md font-medium text-gray-700 mb-3">Agregar Costo por Servicio</h4>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Servicio</label>
+                                      <select
+                                        value={nuevoCostoTerapeuta.tipoTerapia}
+                                        onChange={(e) => setNuevoCostoTerapeuta({ ...nuevoCostoTerapeuta, tipoTerapia: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                      >
+                                        {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                                        <option value="Servicios de Sombra">Servicios de Sombra</option>
+                                        <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
+                                        <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
+                                        <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
+                                        <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
+                                        <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
+                                        <option value="Sesión en casa">Sesión en casa</option>
+                                        <option value="Otro">Otro</option> */}
+                                        {servicios
+                                          .filter(s => s.activo !== false)
+                                          .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                          .map(servicio => (
+                                            <option key={servicio.id} value={servicio.nombre}>
+                                              {servicio.nombre}
+                                            </option>
+                                          ))
+                                        }
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-2">Costo por Hora ($)</label>
+                                      <input
+                                        type="number"
+                                        value={nuevoCostoTerapeuta.costo}
+                                        onChange={(e) => setNuevoCostoTerapeuta({ ...nuevoCostoTerapeuta, costo: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        placeholder="200" />
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={agregarCostoTerapeuta}
+                                    className="mt-3 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                                  >
+                                    <Plus size={16} />
+                                    Agregar Costo
+                                  </button>
                                 </div>
-                              ) : (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                                  <p className="text-sm text-blue-800">
-                                    💡 No hay costos personalizados por cliente. El sistema usará los costos por servicio.
+
+                                {/* Sección de Costos por Cliente */}
+                                <div className="mt-6 pt-6 border-t">
+                                  <h4 className="text-md font-medium text-gray-700 mb-3">💰 Costos Personalizados por Cliente</h4>
+                                  <p className="text-sm text-gray-600 mb-4">
+                                    Define cuánto le pagas a esta terapeuta por cada cliente específico. Estos costos tienen prioridad sobre los costos por servicio.
                                   </p>
-                                </div>
-                              )}
 
-                              {/* Formulario para agregar nuevo costo por cliente */}
-                              <div className="border-t pt-4">
-                                <h4 className="text-md font-medium text-gray-700 mb-3">Agregar Costo por Cliente</h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
-                                    <select
-                                      value={nuevoCostoPorCliente.clienteId}
-                                      onChange={(e) => setNuevoCostoPorCliente({ ...nuevoCostoPorCliente, clienteId: e.target.value })}
-                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                  {/* Tabla de costos por cliente existentes */}
+                                  {terapeutaForm.costosPorCliente && Object.keys(terapeutaForm.costosPorCliente).length > 0 ? (
+                                    <div className="mb-4 border rounded-lg overflow-hidden">
+                                      <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                          <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Costo por Hora</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                          {Object.entries(terapeutaForm.costosPorCliente).map(([clienteId, costo]) => {
+                                            const cliente = clientes.find(c => c.id === clienteId);
+                                            return (
+                                              <tr key={clienteId}>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                  {cliente ? cliente.nombre : 'Cliente no encontrado'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                  ${costo}/hora
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                  <button
+                                                    onClick={() => eliminarCostoPorCliente(clienteId)}
+                                                    className="text-red-600 hover:text-red-800"
+                                                  >
+                                                    <Trash2 size={16} />
+                                                  </button>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                      <p className="text-sm text-blue-800">
+                                        💡 No hay costos personalizados por cliente. El sistema usará los costos por servicio.
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* Formulario para agregar nuevo costo por cliente */}
+                                  <div className="border-t pt-4">
+                                    <h4 className="text-md font-medium text-gray-700 mb-3">Agregar Costo por Cliente</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
+                                        <select
+                                          value={nuevoCostoPorCliente.clienteId}
+                                          onChange={(e) => setNuevoCostoPorCliente({ ...nuevoCostoPorCliente, clienteId: e.target.value })}
+                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        >
+                                          <option value="">Seleccionar cliente...</option>
+                                          {clientes.map(cliente => (
+                                            <option key={cliente.id} value={cliente.id}>
+                                              {cliente.nombre}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Costo por Hora ($)</label>
+                                        <input
+                                          type="number"
+                                          value={nuevoCostoPorCliente.costo}
+                                          onChange={(e) => setNuevoCostoPorCliente({ ...nuevoCostoPorCliente, costo: e.target.value })}
+                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                          placeholder="200" />
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={agregarCostoPorCliente}
+                                      className="mt-3 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2"
                                     >
-                                      <option value="">Seleccionar cliente...</option>
-                                      {clientes.map(cliente => (
-                                        <option key={cliente.id} value={cliente.id}>
-                                          {cliente.nombre}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Costo por Hora ($)</label>
-                                    <input
-                                      type="number"
-                                      value={nuevoCostoPorCliente.costo}
-                                      onChange={(e) => setNuevoCostoPorCliente({ ...nuevoCostoPorCliente, costo: e.target.value })}
-                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                      placeholder="200" />
+                                      <Plus size={16} />
+                                      Agregar Costo por Cliente
+                                    </button>
                                   </div>
                                 </div>
-                                <button
-                                  onClick={agregarCostoPorCliente}
-                                  className="mt-3 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2"
-                                >
-                                  <Plus size={16} />
-                                  Agregar Costo por Cliente
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Botones de acción */}
-                        <div className="flex justify-end space-x-2 mt-6">
-                          <button
-                            onClick={() => closeModal('terapeuta')}
-                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            onClick={() => save('terapeuta')}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                          >
-                            {editingId ? 'Actualizar' : 'Guardar'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* MODAL DE CLIENTE */}
-                  {modals.cliente && (
-                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-                      <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-
-                        {/* Pestañas */}
-                        <div className="flex border-b mb-6">
-                          <button
-                            onClick={() => setPestanaCliente('datos')}
-                            className={`px-6 py-3 font-medium transition-colors ${pestanaCliente === 'datos'
-                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                : 'text-gray-500 hover:text-gray-700'}`}
-                          >
-                            Datos Básicos
-                          </button>
-                          <button
-                            onClick={() => setPestanaCliente('precios')}
-                            className={`px-6 py-3 font-medium transition-colors ${pestanaCliente === 'precios'
-                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                : 'text-gray-500 hover:text-gray-700'}`}
-                          >
-                            Precios Personalizados
-                          </button>
-                        </div>
-
-                        <h3 className="text-lg font-bold mb-4">
-                          {editingId ? 'Editar Cliente' : 'Nuevo Cliente'}
-                        </h3>
-
-                        {/* Pestaña de Datos Básicos */}
-                        {pestanaCliente === 'datos' && (
-                          <div className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Nombre del paciente
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Nombre del paciente"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={clienteForm.nombre}
-                                onChange={(e) => setClienteForm({ ...clienteForm, nombre: e.target.value })} />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Código del cliente
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Ej: CLI001"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={clienteForm.codigo}
-                                onChange={(e) => setClienteForm({ ...clienteForm, codigo: e.target.value })} />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Email de contacto
-                              </label>
-                              <input
-                                type="email"
-                                placeholder="contacto@ejemplo.com"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={clienteForm.email}
-                                onChange={(e) => setClienteForm({ ...clienteForm, email: e.target.value })} />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Teléfono
-                              </label>
-                              <input
-                                type="tel"
-                                placeholder="5512345678"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={clienteForm.telefono}
-                                onChange={(e) => setClienteForm({ ...clienteForm, telefono: e.target.value })} />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Empresa/Institución (opcional)
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Nombre de la empresa"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                value={clienteForm.empresa}
-                                onChange={(e) => setClienteForm({ ...clienteForm, empresa: e.target.value })} />
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Pestaña de Precios Personalizados */}
-                        {pestanaCliente === 'precios' && (
-                          <div className="space-y-4">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                              Precios Personalizados para {clienteForm.nombre || 'este cliente'}
-                            </h3>
-
-                            {/* Lista de precios actuales */}
-                            {Object.keys(clienteForm.preciosPersonalizados || {}).length > 0 ? (
-                              <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                                <table className="w-full">
-                                  <thead>
-                                    <tr className="border-b">
-                                      <th className="text-left py-2 text-sm font-semibold text-gray-700">Tipo de Terapia</th>
-                                      <th className="text-right py-2 text-sm font-semibold text-gray-700">Precio/Hora</th>
-                                      <th className="text-center py-2 text-sm font-semibold text-gray-700">Acción</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {Object.entries(clienteForm.preciosPersonalizados || {}).map(([tipo, precio]) => (
-                                      <tr key={tipo} className="border-b last:border-0">
-                                        <td className="py-3 text-sm text-gray-900">{tipo}</td>
-                                        <td className="py-3 text-sm text-right text-gray-900 font-medium">${precio}</td>
-                                        <td className="py-3 text-center">
-                                          <button
-                                            onClick={() => eliminarPrecioPersonalizado(tipo)}
-                                            className="text-red-600 hover:text-red-800 text-sm"
-                                          >
-                                            <Trash2 size={16} />
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : (
-                              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                                <p className="text-sm text-yellow-800">
-                                  ⚠️ Este cliente no tiene precios personalizados. Se usarán los precios base por defecto.
-                                </p>
                               </div>
                             )}
 
-                            {/* Formulario para agregar nuevo precio */}
-                            <div className="border-t pt-4">
-                              <h4 className="text-md font-medium text-gray-700 mb-3">Agregar Precio Personalizado</h4>
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Terapia</label>
-                                  <select
-                                    value={nuevoPrecio.tipoTerapia}
-                                    onChange={(e) => setNuevoPrecio({ ...nuevoPrecio, tipoTerapia: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                  >
-                                    {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
-                                    <option value="Servicios de Sombra">Servicios de Sombra</option>
-                                    <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
-                                    <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
-                                    <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
-                                    <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
-                                    <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
-                                    <option value="Sesión en casa">Sesión en casa</option>
-                                    <option value="Otro">Otro</option> */}
-                                      {servicios
-                                        .filter(s => s.activo !== false)
-                                        .sort((a, b) => (a.orden || 99) - (b.orden || 99))
-                                        .map(servicio => (
-                                          <option key={servicio.id} value={servicio.nombre}>
-                                            {servicio.nombre}
-                                          </option>
-                                        ))
-                                      }
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">Precio por Hora ($)</label>
-                                  <input
-                                    type="number"
-                                    value={nuevoPrecio.precio}
-                                    onChange={(e) => setNuevoPrecio({ ...nuevoPrecio, precio: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    placeholder="450" />
-                                </div>
-                              </div>
+                            {/* Botones de acción */}
+                            <div className="flex justify-end space-x-2 mt-6">
                               <button
-                                onClick={agregarPrecioPersonalizado}
-                                className="mt-3 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                                onClick={() => closeModal('terapeuta')}
+                                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
                               >
-                                <Plus size={16} />
-                                Agregar Precio
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={() => save('terapeuta')}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                              >
+                                {editingId ? 'Actualizar' : 'Guardar'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* MODAL DE CLIENTE */}
+                      {modals.cliente && (
+                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+                          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+
+                            {/* Pestañas */}
+                            <div className="flex border-b mb-6">
+                              <button
+                                onClick={() => setPestanaCliente('datos')}
+                                className={`px-6 py-3 font-medium transition-colors ${pestanaCliente === 'datos'
+                                    ? 'border-b-2 border-blue-600 text-blue-600'
+                                    : 'text-gray-500 hover:text-gray-700'}`}
+                              >
+                                Datos Básicos
+                              </button>
+                              <button
+                                onClick={() => setPestanaCliente('precios')}
+                                className={`px-6 py-3 font-medium transition-colors ${pestanaCliente === 'precios'
+                                    ? 'border-b-2 border-blue-600 text-blue-600'
+                                    : 'text-gray-500 hover:text-gray-700'}`}
+                              >
+                                Precios Personalizados
                               </button>
                             </div>
 
-                            {/* Referencia de precios base */}
-                            <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                              <h4 className="text-sm font-semibold text-blue-900 mb-2">📋 Precios Base (por defecto)</h4>
-                              <div className="grid grid-cols-2 gap-2 text-xs text-blue-800">
-                                {Object.entries(preciosBasePorTerapia).map(([tipo, precio]) => (
-                                  <div key={tipo} className="flex justify-between">
-                                    <span>{tipo}:</span>
-                                    <span className="font-medium">${precio}</span>
-                                  </div>
-                                ))}
+                            <h3 className="text-lg font-bold mb-4">
+                              {editingId ? 'Editar Cliente' : 'Nuevo Cliente'}
+                            </h3>
+
+                            {/* Pestaña de Datos Básicos */}
+                            {pestanaCliente === 'datos' && (
+                              <div className="space-y-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Nombre del paciente
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Nombre del paciente"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={clienteForm.nombre}
+                                    onChange={(e) => setClienteForm({ ...clienteForm, nombre: e.target.value })} />
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Código del cliente
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ej: CLI001"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={clienteForm.codigo}
+                                    onChange={(e) => setClienteForm({ ...clienteForm, codigo: e.target.value })} />
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Email de contacto
+                                  </label>
+                                  <input
+                                    type="email"
+                                    placeholder="contacto@ejemplo.com"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={clienteForm.email}
+                                    onChange={(e) => setClienteForm({ ...clienteForm, email: e.target.value })} />
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Teléfono
+                                  </label>
+                                  <input
+                                    type="tel"
+                                    placeholder="5512345678"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={clienteForm.telefono}
+                                    onChange={(e) => setClienteForm({ ...clienteForm, telefono: e.target.value })} />
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Empresa/Institución (opcional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Nombre de la empresa"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    value={clienteForm.empresa}
+                                    onChange={(e) => setClienteForm({ ...clienteForm, empresa: e.target.value })} />
+                                </div>
                               </div>
+                            )}
+
+                            {/* Pestaña de Precios Personalizados */}
+                            {pestanaCliente === 'precios' && (
+                              <div className="space-y-4">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                                  Precios Personalizados para {clienteForm.nombre || 'este cliente'}
+                                </h3>
+
+                                {/* Lista de precios actuales */}
+                                {Object.keys(clienteForm.preciosPersonalizados || {}).length > 0 ? (
+                                  <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                                    <table className="w-full">
+                                      <thead>
+                                        <tr className="border-b">
+                                          <th className="text-left py-2 text-sm font-semibold text-gray-700">Tipo de Terapia</th>
+                                          <th className="text-right py-2 text-sm font-semibold text-gray-700">Precio/Hora</th>
+                                          <th className="text-center py-2 text-sm font-semibold text-gray-700">Acción</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {Object.entries(clienteForm.preciosPersonalizados || {}).map(([tipo, precio]) => (
+                                          <tr key={tipo} className="border-b last:border-0">
+                                            <td className="py-3 text-sm text-gray-900">{tipo}</td>
+                                            <td className="py-3 text-sm text-right text-gray-900 font-medium">${precio}</td>
+                                            <td className="py-3 text-center">
+                                              <button
+                                                onClick={() => eliminarPrecioPersonalizado(tipo)}
+                                                className="text-red-600 hover:text-red-800 text-sm"
+                                              >
+                                                <Trash2 size={16} />
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                                    <p className="text-sm text-yellow-800">
+                                      ⚠️ Este cliente no tiene precios personalizados. Se usarán los precios base por defecto.
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Formulario para agregar nuevo precio */}
+                                <div className="border-t pt-4">
+                                  <h4 className="text-md font-medium text-gray-700 mb-3">Agregar Precio Personalizado</h4>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Terapia</label>
+                                      <select
+                                        value={nuevoPrecio.tipoTerapia}
+                                        onChange={(e) => setNuevoPrecio({ ...nuevoPrecio, tipoTerapia: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                      >
+                                        {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                                        <option value="Servicios de Sombra">Servicios de Sombra</option>
+                                        <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
+                                        <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
+                                        <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
+                                        <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
+                                        <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
+                                        <option value="Sesión en casa">Sesión en casa</option>
+                                        <option value="Otro">Otro</option> */}
+                                          {servicios
+                                            .filter(s => s.activo !== false)
+                                            .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                            .map(servicio => (
+                                              <option key={servicio.id} value={servicio.nombre}>
+                                                {servicio.nombre}
+                                              </option>
+                                            ))
+                                          }
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-2">Precio por Hora ($)</label>
+                                      <input
+                                        type="number"
+                                        value={nuevoPrecio.precio}
+                                        onChange={(e) => setNuevoPrecio({ ...nuevoPrecio, precio: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        placeholder="450" />
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={agregarPrecioPersonalizado}
+                                    className="mt-3 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                                  >
+                                    <Plus size={16} />
+                                    Agregar Precio
+                                  </button>
+                                </div>
+
+                                {/* Referencia de precios base */}
+                                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                  <h4 className="text-sm font-semibold text-blue-900 mb-2">📋 Precios Base (por defecto)</h4>
+                                  <div className="grid grid-cols-2 gap-2 text-xs text-blue-800">
+                                    {Object.entries(preciosBasePorTerapia).map(([tipo, precio]) => (
+                                      <div key={tipo} className="flex justify-between">
+                                        <span>{tipo}:</span>
+                                        <span className="font-medium">${precio}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Botones de acción */}
+                            <div className="flex justify-end space-x-2 mt-6">
+                              <button
+                                onClick={() => closeModal('cliente')}
+                                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={() => save('cliente')}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                              >
+                                {editingId ? 'Actualizar' : 'Guardar'}
+                              </button>
                             </div>
                           </div>
-                        )}
-
-                        {/* Botones de acción */}
-                        <div className="flex justify-end space-x-2 mt-6">
-                          <button
-                            onClick={() => closeModal('cliente')}
-                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            onClick={() => save('cliente')}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                          >
-                            {editingId ? 'Actualizar' : 'Guardar'}
-                          </button>
                         </div>
-                      </div>
-                    </div>
-                  )}
+                      )}
+                  </div>
+                )}
+                {/* Modal Cerrar Mes */}
+                {mostrarCerrarMes && (
+                  <CerrarMes
+                    pagos={pagos}
+                    utilidadHistorica={utilidadHistorica}
+                    onGuardar={async (datos) => {
+                      const resultado = await guardarCierreMes(datos);
+                      if (resultado.success) {
+                        await cargarUtilidadHistorica();
+                      }
+                      return resultado;
+                    }}
+                    onCerrar={() => setMostrarCerrarMes(false)}
+                  />
+                )}
               </div>
-            )}
-            {/* Modal Cerrar Mes */}
-            {mostrarCerrarMes && (
-              <CerrarMes
-                pagos={pagos}
-                utilidadHistorica={utilidadHistorica}
-                onGuardar={async (datos) => {
-                  const resultado = await guardarCierreMes(datos);
-                  if (resultado.success) {
-                    await cargarUtilidadHistorica();
-                  }
-                  return resultado;
-                }}
-                onCerrar={() => setMostrarCerrarMes(false)}
-              />
-            )}
-          </div>
-        } 
-      />
-    </Routes>
-  </Router>
+            } 
+          />
+        </Routes>
+      </Router>
+    </ConfiguracionProvider>
   )
 };
 

@@ -16,24 +16,35 @@ import {
   updatePassword,
   deleteUser as deleteAuthUser
 } from 'firebase/auth';
-import { auth, db } from '../firebase'; // Ajusta la ruta según tu estructura
+import { auth, db } from '../firebase';
 
 /**
- * FUNCIONES PARA GESTIÓN DE USUARIOS DEL PORTAL
+ * API para gestión de usuarios en Firebase
+ * VERSIÓN MULTI-TENANT: Todas las operaciones filtran por organizationId
  */
 
 /**
- * Obtener todos los usuarios del portal
+ * Obtener todos los usuarios del portal (rol cliente) de una organización
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} Lista de usuarios
  */
-export const obtenerUsuariosPortal = async () => {
+export const obtenerUsuariosPortal = async (organizationId) => {
   try {
     console.log("=== CARGANDO USUARIOS DEL PORTAL ===");
     
     const usuariosRef = collection(db, 'usuarios');
-    console.log("Colección referenciada");
+    let q;
     
-    const q = query(usuariosRef, where('rol', '==', 'cliente'));
+    if (organizationId) {
+      q = query(
+        usuariosRef, 
+        where('organizationId', '==', organizationId),
+        where('rol', '==', 'cliente')
+      );
+    } else {
+      q = query(usuariosRef, where('rol', '==', 'cliente'));
+    }
+    
     console.log("Query creada");
     
     const snapshot = await getDocs(q);
@@ -41,7 +52,7 @@ export const obtenerUsuariosPortal = async () => {
     
     const usuarios = [];
     snapshot.forEach((doc) => {
-      console.log("Usuario encontrado:", doc.id, doc.data());
+      console.log("Usuario encontrado:", doc.id);
       usuarios.push({
         id: doc.id,
         ...doc.data()
@@ -58,16 +69,14 @@ export const obtenerUsuariosPortal = async () => {
 
 /**
  * Crear usuario del portal
- * IMPORTANTE: Esta función debe ejecutarse desde el lado del servidor o con privilegios de admin
- * Para uso en producción, considera usar Firebase Cloud Functions
- * 
  * @param {Object} datos - Datos del nuevo usuario
  * @param {string} datos.email - Email del usuario
  * @param {string} datos.password - Contraseña temporal
  * @param {string} datos.clienteId - ID del cliente en Firestore
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Object>} Resultado de la creación
  */
-export const crearUsuarioPortal = async ({ email, password, clienteId }) => {
+export const crearUsuarioPortal = async ({ email, password, clienteId }, organizationId) => {
   try {
     // Validaciones
     if (!email || !password || !clienteId) {
@@ -91,33 +100,10 @@ export const crearUsuarioPortal = async ({ email, password, clienteId }) => {
       throw new Error('Ya existe un usuario para este cliente');
     }
 
-    // NOTA IMPORTANTE:
-    // createUserWithEmailAndPassword crea el usuario EN LA SESIÓN ACTUAL
-    // Esto cerrará la sesión del admin
-    // 
-    // SOLUCIÓN RECOMENDADA:
-    // Usar Firebase Admin SDK desde Cloud Functions
-    // O usar la API REST de Firebase Authentication
-    
-    // Por ahora, para desarrollo local, documentamos el flujo:
+    // NOTA: Esta función debe ejecutarse desde Firebase Cloud Functions
     console.log('⚠️ ADVERTENCIA: Esta función debe ejecutarse desde Firebase Cloud Functions');
-    console.log('Para uso en producción, implementa esto con Firebase Admin SDK');
 
-    // Aquí iría el código con Admin SDK:
-    /*
-    const admin = require('firebase-admin');
-    const userRecord = await admin.auth().createUser({
-      email: email,
-      password: password,
-      emailVerified: false,
-      disabled: false
-    });
-    
-    const uid = userRecord.uid;
-    */
-
-    // Por ahora, simulamos la creación (TEMPORAL - SOLO DESARROLLO)
-    // En producción, esto debe ser una Cloud Function
+    // ID temporal para desarrollo
     const uid = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Crear documento en Firestore
@@ -126,7 +112,8 @@ export const crearUsuarioPortal = async ({ email, password, clienteId }) => {
       rol: 'cliente',
       clienteId: clienteId,
       activo: true,
-      fechaCreacion: new Date().toISOString(),
+      ...(organizationId && { organizationId }),
+      createdAt: new Date().toISOString(),
       ultimoAcceso: null,
       passwordCambiada: false
     };
@@ -159,11 +146,8 @@ export const activarDesactivarUsuario = async (userId, activo) => {
     const userRef = doc(db, 'usuarios', userId);
     await updateDoc(userRef, {
       activo: activo,
-      fechaModificacion: new Date().toISOString()
+      updatedAt: new Date().toISOString()
     });
-
-    // Si se desactiva, también deshabilitar en Auth (requiere Admin SDK)
-    // admin.auth().updateUser(userId, { disabled: !activo });
 
     return {
       success: true,
@@ -236,9 +220,6 @@ export const eliminarUsuarioPortal = async (userId) => {
     // Eliminar de Firestore
     await deleteDoc(doc(db, 'usuarios', userId));
 
-    // Eliminar de Auth (requiere Admin SDK)
-    // await admin.auth().deleteUser(userId);
-
     return {
       success: true,
       message: 'Usuario eliminado'
@@ -279,7 +260,7 @@ export const marcarPasswordCambiada = async (userId) => {
     const userRef = doc(db, 'usuarios', userId);
     await updateDoc(userRef, {
       passwordCambiada: true,
-      fechaModificacion: new Date().toISOString()
+      updatedAt: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error marcando password cambiada:', error);
@@ -291,12 +272,24 @@ export const marcarPasswordCambiada = async (userId) => {
 // ========================================
 
 /**
- * Obtiene todos los usuarios (para admin)
+ * Obtiene todos los usuarios de una organización (para admin)
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} - Array de usuarios
  */
-export const obtenerUsuarios = async () => {
+export const obtenerUsuarios = async (organizationId) => {
   try {
-    const snapshot = await getDocs(collection(db, 'usuarios'));
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        collection(db, 'usuarios'),
+        where('organizationId', '==', organizationId)
+      );
+    } else {
+      q = collection(db, 'usuarios');
+    }
+    
+    const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     console.error('Error al obtener usuarios:', error);
@@ -313,7 +306,8 @@ export const obtenerUsuarios = async () => {
 export const vincularUsuarioTerapeuta = async (usuarioId, terapeutaId) => {
   try {
     await updateDoc(doc(db, 'usuarios', usuarioId), { 
-      terapeutaId: terapeutaId || null 
+      terapeutaId: terapeutaId || null,
+      updatedAt: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error al vincular usuario con terapeuta:', error);

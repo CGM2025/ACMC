@@ -8,9 +8,7 @@ import { ConfiguracionProvider } from './contexts/ConfiguracionContext';
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <ConfiguracionProvider>
-      <App />
-    </ConfiguracionProvider>
+    <App />
   </React.StrictMode>
 );
 

@@ -13,6 +13,7 @@ const PERMISOS = {
   admin: ['dashboard', 'horas', 'reportes', 'terapeutas', 'bloques', 'citas', 'clientes', 'pagos', 'usuarios', 'comprobantes', 'utilidad', 'servicios'],
   // ... otros roles
 };
+
 /**
  * Custom Hook para manejar la autenticación de usuarios
  * 
@@ -51,15 +52,22 @@ export const useAuth = () => {
               email: firebaseUser.email,
               nombre: userData.nombre,
               rol: userData.rol,
-              terapeutaId: userData.terapeutaId || null  // ← AGREGAR ESTA LÍNEA
+              terapeutaId: userData.terapeutaId || null,
+              organizationId: userData.organizationId || null,  // ← AGREGADO
+              clienteId: userData.clienteId || null  // ← Para usuarios tipo cliente
             });
             setIsLoggedIn(true);
+            console.log('✅ Usuario cargado con organizationId:', userData.organizationId);
           } else {
             // Usuario nuevo - crear documento en Firestore
+            // Por defecto asignar a la organización principal si existe
+            const defaultOrgId = 'org_acmc_001'; // Organización por defecto
+            
             const newUserData = {
               nombre: firebaseUser.displayName || firebaseUser.email.split('@')[0],
               email: firebaseUser.email,
               rol: 'terapeuta', // Rol por defecto
+              organizationId: defaultOrgId,  // ← AGREGADO
               createdAt: new Date().toISOString()
             };
             
@@ -69,9 +77,11 @@ export const useAuth = () => {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               nombre: newUserData.nombre,
-              rol: newUserData.rol
+              rol: newUserData.rol,
+              organizationId: newUserData.organizationId  // ← AGREGADO
             });
             setIsLoggedIn(true);
+            console.log('✅ Usuario nuevo creado con organizationId:', defaultOrgId);
           }
         } catch (error) {
           console.error('Error al cargar datos del usuario:', error);
@@ -122,10 +132,13 @@ export const useAuth = () => {
 
       if (!userDoc.exists()) {
         // Crear nuevo usuario en Firestore
+        const defaultOrgId = 'org_acmc_001'; // Organización por defecto
+        
         await setDoc(userDocRef, {
           nombre: user.displayName,
           email: user.email,
           rol: 'terapeuta', // Rol por defecto
+          organizationId: defaultOrgId,  // ← AGREGADO
           createdAt: new Date().toISOString()
         });
       }

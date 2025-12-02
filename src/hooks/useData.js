@@ -67,6 +67,9 @@ import {
  * @returns {Object} Estados y funciones para gestionar datos
  */
 export const useData = (currentUser, isLoggedIn) => {
+
+  // Obtener organizationId del usuario actual
+  const organizationId = currentUser?.organizationId || null;
   
   const [servicios, setServicios] = useState([]);
 
@@ -98,7 +101,7 @@ export const useData = (currentUser, isLoggedIn) => {
   const cargarCitas = useCallback(async () => {
     try {
       setLoadingCitas(true);
-      const data = await obtenerCitas();
+      const data = await obtenerCitas(organizationId);
       setCitas(data);
       console.log('✅ Citas cargadas:', data.length);
     } catch (error) {
@@ -106,73 +109,73 @@ export const useData = (currentUser, isLoggedIn) => {
     } finally {
       setLoadingCitas(false);
     }
-  }, []);
+  }, [organizationId]);
 
   /**
    * Carga los terapeutas desde Firestore
    */
   const cargarTerapeutas = useCallback(async () => {
     try {
-      const data = await obtenerTerapeutas();
+      const data = await obtenerTerapeutas(organizationId);
       setTerapeutas(data);
       console.log('✅ Terapeutas cargadas:', data.length);
     } catch (error) {
       console.error('Error al cargar terapeutas:', error);
     }
-  }, []);
+  }, [organizationId]);
 
   /**
    * Carga los clientes desde Firestore
    */
   const cargarClientes = useCallback(async () => {
     try {
-      const data = await obtenerClientes();
+      const data = await obtenerClientes(organizationId);
       setClientes(data);
       console.log('✅ Clientes cargados:', data.length);
     } catch (error) {
       console.error('Error al cargar clientes:', error);
     }
-  }, []);
+  }, [organizationId]);
 
   /**
    * Carga las horas trabajadas desde Firestore
    */
   const cargarHorasTrabajadas = useCallback(async () => {
     try {
-      const data = await obtenerHorasTrabajadasAPI();
+      const data = await obtenerHorasTrabajadasAPI(organizationId);
       setHorasTrabajadas(data);
       console.log('✅ Horas trabajadas cargadas:', data.length);
     } catch (error) {
       console.error('Error al cargar horas trabajadas:', error);
     }
-  }, []);
+  }, [organizationId]);
 
   /**
    * Carga los pagos desde Firestore
    */
   const cargarPagos = useCallback(async () => {
     try {
-      const data = await obtenerPagos();
+      const data = await obtenerPagos(organizationId);
       setPagos(data);
       console.log('✅ Pagos cargados:', data.length);
     } catch (error) {
       console.error('Error al cargar pagos:', error);
     }
-  }, []);
+  }, [organizationId]);
 
   /**
    * Carga los recibos desde Firestore
    * ← NUEVA FUNCIÓN
    */
-  const cargarRecibos = useCallback(async () => {
-    try {
-      const data = await obtenerRecibos();
-      setRecibos(data);
-      console.log('✅ Recibos cargados:', data.length);
-    } catch (error) {
-      console.error('Error al cargar recibos:', error);
-    }
-  }, []);
+    const cargarRecibos = useCallback(async () => {
+      try {
+        const data = await obtenerRecibos(organizationId);
+        setRecibos(data);
+        console.log('✅ Recibos cargados:', data.length);
+      } catch (error) {
+        console.error('Error al cargar recibos:', error);
+      }
+    }, [organizationId]);
 
   /**
    * Carga recibos de un cliente específico
@@ -180,39 +183,39 @@ export const useData = (currentUser, isLoggedIn) => {
    */
   const cargarRecibosPorCliente = useCallback(async (clienteNombre) => {
     try {
-      const data = await obtenerRecibosPorCliente(clienteNombre);
+      const data = await obtenerRecibosPorCliente(clienteNombre, organizationId);
       return data;
     } catch (error) {
       console.error('Error al cargar recibos por cliente:', error);
       return [];
     }
-  }, []);
+  }, [organizationId]);
 
   /**
    * Carga los datos históricos de utilidad
    */
   const cargarUtilidadHistorica = useCallback(async () => {
     try {
-      const data = await obtenerUtilidadHistorica();
+      const data = await obtenerUtilidadHistorica(organizationId);
       setUtilidadHistorica(data);
       console.log('✅ Utilidad histórica cargada:', data.length);
     } catch (error) {
       console.error('Error al cargar utilidad histórica:', error);
     }
-  }, []);
+  }, [organizationId]);
 
   /**
    * Carga los usuarios desde Firestore
    */
   const cargarUsuarios = useCallback(async () => {
     try {
-      const data = await obtenerUsuarios();
+      const data = await obtenerUsuarios(organizationId);
       setUsuarios(data);
       console.log('✅ Usuarios cargados:', data.length);
     } catch (error) {
       console.error('Error al cargar usuarios:', error);
     }
-  }, []);
+  }, [organizationId]);
 
   /**
    * Vincula un usuario con un terapeuta
@@ -233,13 +236,13 @@ export const useData = (currentUser, isLoggedIn) => {
    */
   const cargarServicios = useCallback(async () => {
     try {
-      const data = await obtenerServicios();
+      const data = await obtenerServicios(organizationId);
       setServicios(data);
       console.log('✅ Servicios cargados:', data.length);
     } catch (error) {
       console.error('Error al cargar servicios:', error);
     }
-  }, []);
+  }, [organizationId]);
 
   /**
    * Carga todos los datos del sistema
@@ -284,7 +287,7 @@ export const useData = (currentUser, isLoggedIn) => {
       if (editingId) {
         await actualizarServicioAPI(editingId, servicioForm);
       } else {
-        await crearServicioAPI(servicioForm);
+        await crearServicioAPI(servicioForm, organizationId);
       }
       await cargarServicios();
       return { success: true };
@@ -356,7 +359,7 @@ export const useData = (currentUser, isLoggedIn) => {
       if (editingId) {
         await actualizarHorasTrabajadasAPI(editingId, data);
       } else {
-        await crearHorasTrabajadasAPI(data);
+        await crearHorasTrabajadasAPI(data, organizationId);
       }
       
       await cargarHorasTrabajadas();
@@ -375,7 +378,7 @@ export const useData = (currentUser, isLoggedIn) => {
       if (editingId) {
         await actualizarTerapeutaAPI(editingId, terapeutaForm);
       } else {
-        await crearTerapeutaAPI(terapeutaForm);
+        await crearTerapeutaAPI(terapeutaForm, organizationId);
       }
       
       await cargarTerapeutas();
@@ -394,7 +397,7 @@ export const useData = (currentUser, isLoggedIn) => {
       if (editingId) {
         await actualizarClienteAPI(editingId, clienteForm);
       } else {
-        await crearClienteAPI(clienteForm);
+        await crearClienteAPI(clienteForm, organizationId);
       }
       
       await cargarClientes();
@@ -405,34 +408,6 @@ export const useData = (currentUser, isLoggedIn) => {
     }
   };
 
-  /**
-   * Guarda o actualiza un pago usando la API
-   * Ahora también actualiza el estado del recibo si está ligado
-   * ← FUNCIÓN MEJORADA
-   */
-  // const guardarPago = async (pagoForm, editingId) => {
-  //   try {
-  //     const data = { ...pagoForm, monto: parseFloat(pagoForm.monto) };
-      
-  //     if (editingId) {
-  //       await actualizarPagoAPI(editingId, data);
-  //     } else {
-  //       await crearPagoAPI(data);
-  //     }
-      
-  //     // Si el pago está ligado a un recibo, actualizar el estado del recibo
-  //     if (data.reciboFirebaseId) {
-  //       await actualizarEstadoReciboConPagos(data.reciboFirebaseId);
-  //     }
-      
-  //     await cargarPagos();
-  //     await cargarRecibos(); // Recargar recibos para ver el cambio de estado
-  //     return { success: true };
-  //   } catch (error) {
-  //     console.error('Error al guardar pago:', error);
-  //     return { success: false, error };
-  //   }
-  // };
   /**
    * Guarda un pago (crear nuevo o actualizar existente) usando transacciones atómicas
    * ← FUNCIÓN MEJORADA CON TRANSACCIONES
@@ -459,7 +434,7 @@ export const useData = (currentUser, isLoggedIn) => {
       } else {
         // CREAR pago nuevo
         resultado = await registrarPagoVinculado(
-          pagoData,
+          { ...pagoData, organizationId },
           pagoData.reciboFirebaseId || null
         );
       }
@@ -523,7 +498,7 @@ export const useData = (currentUser, isLoggedIn) => {
       if (editingId) {
         await actualizarCita(editingId, citaForm);
       } else {
-        await crearCita(citaForm);
+        await crearCita(citaForm, organizationId);
       }
       
       await cargarCitas();

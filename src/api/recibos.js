@@ -12,19 +12,31 @@ import {
 
 /**
  * API para gestión de recibos en Firebase
- * VERSIÓN SIN ÍNDICES: Las consultas se ordenan manualmente en JavaScript
+ * VERSIÓN MULTI-TENANT: Todas las operaciones filtran por organizationId
  */
 
 const COLLECTION_NAME = 'recibos';
 
 /**
- * Obtiene todos los recibos ordenados por fecha
+ * Obtiene todos los recibos de una organización ordenados por fecha
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} - Array de recibos
  */
-export const obtenerRecibos = async () => {
+export const obtenerRecibos = async (organizationId) => {
   try {
-    // Sin orderBy para evitar error de índice
-    const snapshot = await getDocs(collection(db, COLLECTION_NAME));
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('organizationId', '==', organizationId)
+      );
+    } else {
+      // Fallback para compatibilidad (sin filtro)
+      q = collection(db, COLLECTION_NAME);
+    }
+    
+    const snapshot = await getDocs(q);
     
     // Ordenar manualmente en JavaScript
     const recibos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -42,14 +54,26 @@ export const obtenerRecibos = async () => {
 /**
  * Obtiene los recibos de un cliente específico
  * @param {string} clienteNombre - Nombre del cliente
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} - Array de recibos del cliente
  */
-export const obtenerRecibosPorCliente = async (clienteNombre) => {
+export const obtenerRecibosPorCliente = async (clienteNombre, organizationId) => {
   try {
-    const q = query(
-      collection(db, COLLECTION_NAME),
-      where('clienteNombre', '==', clienteNombre)
-    );
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('organizationId', '==', organizationId),
+        where('clienteNombre', '==', clienteNombre)
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('clienteNombre', '==', clienteNombre)
+      );
+    }
+    
     const snapshot = await getDocs(q);
     
     // Ordenar manualmente
@@ -68,14 +92,26 @@ export const obtenerRecibosPorCliente = async (clienteNombre) => {
 /**
  * Obtiene los recibos de un mes específico
  * @param {string} mes - Mes en formato YYYY-MM
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} - Array de recibos del mes
  */
-export const obtenerRecibosPorMes = async (mes) => {
+export const obtenerRecibosPorMes = async (mes, organizationId) => {
   try {
-    const q = query(
-      collection(db, COLLECTION_NAME),
-      where('mes', '==', mes)
-    );
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('organizationId', '==', organizationId),
+        where('mes', '==', mes)
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('mes', '==', mes)
+      );
+    }
+    
     const snapshot = await getDocs(q);
     
     // Ordenar manualmente por nombre de cliente
@@ -92,9 +128,10 @@ export const obtenerRecibosPorMes = async (mes) => {
 /**
  * Crea un nuevo recibo
  * @param {Object} reciboData - Datos del recibo
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<string>} - ID del recibo creado
  */
-export const crearRecibo = async (reciboData) => {
+export const crearRecibo = async (reciboData, organizationId) => {
   try {
     // Validar que tenga los campos obligatorios
     if (!reciboData.reciboId || !reciboData.mes || !reciboData.clienteNombre) {
@@ -106,7 +143,9 @@ export const crearRecibo = async (reciboData) => {
       ...reciboData,
       montoPagado: reciboData.montoPagado || 0,
       estadoPago: reciboData.estadoPago || 'pendiente',
-      fechaGeneracion: reciboData.fechaGeneracion || new Date().toISOString()
+      fechaGeneracion: reciboData.fechaGeneracion || new Date().toISOString(),
+      ...(organizationId && { organizationId }),
+      createdAt: new Date().toISOString()
     };
 
     const docRef = await addDoc(collection(db, COLLECTION_NAME), reciboCompleto);
@@ -126,7 +165,11 @@ export const crearRecibo = async (reciboData) => {
  */
 export const actualizarRecibo = async (reciboId, reciboData) => {
   try {
-    await updateDoc(doc(db, COLLECTION_NAME, reciboId), reciboData);
+    const dataConTimestamp = {
+      ...reciboData,
+      updatedAt: new Date().toISOString()
+    };
+    await updateDoc(doc(db, COLLECTION_NAME, reciboId), dataConTimestamp);
     console.log('✅ Recibo actualizado:', reciboId);
   } catch (error) {
     console.error('Error al actualizar recibo:', error);
@@ -154,7 +197,8 @@ export const actualizarEstadoPagoRecibo = async (reciboId, montoPagado, totalGen
 
     await updateDoc(doc(db, COLLECTION_NAME, reciboId), {
       montoPagado,
-      estadoPago
+      estadoPago,
+      updatedAt: new Date().toISOString()
     });
     
     console.log('✅ Estado de pago actualizado:', { reciboId, montoPagado, estadoPago });

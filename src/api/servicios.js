@@ -13,27 +13,50 @@ import {
 
 /**
  * API para gestión de servicios/tipos de terapia en Firebase
- * Esta es la ÚNICA fuente de verdad para los tipos de servicios y sus precios base
+ * VERSIÓN MULTI-TENANT: Todas las operaciones filtran por organizationId
  */
 
 const COLLECTION_NAME = 'servicios';
 
 /**
- * Obtiene todos los servicios ordenados
+ * Obtiene todos los servicios de una organización ordenados
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} - Array de servicios
  */
-export const obtenerServicios = async () => {
+export const obtenerServicios = async (organizationId) => {
   try {
-    const q = query(
-      collection(db, COLLECTION_NAME), 
-      orderBy('orden', 'asc')
-    );
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('organizationId', '==', organizationId),
+        orderBy('orden', 'asc')
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_NAME), 
+        orderBy('orden', 'asc')
+      );
+    }
+    
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     // Si falla el orderBy (falta índice), intentar sin ordenar
     console.warn('Obteniendo servicios sin ordenar:', error.message);
-    const snapshot = await getDocs(collection(db, COLLECTION_NAME));
+    
+    let snapshot;
+    if (organizationId) {
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        where('organizationId', '==', organizationId)
+      );
+      snapshot = await getDocs(q);
+    } else {
+      snapshot = await getDocs(collection(db, COLLECTION_NAME));
+    }
+    
     const servicios = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     // Ordenar en JavaScript
     return servicios.sort((a, b) => (a.orden || 99) - (b.orden || 99));
@@ -41,22 +64,35 @@ export const obtenerServicios = async () => {
 };
 
 /**
- * Obtiene solo los servicios activos
+ * Obtiene solo los servicios activos de una organización
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} - Array de servicios activos
  */
-export const obtenerServiciosActivos = async () => {
+export const obtenerServiciosActivos = async (organizationId) => {
   try {
-    const q = query(
-      collection(db, COLLECTION_NAME),
-      where('activo', '==', true),
-      orderBy('orden', 'asc')
-    );
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('organizationId', '==', organizationId),
+        where('activo', '==', true),
+        orderBy('orden', 'asc')
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('activo', '==', true),
+        orderBy('orden', 'asc')
+      );
+    }
+    
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     // Fallback: obtener todos y filtrar
     console.warn('Obteniendo servicios activos sin índice:', error.message);
-    const todos = await obtenerServicios();
+    const todos = await obtenerServicios(organizationId);
     return todos.filter(s => s.activo !== false);
   }
 };
@@ -64,9 +100,10 @@ export const obtenerServiciosActivos = async () => {
 /**
  * Crea un nuevo servicio
  * @param {Object} servicioData - Datos del servicio
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<string>} - ID del servicio creado
  */
-export const crearServicio = async (servicioData) => {
+export const crearServicio = async (servicioData, organizationId) => {
   try {
     // Validar datos requeridos
     if (!servicioData.nombre || servicioData.precio === undefined) {
@@ -79,8 +116,9 @@ export const crearServicio = async (servicioData) => {
       activo: servicioData.activo !== false,
       orden: servicioData.orden || 99,
       descripcion: servicioData.descripcion || '',
-      fechaCreacion: new Date().toISOString(),
-      fechaActualizacion: new Date().toISOString()
+      ...(organizationId && { organizationId }),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     const docRef = await addDoc(collection(db, COLLECTION_NAME), datos);
@@ -102,7 +140,7 @@ export const actualizarServicio = async (servicioId, servicioData) => {
   try {
     const datos = {
       ...servicioData,
-      fechaActualizacion: new Date().toISOString()
+      updatedAt: new Date().toISOString()
     };
 
     // Asegurar tipos correctos
@@ -148,7 +186,7 @@ export const desactivarServicio = async (servicioId) => {
   try {
     await updateDoc(doc(db, COLLECTION_NAME, servicioId), {
       activo: false,
-      fechaActualizacion: new Date().toISOString()
+      updatedAt: new Date().toISOString()
     });
     console.log('✅ Servicio desactivado:', servicioId);
   } catch (error) {
@@ -166,7 +204,7 @@ export const activarServicio = async (servicioId) => {
   try {
     await updateDoc(doc(db, COLLECTION_NAME, servicioId), {
       activo: true,
-      fechaActualizacion: new Date().toISOString()
+      updatedAt: new Date().toISOString()
     });
     console.log('✅ Servicio activado:', servicioId);
   } catch (error) {
@@ -178,9 +216,10 @@ export const activarServicio = async (servicioId) => {
 /**
  * Inicializa la colección con los servicios por defecto
  * Solo usar una vez para migrar datos existentes
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<number>} - Número de servicios creados
  */
-export const inicializarServiciosPorDefecto = async () => {
+export const inicializarServiciosPorDefecto = async (organizationId) => {
   const serviciosPorDefecto = [
     { nombre: 'Sesión de ABA estándar', precio: 450, orden: 1 },
     { nombre: 'Sesión de ABA precio especial', precio: 900, orden: 2 },
@@ -197,7 +236,7 @@ export const inicializarServiciosPorDefecto = async () => {
 
   try {
     // Verificar si ya existen servicios
-    const existentes = await obtenerServicios();
+    const existentes = await obtenerServicios(organizationId);
     if (existentes.length > 0) {
       console.log('⚠️ Ya existen servicios en la colección. No se inicializará.');
       return 0;
@@ -210,7 +249,7 @@ export const inicializarServiciosPorDefecto = async () => {
         ...servicio,
         activo: true,
         descripcion: ''
-      });
+      }, organizationId);
       creados++;
     }
 

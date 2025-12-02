@@ -12,28 +12,53 @@ import {
 
 /**
  * API para gestión de utilidad histórica en Firebase
+ * VERSIÓN MULTI-TENANT: Todas las operaciones filtran por organizationId
  */
 
 const COLLECTION_NAME = 'utilidadHistorica';
 
 /**
- * Obtiene toda la utilidad histórica ordenada por fecha
+ * Obtiene toda la utilidad histórica de una organización ordenada por fecha
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} - Array de registros históricos
  */
-export const obtenerUtilidadHistorica = async () => {
+export const obtenerUtilidadHistorica = async (organizationId) => {
   try {
-    const q = query(
-      collection(db, COLLECTION_NAME),
-      orderBy('año', 'desc'),
-      orderBy('mes', 'desc')
-    );
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('organizationId', '==', organizationId),
+        orderBy('año', 'desc'),
+        orderBy('mes', 'desc')
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        orderBy('año', 'desc'),
+        orderBy('mes', 'desc')
+      );
+    }
+    
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     // Si falla por índice, intentar sin ordenar
     console.warn('Intentando sin orderBy:', error.message);
     try {
-      const snapshot = await getDocs(collection(db, COLLECTION_NAME));
+      let snapshot;
+      
+      if (organizationId) {
+        const q = query(
+          collection(db, COLLECTION_NAME),
+          where('organizationId', '==', organizationId)
+        );
+        snapshot = await getDocs(q);
+      } else {
+        snapshot = await getDocs(collection(db, COLLECTION_NAME));
+      }
+      
       const datos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       // Ordenar en JavaScript
       return datos.sort((a, b) => {
@@ -50,9 +75,10 @@ export const obtenerUtilidadHistorica = async () => {
 /**
  * Guarda el cierre de mes con todos los detalles
  * @param {Object} datosCierre - Datos del cierre de mes
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Object>} - Resultado de la operación
  */
-export const guardarCierreMes = async (datosCierre) => {
+export const guardarCierreMes = async (datosCierre, organizationId) => {
   try {
     const {
       año,
@@ -68,7 +94,7 @@ export const guardarCierreMes = async (datosCierre) => {
     } = datosCierre;
 
     // Verificar que no exista ya un registro para este mes
-    const existente = await verificarMesCerrado(año, mes);
+    const existente = await verificarMesCerrado(año, mes, organizationId);
     if (existente) {
       throw new Error(`El mes ${mesNombre} ${año} ya ha sido cerrado`);
     }
@@ -92,7 +118,9 @@ export const guardarCierreMes = async (datosCierre) => {
       notas: notas || '',
       fechaCierre,
       // Campo legacy para compatibilidad
-      fechaImportacion: fechaCierre
+      fechaImportacion: fechaCierre,
+      ...(organizationId && { organizationId }),
+      createdAt: new Date().toISOString()
     };
 
     const docRef = await addDoc(collection(db, COLLECTION_NAME), docData);
@@ -113,15 +141,28 @@ export const guardarCierreMes = async (datosCierre) => {
  * Verifica si un mes ya ha sido cerrado
  * @param {number} año - Año
  * @param {number} mes - Mes (1-12)
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<boolean>} - True si ya está cerrado
  */
-export const verificarMesCerrado = async (año, mes) => {
+export const verificarMesCerrado = async (año, mes, organizationId) => {
   try {
-    const q = query(
-      collection(db, COLLECTION_NAME),
-      where('año', '==', año),
-      where('mes', '==', mes)
-    );
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('organizationId', '==', organizationId),
+        where('año', '==', año),
+        where('mes', '==', mes)
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('año', '==', año),
+        where('mes', '==', mes)
+      );
+    }
+    
     const snapshot = await getDocs(q);
     return !snapshot.empty;
   } catch (error) {
@@ -133,14 +174,26 @@ export const verificarMesCerrado = async (año, mes) => {
 /**
  * Obtiene el resumen de utilidad por año
  * @param {number} año - Año a consultar
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Object>} - Resumen del año
  */
-export const obtenerResumenAnual = async (año) => {
+export const obtenerResumenAnual = async (año, organizationId) => {
   try {
-    const q = query(
-      collection(db, COLLECTION_NAME),
-      where('año', '==', año)
-    );
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('organizationId', '==', organizationId),
+        where('año', '==', año)
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_NAME),
+        where('año', '==', año)
+      );
+    }
+    
     const snapshot = await getDocs(q);
     
     const meses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -171,9 +224,10 @@ export const obtenerResumenAnual = async (año) => {
 /**
  * Importa datos históricos en batch (función legacy)
  * @param {Array} datosHistoricos - Array de registros históricos
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<number>} - Número de registros importados
  */
-export const importarUtilidadHistorica = async (datosHistoricos) => {
+export const importarUtilidadHistorica = async (datosHistoricos, organizationId) => {
   try {
     const batch = writeBatch(db);
     
@@ -187,7 +241,9 @@ export const importarUtilidadHistorica = async (datosHistoricos) => {
         ingresos: dato.ingresos || null,
         totalGastos: dato.totalGastos || null,
         gastos: dato.gastos || null,
-        fechaImportacion: new Date().toISOString()
+        fechaImportacion: new Date().toISOString(),
+        ...(organizationId && { organizationId }),
+        createdAt: new Date().toISOString()
       });
     });
     

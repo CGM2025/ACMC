@@ -16,11 +16,9 @@ import {
 } from 'firebase/storage';
 import { db } from '../firebase';
 
-// Importar storage - necesitarás agregarlo a firebase.js
-// import { storage } from '../firebase';
-
 /**
- * FUNCIONES PARA GESTIÓN DE COMPROBANTES DE PAGO
+ * API para gestión de comprobantes de pago en Firebase
+ * VERSIÓN MULTI-TENANT: Todas las operaciones filtran por organizationId
  */
 
 /**
@@ -33,12 +31,13 @@ import { db } from '../firebase';
  * @param {string} datos.concepto - Concepto del pago
  * @param {number} datos.monto - Monto del pago
  * @param {string} datos.metodoPago - Método de pago
+ * @param {string} datos.organizationId - ID de la organización
  * @param {Object} storage - Instancia de Firebase Storage
  * @returns {Promise<Object>} Resultado de la operación
  */
 export const subirComprobante = async (datos, storage) => {
   try {
-    const { archivo, reciboId, reciboPeriodo, clienteId, concepto, monto, metodoPago } = datos;
+    const { archivo, reciboId, reciboPeriodo, clienteId, concepto, monto, metodoPago, organizationId } = datos;
 
     // Validaciones
     if (!archivo) throw new Error('No se proporcionó archivo');
@@ -72,7 +71,9 @@ export const subirComprobante = async (datos, storage) => {
       fechaRevision: null,
       revisadoPor: null,
       motivoRechazo: null,
-      pagoId: null // Se llena cuando se aprueba y se crea el pago
+      pagoId: null, // Se llena cuando se aprueba y se crea el pago
+      ...(organizationId && { organizationId }),
+      createdAt: new Date().toISOString()
     };
 
     const docRef = await addDoc(collection(db, 'comprobantes'), comprobanteData);
@@ -93,13 +94,25 @@ export const subirComprobante = async (datos, storage) => {
 };
 
 /**
- * Obtener todos los comprobantes (para admin)
+ * Obtener todos los comprobantes de una organización (para admin)
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} Lista de comprobantes
  */
-export const obtenerComprobantes = async () => {
+export const obtenerComprobantes = async (organizationId) => {
   try {
     const comprobantesRef = collection(db, 'comprobantes');
-    const q = query(comprobantesRef, orderBy('fechaSubida', 'desc'));
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        comprobantesRef, 
+        where('organizationId', '==', organizationId),
+        orderBy('fechaSubida', 'desc')
+      );
+    } else {
+      q = query(comprobantesRef, orderBy('fechaSubida', 'desc'));
+    }
+    
     const snapshot = await getDocs(q);
     
     const comprobantes = [];
@@ -120,16 +133,29 @@ export const obtenerComprobantes = async () => {
 /**
  * Obtener comprobantes de un cliente específico
  * @param {string} clienteId - ID del cliente
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} Lista de comprobantes del cliente
  */
-export const obtenerComprobantesCliente = async (clienteId) => {
+export const obtenerComprobantesCliente = async (clienteId, organizationId) => {
   try {
     const comprobantesRef = collection(db, 'comprobantes');
-    const q = query(
-      comprobantesRef, 
-      where('clienteId', '==', clienteId),
-      orderBy('fechaSubida', 'desc')
-    );
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        comprobantesRef,
+        where('organizationId', '==', organizationId),
+        where('clienteId', '==', clienteId),
+        orderBy('fechaSubida', 'desc')
+      );
+    } else {
+      q = query(
+        comprobantesRef, 
+        where('clienteId', '==', clienteId),
+        orderBy('fechaSubida', 'desc')
+      );
+    }
+    
     const snapshot = await getDocs(q);
     
     const comprobantes = [];
@@ -168,7 +194,10 @@ export const aprobarComprobante = async (comprobante, adminId) => {
       comprobanteId: comprobante.id,
       comprobanteURL: comprobante.archivoURL,
       creadoPor: adminId,
-      origen: 'portal_cliente'
+      origen: 'portal_cliente',
+      // Mantener el organizationId del comprobante
+      ...(comprobante.organizationId && { organizationId: comprobante.organizationId }),
+      createdAt: new Date().toISOString()
     };
 
     const pagoRef = await addDoc(collection(db, 'pagos'), pagoData);
@@ -179,7 +208,8 @@ export const aprobarComprobante = async (comprobante, adminId) => {
       estado: 'aprobado',
       fechaRevision: serverTimestamp(),
       revisadoPor: adminId,
-      pagoId: pagoRef.id
+      pagoId: pagoRef.id,
+      updatedAt: new Date().toISOString()
     });
 
     // 3. Si hay reciboId, actualizar el recibo con el pago
@@ -187,7 +217,6 @@ export const aprobarComprobante = async (comprobante, adminId) => {
       try {
         const reciboRef = doc(db, 'recibos', comprobante.reciboId);
         // Podrías actualizar campos del recibo aquí si es necesario
-        // Por ejemplo, marcar como pagado parcial o total
       } catch (err) {
         console.warn('No se pudo actualizar el recibo:', err);
       }
@@ -223,7 +252,8 @@ export const rechazarComprobante = async (comprobante, motivoRechazo, adminId) =
       estado: 'rechazado',
       fechaRevision: serverTimestamp(),
       revisadoPor: adminId,
-      motivoRechazo: motivoRechazo
+      motivoRechazo: motivoRechazo,
+      updatedAt: new Date().toISOString()
     });
 
     return {
@@ -241,13 +271,25 @@ export const rechazarComprobante = async (comprobante, motivoRechazo, adminId) =
 };
 
 /**
- * Obtener comprobantes pendientes (para notificaciones)
+ * Obtener comprobantes pendientes de una organización (para notificaciones)
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<number>} Cantidad de comprobantes pendientes
  */
-export const contarComprobantesPendientes = async () => {
+export const contarComprobantesPendientes = async (organizationId) => {
   try {
     const comprobantesRef = collection(db, 'comprobantes');
-    const q = query(comprobantesRef, where('estado', '==', 'pendiente'));
+    let q;
+    
+    if (organizationId) {
+      q = query(
+        comprobantesRef, 
+        where('organizationId', '==', organizationId),
+        where('estado', '==', 'pendiente')
+      );
+    } else {
+      q = query(comprobantesRef, where('estado', '==', 'pendiente'));
+    }
+    
     const snapshot = await getDocs(q);
     return snapshot.size;
   } catch (error) {
