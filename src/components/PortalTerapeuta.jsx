@@ -1,6 +1,6 @@
 // src/components/PortalTerapeuta.jsx
 import React, { useState, useMemo, useCallback } from 'react';
-import { Calendar, Clock, DollarSign, CheckCircle, Upload, LogOut, ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { Calendar, Clock, DollarSign, CheckCircle, Upload, LogOut, ChevronLeft, ChevronRight, Star, Plus, X } from 'lucide-react';
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'moment/locale/es';
@@ -28,12 +28,22 @@ const PortalTerapeuta = ({
   citas,
   clientes,
   onActualizarCita,
+  onCrearCita,           // ← NUEVO
   onImportarWord,
   onLogout,
   importandoWord = false
 }) => {
   const [vistaActiva, setVistaActiva] = useState('citas'); // 'citas' o 'registrar'
   const [mesCalendario, setMesCalendario] = useState(new Date());
+  const [mostrarFormularioCita, setMostrarFormularioCita] = useState(false);
+  const [nuevaCita, setNuevaCita] = useState({
+    fecha: '',
+    horaInicio: '09:00',
+    horaFin: '11:00',
+    clienteId: '',
+    tipoTerapia: 'Sesión de ABA estándar',
+    notas: ''
+  });
 
   // ========================================
   // FILTRAR CITAS DE ESTA TERAPEUTA
@@ -57,9 +67,8 @@ const PortalTerapeuta = ({
   // ESTADÍSTICAS DEL MES ACTUAL
   // ========================================
   const estadisticasMes = useMemo(() => {
-    const ahora = new Date();
-    const year = ahora.getFullYear();
-    const month = ahora.getMonth() + 1;
+    const year = mesCalendario.getFullYear();
+    const month = mesCalendario.getMonth() + 1;
     
     const citasMes = misCitas.filter(cita => {
       if (cita.estado !== 'completada') return false;
@@ -85,7 +94,7 @@ const PortalTerapeuta = ({
       totalGanado: totalGanado,
       totalSesiones: citasMes.length
     };
-  }, [misCitas]);
+  }, [misCitas, mesCalendario]);
 
   // ========================================
   // CITAS PRÓXIMAS (siguientes 7 días)
@@ -153,6 +162,77 @@ const PortalTerapeuta = ({
       }
     }
   }, [onActualizarCita]);
+
+  // ========================================
+  // CREAR NUEVA CITA
+  // ========================================
+  const handleCrearCita = useCallback(async () => {
+    // Validaciones
+    if (!nuevaCita.fecha || !nuevaCita.clienteId) {
+      alert('Por favor completa la fecha y selecciona un cliente');
+      return;
+    }
+
+    const clienteSeleccionado = clientes.find(c => c.id === nuevaCita.clienteId);
+    if (!clienteSeleccionado) {
+      alert('Cliente no encontrado');
+      return;
+    }
+
+    // Calcular duración y costos
+    const [h1, m1] = nuevaCita.horaInicio.split(':').map(Number);
+    const [h2, m2] = nuevaCita.horaFin.split(':').map(Number);
+    const duracionHoras = ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60;
+
+    if (duracionHoras <= 0) {
+      alert('La hora de fin debe ser posterior a la hora de inicio');
+      return;
+    }
+
+    // Obtener precio del cliente o usar precio base
+    const precioCliente = clienteSeleccionado.preciosPersonalizados?.[nuevaCita.tipoTerapia];
+    const costoPorHora = precioCliente || 450;
+    const costoTotal = costoPorHora * duracionHoras;
+
+    // Obtener costo del terapeuta
+    const costoTerapeuta = terapeuta.costosPorCliente?.[nuevaCita.clienteId] || 
+                          terapeuta.costosPorServicio?.[nuevaCita.tipoTerapia] || 
+                          200;
+    const costoTerapeutaTotal = costoTerapeuta * duracionHoras;
+
+    const citaData = {
+      fecha: nuevaCita.fecha,
+      horaInicio: nuevaCita.horaInicio,
+      horaFin: nuevaCita.horaFin,
+      terapeuta: terapeuta.nombre,
+      cliente: clienteSeleccionado.nombre,
+      clienteId: nuevaCita.clienteId,
+      tipoTerapia: nuevaCita.tipoTerapia,
+      estado: 'pendiente',
+      costoPorHora,
+      costoTotal,
+      costoTerapeuta,
+      costoTerapeutaTotal,
+      notas: nuevaCita.notas || ''
+    };
+
+    try {
+      await onCrearCita(citaData);
+      alert('✅ Cita creada correctamente');
+      setMostrarFormularioCita(false);
+      setNuevaCita({
+        fecha: '',
+        horaInicio: '09:00',
+        horaFin: '11:00',
+        clienteId: '',
+        tipoTerapia: 'Sesión de ABA estándar',
+        notas: ''
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      alert('❌ Error al crear la cita');
+    }
+  }, [nuevaCita, clientes, terapeuta, onCrearCita]);
 
   // ========================================
   // FORMATEAR FECHA
@@ -279,11 +359,13 @@ const PortalTerapeuta = ({
             </div>
           </div>
 
-          {/* Horas Este Mes */}
+          {/* Horas del Mes Seleccionado */}
           <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 uppercase tracking-wide">Este Mes</p>
+                <p className="text-sm text-gray-500 uppercase tracking-wide">
+                  {mesCalendario.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
+                </p>
                 <p className="text-3xl font-bold text-gray-800">{estadisticasMes.totalHoras}</p>
                 <p className="text-sm text-gray-500">horas</p>
               </div>
@@ -311,11 +393,13 @@ const PortalTerapeuta = ({
             <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-500 uppercase tracking-wide">Ganado</p>
+                  <p className="text-sm text-gray-500 uppercase tracking-wide">Ganancia</p>
                   <p className="text-3xl font-bold text-gray-800">
                     ${estadisticasMes.totalGanado.toLocaleString()}
                   </p>
-                  <p className="text-sm text-gray-500">este mes</p>
+                  <p className="text-sm text-gray-500">
+                    {mesCalendario.toLocaleDateString('es-MX', { month: 'short' })}
+                  </p>
                 </div>
                 <div className="bg-green-100 p-3 rounded-full">
                   <DollarSign className="text-green-600" size={24} />
@@ -327,6 +411,13 @@ const PortalTerapeuta = ({
 
         {/* Navegación de Pestañas */}
         <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setMostrarFormularioCita(true)}
+            className="px-4 py-2 rounded-lg font-medium bg-green-600 text-white hover:bg-green-700 flex items-center gap-2"
+          >
+            <Plus size={18} />
+            Nueva Cita
+          </button>
           <button
             onClick={() => setVistaActiva('citas')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -588,6 +679,134 @@ const PortalTerapeuta = ({
           </div>
         )}
       </main>
+
+      {/* Modal para Nueva Cita */}
+      {mostrarFormularioCita && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-800">Nueva Cita</h2>
+              <button
+                onClick={() => setMostrarFormularioCita(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Formulario */}
+            <div className="p-6 space-y-4">
+              {/* Fecha */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha
+                </label>
+                <input
+                  type="date"
+                  value={nuevaCita.fecha}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, fecha: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Horario */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Hora Inicio
+                  </label>
+                  <input
+                    type="time"
+                    value={nuevaCita.horaInicio}
+                    onChange={(e) => setNuevaCita({ ...nuevaCita, horaInicio: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Hora Fin
+                  </label>
+                  <input
+                    type="time"
+                    value={nuevaCita.horaFin}
+                    onChange={(e) => setNuevaCita({ ...nuevaCita, horaFin: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Cliente */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cliente
+                </label>
+                <select
+                  value={nuevaCita.clienteId}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, clienteId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccionar cliente...</option>
+                  {clientes.map(cliente => (
+                    <option key={cliente.id} value={cliente.id}>
+                      {cliente.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tipo de Terapia */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Terapia
+                </label>
+                <select
+                  value={nuevaCita.tipoTerapia}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, tipoTerapia: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
+                  <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
+                  <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                  <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
+                  <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
+                  <option value="Servicios de Sombra">Servicios de Sombra</option>
+                </select>
+              </div>
+
+              {/* Notas (opcional) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notas (opcional)
+                </label>
+                <textarea
+                  value={nuevaCita.notas}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, notas: e.target.value })}
+                  placeholder="Notas adicionales..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-3 p-6 border-t bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => setMostrarFormularioCita(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCrearCita}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Crear Cita
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

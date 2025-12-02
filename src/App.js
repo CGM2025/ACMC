@@ -61,7 +61,7 @@ import CerrarMes from './components/CerrarMes';
 import { guardarCierreMes } from './api/utilidadHistorica';
 import GestionServicios from './components/pages/GestionServicios';
 
-import { actualizarCita as actualizarCitaDirecta } from './api/citas';
+import { actualizarCita as actualizarCitaDirecta, crearCita } from './api/citas';
 import PortalTerapeuta from './components/PortalTerapeuta';
 
 // Firebase configuration
@@ -1032,6 +1032,10 @@ const SistemaGestion = () => {
         clientes={clientes}
         onActualizarCita={async (citaId, datos) => {
           await actualizarCitaDirecta(citaId, datos);
+          await cargarCitas();
+        }}
+        onCrearCita={async (citaData) => {
+          await crearCita(citaData);
           await cargarCitas();
         }}
         onImportarWord={importarDesdeWord}
