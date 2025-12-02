@@ -80,3 +80,11 @@ export {
   obtenerUsuarios,
   vincularUsuarioTerapeuta
 } from './usuarios';
+
+// Configuración de Empresa
+export {
+  obtenerConfiguracion,
+  guardarConfiguracion,
+  subirLogo,
+  eliminarLogo
+} from './configuracion';

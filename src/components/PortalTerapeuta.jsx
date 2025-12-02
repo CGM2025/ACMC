@@ -1,5 +1,6 @@
 // src/components/PortalTerapeuta.jsx
 import React, { useState, useMemo, useCallback } from 'react';
+import { useConfiguracion } from '../contexts/ConfiguracionContext';
 import { Calendar, Clock, DollarSign, CheckCircle, Upload, LogOut, ChevronLeft, ChevronRight, Star, Plus, X } from 'lucide-react';
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
@@ -36,6 +37,9 @@ const PortalTerapeuta = ({
   const [vistaActiva, setVistaActiva] = useState('citas'); // 'citas' o 'registrar'
   const [mesCalendario, setMesCalendario] = useState(new Date());
   const [mostrarFormularioCita, setMostrarFormularioCita] = useState(false);
+  // Configuración de empresa
+  const { configuracion } = useConfiguracion();
+  const [citaSeleccionada, setCitaSeleccionada] = useState(null);
   const [nuevaCita, setNuevaCita] = useState({
     fecha: '',
     horaInicio: '09:00',
@@ -235,6 +239,25 @@ const PortalTerapeuta = ({
   }, [nuevaCita, clientes, terapeuta, onCrearCita]);
 
   // ========================================
+  // CAMBIAR ESTADO DE CITA
+  // ========================================
+  const handleCambiarEstado = useCallback(async (nuevoEstado) => {
+    if (!citaSeleccionada) return;
+    
+    try {
+      await onActualizarCita(citaSeleccionada.id, { 
+        ...citaSeleccionada, 
+        estado: nuevoEstado 
+      });
+      alert(`✅ Cita marcada como "${nuevoEstado}"`);
+      setCitaSeleccionada(null);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('❌ Error al actualizar la cita');
+    }
+  }, [citaSeleccionada, onActualizarCita]);
+
+  // ========================================
   // FORMATEAR FECHA
   // ========================================
   const formatearFecha = (fechaStr) => {
@@ -321,11 +344,27 @@ const PortalTerapeuta = ({
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      {/* <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🏥</span>
             <span className="font-bold text-xl text-gray-800">ACMC</span>
+          </div> */}
+      <header className="bg-white shadow-sm border-b px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {configuracion?.logoUrl ? (
+              <img 
+                src={configuracion.logoUrl} 
+                alt={configuracion.nombreEmpresa}
+                className="w-10 h-10 object-contain rounded"
+              />
+            ) : (
+              <span className="text-2xl">🏥</span>
+            )}
+            <span className="font-bold text-xl text-gray-800">
+              {configuracion?.nombreEmpresa || 'ACMC'}
+            </span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-gray-600">
@@ -462,7 +501,8 @@ const PortalTerapeuta = ({
                     {citasHoy.map(cita => (
                       <div
                         key={cita.id}
-                        className={`p-4 rounded-lg border-l-4 ${
+                        onClick={() => setCitaSeleccionada(cita)}
+                        className={`p-4 rounded-lg border-l-4 cursor-pointer hover:shadow-md transition-shadow ${
                           cita.estado === 'completada'
                             ? 'bg-green-50 border-green-500'
                             : cita.estado === 'cancelada'
@@ -480,7 +520,7 @@ const PortalTerapeuta = ({
                               {cita.tipoTerapia || 'Sesión de ABA'}
                             </p>
                           </div>
-                          {cita.estado !== 'completada' && cita.estado !== 'cancelada' && (
+                          {/* {cita.estado !== 'completada' && cita.estado !== 'cancelada' && (
                             <button
                               onClick={() => marcarCompletada(cita)}
                               className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
@@ -494,7 +534,15 @@ const PortalTerapeuta = ({
                               <CheckCircle size={16} />
                               Completada
                             </span>
-                          )}
+                          )} */}
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            cita.estado === 'completada' ? 'bg-green-100 text-green-700' :
+                            cita.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' :
+                            cita.estado === 'cancelada' ? 'bg-red-100 text-red-700' :
+                            'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {cita.estado}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -572,11 +620,14 @@ const PortalTerapeuta = ({
                   onNavigate={setMesCalendario}
                   view="month"
                   views={['month', 'week', 'day']}
+                  // onSelectEvent={(event) => {
+                  //   const cita = event.resource;
+                  //   if (cita.estado !== 'completada' && cita.estado !== 'cancelada') {
+                  //     marcarCompletada(cita);
+                  //   }
+                  // }}
                   onSelectEvent={(event) => {
-                    const cita = event.resource;
-                    if (cita.estado !== 'completada' && cita.estado !== 'cancelada') {
-                      marcarCompletada(cita);
-                    }
+                    setCitaSeleccionada(event.resource);
                   }}
                   messages={mensajesCalendario}
                   eventPropGetter={eventStyleGetter}
@@ -679,6 +730,126 @@ const PortalTerapeuta = ({
           </div>
         )}
       </main>
+
+      {/* Modal de Detalle de Cita */}
+      {citaSeleccionada && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-800">Detalle de Cita</h2>
+              <button
+                onClick={() => setCitaSeleccionada(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="p-6 space-y-4">
+              {/* Cliente */}
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <div className="bg-blue-100 p-2 rounded-full">
+                  <Calendar size={20} className="text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800">{citaSeleccionada.cliente}</p>
+                  <p className="text-sm text-gray-500">{citaSeleccionada.tipoTerapia || 'Sesión de ABA'}</p>
+                </div>
+              </div>
+
+              {/* Fecha y Hora */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500 uppercase">Fecha</p>
+                  <p className="font-medium text-gray-800">{formatearFecha(citaSeleccionada.fecha)}</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500 uppercase">Horario</p>
+                  <p className="font-medium text-gray-800">
+                    {citaSeleccionada.horaInicio} - {citaSeleccionada.horaFin}
+                  </p>
+                </div>
+              </div>
+
+              {/* Estado Actual */}
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500 uppercase mb-2">Estado Actual</p>
+                <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                  citaSeleccionada.estado === 'completada' ? 'bg-green-100 text-green-700' :
+                  citaSeleccionada.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' :
+                  citaSeleccionada.estado === 'cancelada' ? 'bg-red-100 text-red-700' :
+                  'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {citaSeleccionada.estado}
+                </span>
+              </div>
+
+              {/* Cambiar Estado */}
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-3">Cambiar estado a:</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleCambiarEstado('pendiente')}
+                    disabled={citaSeleccionada.estado === 'pendiente'}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      citaSeleccionada.estado === 'pendiente'
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                    }`}
+                  >
+                    Pendiente
+                  </button>
+                  <button
+                    onClick={() => handleCambiarEstado('confirmada')}
+                    disabled={citaSeleccionada.estado === 'confirmada'}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      citaSeleccionada.estado === 'confirmada'
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                    }`}
+                  >
+                    Confirmada
+                  </button>
+                  <button
+                    onClick={() => handleCambiarEstado('completada')}
+                    disabled={citaSeleccionada.estado === 'completada'}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      citaSeleccionada.estado === 'completada'
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-green-100 text-green-700 hover:bg-green-200'
+                    }`}
+                  >
+                    Completada
+                  </button>
+                  <button
+                    onClick={() => handleCambiarEstado('cancelada')}
+                    disabled={citaSeleccionada.estado === 'cancelada'}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      citaSeleccionada.estado === 'cancelada'
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                    }`}
+                  >
+                    Cancelada
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => setCitaSeleccionada(null)}
+                className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal para Nueva Cita */}
       {mostrarFormularioCita && (

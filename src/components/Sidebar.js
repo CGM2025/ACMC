@@ -1,4 +1,5 @@
 import React from 'react';
+import { useConfiguracion } from '../contexts/ConfiguracionContext';
 import { 
   DollarSign, 
   Users, 
@@ -35,6 +36,8 @@ const Sidebar = ({
   handleLogout,
   onCerrarMes  // ← AGREGAR ESTO 
 }) => {
+  // Obtener configuración de empresa
+  const { configuracion } = useConfiguracion();
   // Configuración de los items del menú
   const menuItems = [
     { 
@@ -109,10 +112,30 @@ const Sidebar = ({
         <div className="flex items-center justify-between">
           {!sidebarCollapsed && (
             <div className="flex-1">
-              <h1 className="text-xl font-bold text-gray-800">Sistema de Gestión</h1>
-              <p className="text-sm text-gray-500 mt-1">{currentUser.nombre}</p>
+              <div className="flex items-center gap-3 mb-2">
+                {configuracion?.logoUrl ? (
+                  <img 
+                    src={configuracion.logoUrl} 
+                    alt={configuracion.nombreEmpresa}
+                    className="w-10 h-10 object-contain rounded"
+                  />
+                ) : (
+                  <span className="text-3xl">🏥</span>
+                )}
+                <h1 className="text-xl font-bold text-gray-800">
+                  {configuracion?.nombreEmpresa || 'Sistema de Gestión'}
+                </h1>
+              </div>
+              <p className="text-sm text-gray-500">{currentUser.nombre}</p>
               <p className="text-xs text-gray-400">{currentUser.rol}</p>
             </div>
+          )}
+          {sidebarCollapsed && configuracion?.logoUrl && (
+            <img 
+              src={configuracion.logoUrl} 
+              alt={configuracion.nombreEmpresa}
+              className="w-8 h-8 object-contain rounded"
+            />
           )}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload, Link2 } from 'lucide-react';
+import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload, Link2, Settings } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { importarUtilidadHistorica } from './api';
 import mammoth from 'mammoth';
@@ -63,6 +63,8 @@ import GestionServicios from './components/pages/GestionServicios';
 
 import { actualizarCita as actualizarCitaDirecta, crearCita } from './api/citas';
 import PortalTerapeuta from './components/PortalTerapeuta';
+import ConfiguracionEmpresa from './components/ConfiguracionEmpresa';
+import { useConfiguracion } from './contexts/ConfiguracionContext';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -133,6 +135,8 @@ const SistemaGestion = () => {
   } = useData(currentUser, isLoggedIn);
 
   const [mostrarCerrarMes, setMostrarCerrarMes] = useState(false);
+
+  const { configuracion, cargarConfiguracion } = useConfiguracion();
 
   // ← AQUÍ DEBE IR el useState de usuariosPortal
   const [usuariosPortal, setUsuariosPortal] = useState([]);
@@ -1030,8 +1034,13 @@ const SistemaGestion = () => {
         terapeuta={terapeutaVinculado}
         citas={citas}
         clientes={clientes}
+        // onActualizarCita={async (citaId, datos) => {
+        //   await actualizarCitaDirecta(citaId, datos);
+        //   await cargarCitas();
+        // }}
         onActualizarCita={async (citaId, datos) => {
-          await actualizarCitaDirecta(citaId, datos);
+          // Solo enviar el campo estado para cumplir con reglas de seguridad
+          await actualizarCitaDirecta(citaId, { estado: datos.estado });
           await cargarCitas();
         }}
         onCrearCita={async (citaData) => {
@@ -1370,6 +1379,14 @@ const SistemaGestion = () => {
                         } } />
                     )}
 
+                    {/* Pestaña de Configuración */}
+                    {activeTab === 'configuracion' && currentUser?.rol === 'admin' && (
+                      <div className="space-y-6">
+                        <h2 className="text-2xl font-bold text-gray-800">Configuración de Empresa</h2>
+                        <ConfiguracionEmpresa onConfiguracionActualizada={cargarConfiguracion} />
+                      </div>
+                    )}
+
                     {/* NUEVO: Tu componente de Recibos Gemini */}
                     {activeTab === 'recibos-gemini' && (
                       <RecibosGemini
@@ -1419,6 +1436,21 @@ const SistemaGestion = () => {
                       />
                     )}
 
+                    {hasPermission('configuracion') && (
+                      <button 
+                        onClick={() => setActiveTab('configuracion')} 
+                        className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg font-medium transition-all ${
+                          activeTab === 'configuracion' 
+                            ? 'bg-blue-600 text-white shadow-md' 
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                        title={sidebarCollapsed ? 'Configuración' : ''}
+                      >
+                        <Settings size={20} />
+                        {!sidebarCollapsed && <span>Configuración</span>}
+                      </button>
+                    )}
+
                     {/* NUEVO: Tu componente de Gestion de Usuarios */}
                     {activeTab === 'usuarios' && hasPermission('usuarios') && (
                       <GestionUsuarios
@@ -1464,6 +1496,7 @@ const SistemaGestion = () => {
                         onRecargar={cargarComprobantes}
                       />
                     )}
+
                   </main>
 
                   {/* MODALES (igual que antes - código omitido) */}

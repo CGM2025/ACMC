@@ -3,11 +3,14 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { ConfiguracionProvider } from './contexts/ConfiguracionContext';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <ConfiguracionProvider>
+      <App />
+    </ConfiguracionProvider>
   </React.StrictMode>
 );
 
