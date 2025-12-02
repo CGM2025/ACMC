@@ -8,7 +8,8 @@ import {
   Calendar, 
   ChevronLeft, 
   ChevronRight, 
-  FileText 
+  FileText,
+  Settings  // ← AGREGAR
 } from 'lucide-react';
 import { FileCheck } from 'lucide-react';
 import { Calculator } from 'lucide-react';
@@ -46,6 +47,13 @@ const Sidebar = ({
       icon: DollarSign, 
       permission: 'dashboard',
       color: 'blue' 
+    },
+    { 
+      id: 'migracion', 
+      label: '🚀 Migración', 
+      icon: Settings, // o cualquier icono
+      permission: 'dashboard',
+      color: 'purple' 
     },
     { 
       id: 'horas', 

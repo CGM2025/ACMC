@@ -1,3 +1,4 @@
+import MigracionOrganization from './components/MigracionOrganization';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload, Link2, Settings } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
@@ -1123,6 +1124,10 @@ const SistemaGestion = () => {
 
                   {/* Contenido Principal - Se ajusta según el sidebar */}
                   <main className={`${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex-1 p-8 transition-all duration-300`}>
+                    {activeTab === 'migracion' && currentUser?.rol === 'admin' && (
+                      <MigracionOrganization />
+                    )}
+
                     {activeTab === 'dashboard' && hasPermission('dashboard') && (
                       <Dashboard
                         citas={citas}
