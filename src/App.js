@@ -335,7 +335,7 @@ const SistemaGestion = () => {
     eliminarHorario,
     generarCitas,
     guardarCitas
-  } = useCitas(citas, terapeutas, clientes, cargarCitas, preciosBasePorTerapia);
+  } = useCitas(citas, terapeutas, clientes, cargarCitas, preciosBasePorTerapia, currentUser?.organizationId);
 
   const horasDesdeCitas = useMemo(() => {
     // Convertir objeto a array con estructura esperada

@@ -11,9 +11,10 @@ import { actualizarCita, crearCitasEnBatch } from '../api';
  * @param {Array} clientes - Lista de clientes
  * @param {Function} cargarCitas - Función para recargar citas desde Firebase
  * @param {Object} preciosBasePorTerapia - Precios base por tipo de terapia
+ * @param {string} organizationId - ID de la organización (NUEVO)
  * @returns {Object} Estados y funciones para gestionar citas
  */
-export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePorTerapia) => {
+export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePorTerapia, organizationId) => {
   
   // ========================================
   // ESTADOS DE FILTRADO Y BÚSQUEDA
@@ -424,8 +425,8 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
       }
 
       if (citasImportadas.length > 0) {
-        // Usar la función de la API
-        await crearCitasEnBatch(citasImportadas);
+        // ✅ CORREGIDO: Pasar organizationId a crearCitasEnBatch
+        await crearCitasEnBatch(citasImportadas, organizationId);
         
         let mensaje = `✅ ${citasImportadas.length} citas importadas correctamente para ${terapeutaObj.nombre}`;
         if (errores.length > 0) {
@@ -449,7 +450,7 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
     } finally {
       setImportandoWord(false);
     }
-  }, [clientes, terapeutas, preciosBasePorTerapia, cargarCitas]);
+  }, [clientes, terapeutas, preciosBasePorTerapia, cargarCitas, organizationId]);
 
   // ========================================
   // FUNCIÓN: AGREGAR HORARIO
@@ -537,8 +538,8 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
   // ========================================
   const guardarCitas = useCallback(async () => {
     try {
-      // ✅ Usar la función de la API
-      await crearCitasEnBatch(citasGeneradas);
+      // ✅ CORREGIDO: Pasar organizationId a crearCitasEnBatch
+      await crearCitasEnBatch(citasGeneradas, organizationId);
       
       alert(`✅ ${citasGeneradas.length} citas guardadas`);
       setCitasGeneradas([]);
@@ -548,7 +549,7 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
       console.error('Error:', error);
       alert('Error al guardar citas');
     }
-  }, [citasGeneradas, cargarCitas]);
+  }, [citasGeneradas, cargarCitas, organizationId]);
 
   // ========================================
   // RETURN: EXPORTAR TODO
