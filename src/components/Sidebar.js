@@ -49,13 +49,6 @@ const Sidebar = ({
       color: 'blue' 
     },
     { 
-      id: 'migracion', 
-      label: '🚀 Migración', 
-      icon: Settings, // o cualquier icono
-      permission: 'dashboard',
-      color: 'purple' 
-    },
-    { 
       id: 'horas', 
       label: 'Horas', 
       icon: Clock, 
