@@ -103,6 +103,13 @@ const Sidebar = ({
       icon: FileText, 
       permission: 'reportes',
       color: 'purple' 
+    },
+    { 
+      id: 'pagos-terapeutas', 
+      label: 'Pagos Terapeutas', 
+      icon: Calculator, 
+      permission: 'pagos',
+      color: 'green' 
     }
   ];
 

@@ -28,6 +28,7 @@ import {
 } from './api/transacciones';
 import { crearRecibo } from './api/recibos';
 import RecibosGemini from './components/RecibosGemini';
+import PagosTerapeutasGemini from './components/pages/PagosTerapeutasGemini';
 import Sidebar from './components/Sidebar';
 import Pagos from './components/pages/Pagos';
 import Horas from './components/pages/Horas';
@@ -1471,6 +1472,16 @@ const SistemaGestion = () => {
                                 throw error;
                               }
                             }}
+                          />
+                        )}
+
+                        {/* Pagos a Terapeutas */}
+                        {activeTab === 'pagos-terapeutas' && hasPermission('pagos') && (
+                          <PagosTerapeutasGemini
+                            citas={citas}
+                            terapeutas={terapeutas}
+                            cargosSombra={cargosSombra}
+                            servicios={servicios}
                           />
                         )}
 
