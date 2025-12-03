@@ -132,7 +132,12 @@ const SistemaGestion = () => {
     eliminarServicio: eliminarServicioFn,
     activarServicio,
     desactivarServicio,
-    obtenerPreciosBase
+    obtenerPreciosBase,
+    // Cargos de Sombra
+    cargosSombra,
+    cargarCargosSombra,
+    guardarCargoSombra,
+    eliminarCargoSombra
   } = useData(currentUser, isLoggedIn);
 
   const [mostrarCerrarMes, setMostrarCerrarMes] = useState(false);
@@ -1427,13 +1432,42 @@ const SistemaGestion = () => {
                                 throw error;
                               }
                             }}
-                            onGenerarRecibo={async (datosRecibo) => {  // ← AGREGAR
+                            onGenerarRecibo={async (datosRecibo) => {
                               try {
-                                await crearRecibo(datosRecibo);
-                                await cargarRecibos();  // Recargar recibos
+                                await crearRecibo(datosRecibo, currentUser?.organizationId);
+                                await cargarRecibos();
                                 console.log('✅ Recibo generado:', datosRecibo.reciboId);
                               } catch (error) {
                                 console.error('Error generando recibo:', error);
+                                throw error;
+                              }
+                            }}
+                            // Props para Cargos de Sombra
+                            cargosSombra={cargosSombra}
+                            onAgregarCargoSombra={async (cargoData) => {
+                              try {
+                                await guardarCargoSombra(cargoData);
+                                await cargarCargosSombra();
+                              } catch (error) {
+                                console.error('Error agregando cargo de sombra:', error);
+                                throw error;
+                              }
+                            }}
+                            onEditarCargoSombra={async (cargoId, cargoData) => {
+                              try {
+                                await guardarCargoSombra(cargoData, cargoId);
+                                await cargarCargosSombra();
+                              } catch (error) {
+                                console.error('Error editando cargo de sombra:', error);
+                                throw error;
+                              }
+                            }}
+                            onEliminarCargoSombra={async (cargoId) => {
+                              try {
+                                await eliminarCargoSombra(cargoId);
+                                await cargarCargosSombra();
+                              } catch (error) {
+                                console.error('Error eliminando cargo de sombra:', error);
                                 throw error;
                               }
                             }}

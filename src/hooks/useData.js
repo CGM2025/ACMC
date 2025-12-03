@@ -59,6 +59,14 @@ import {
   vincularUsuarioTerapeuta as vincularUsuarioTerapeutaAPI
 } from '../api';
 
+import {
+  obtenerCargosSombra,
+  obtenerCargosSombraPorMes,
+  crearCargoSombra as crearCargoSombraAPI,
+  actualizarCargoSombra as actualizarCargoSombraAPI,
+  eliminarCargoSombra as eliminarCargoSombraAPI
+} from '../api/cargosSombra';
+
 /**
  * Custom Hook para manejar la carga, guardado y eliminación de datos
  * 
@@ -81,6 +89,7 @@ export const useData = (currentUser, isLoggedIn) => {
   const [citas, setCitas] = useState([]);
   const [utilidadHistorica, setUtilidadHistorica] = useState([]);
   const [recibos, setRecibos] = useState([]); // ← NUEVO
+  const [cargosSombra, setCargosSombra] = useState([]);
   
   // Estados para ordenamiento
   const [ordenClientes, setOrdenClientes] = useState('original');
@@ -245,6 +254,19 @@ export const useData = (currentUser, isLoggedIn) => {
   }, [organizationId]);
 
   /**
+   * Carga los cargos de sombra desde Firestore
+   */
+  const cargarCargosSombra = useCallback(async () => {
+    try {
+      const data = await obtenerCargosSombra(organizationId);
+      setCargosSombra(data);
+      console.log('✅ Cargos de sombra cargados:', data.length);
+    } catch (error) {
+      console.error('Error al cargar cargos de sombra:', error);
+    }
+  }, [organizationId]);
+
+  /**
    * Carga todos los datos del sistema
    */
   const cargarTodosLosDatos = useCallback(async () => {
@@ -256,9 +278,10 @@ export const useData = (currentUser, isLoggedIn) => {
         cargarClientes(),
         cargarHorasTrabajadas(),
         cargarPagos(),
-        cargarRecibos(), // ← NUEVO
+        cargarRecibos(),
         cargarUtilidadHistorica(),
-        cargarServicios()  // ← AGREGAR ESTO
+        cargarServicios(),
+        cargarCargosSombra()  // ← AGREGAR ESTO
       ]);
       console.log('✅ Todos los datos cargados');
     } catch (error) {
@@ -274,7 +297,8 @@ export const useData = (currentUser, isLoggedIn) => {
     cargarPagos,
     cargarRecibos,
     cargarUtilidadHistorica,
-    cargarServicios  // ← AGREGAR ESTO
+    cargarServicios,
+    cargarCargosSombra  // ← AGREGAR ESTO
   ]);
 
   // ==================== FUNCIONES DE TIPOS DE TERAPIA ====================
@@ -595,6 +619,40 @@ export const useData = (currentUser, isLoggedIn) => {
     }
   };
 
+  // ==================== FUNCIONES DE CARGOS DE SOMBRA ====================
+
+  /**
+   * Guarda o actualiza un cargo de sombra
+   */
+  const guardarCargoSombra = async (cargoData, cargoId) => {
+    try {
+      if (cargoId) {
+        await actualizarCargoSombraAPI(cargoId, cargoData);
+      } else {
+        await crearCargoSombraAPI(cargoData, organizationId);
+      }
+      await cargarCargosSombra();
+      return { success: true };
+    } catch (error) {
+      console.error('Error al guardar cargo de sombra:', error);
+      return { success: false, error };
+    }
+  };
+
+  /**
+   * Elimina un cargo de sombra
+   */
+  const eliminarCargoSombra = async (cargoId) => {
+    try {
+      await eliminarCargoSombraAPI(cargoId);
+      await cargarCargosSombra();
+      return { success: true };
+    } catch (error) {
+      console.error('Error al eliminar cargo de sombra:', error);
+      return { success: false, error };
+    }
+  };
+
   // ==================== FUNCIONES DE ORDENAMIENTO ====================
 
   /**
@@ -676,7 +734,8 @@ export const useData = (currentUser, isLoggedIn) => {
     pagos,
     citas,
     utilidadHistorica,
-    recibos, // ← NUEVO
+    recibos,
+    cargosSombra,
     
     // Estados de UI
     loadingCitas,
@@ -699,6 +758,7 @@ export const useData = (currentUser, isLoggedIn) => {
     cargarRecibosPorCliente, // ← NUEVO
     cargarUtilidadHistorica,
     cargarTodosLosDatos,
+    cargarCargosSombra,
     
     // Funciones de guardado
     guardarHorasTrabajadas,
@@ -720,6 +780,10 @@ export const useData = (currentUser, isLoggedIn) => {
     // Funciones auxiliares
     getNombre,
     getTotales,
+
+    // Cargos de sombra  ← AGREGAR SECCIÓN
+    guardarCargoSombra,
+    eliminarCargoSombra,
 
       // Servicios
     servicios,

@@ -282,7 +282,7 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
         return `${anio}-${mes}-${dia}`;
       };
 
-      // Convertir hora de "3:30 pm" a "15:30" (solo manipulación de strings)
+      // Convertir hora de "3:30 pm" o "4 pm" a "15:30" o "16:00" (solo manipulación de strings)
       const convertirHora = (horaStr) => {
         if (!horaStr) return null;
         
@@ -297,11 +297,21 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
         hora = hora.replace('pm', '').replace('am', '').trim();
         
         // Separar hora y minutos
-        const partes = hora.split(':');
-        if (partes.length < 2) return null;
+        let horas, minutos;
         
-        let horas = parseInt(partes[0], 10);
-        const minutos = partes[1].padStart(2, '0');
+        if (hora.includes(':')) {
+          // Formato con minutos: "3:30" o "11:30"
+          const partes = hora.split(':');
+          horas = parseInt(partes[0], 10);
+          minutos = partes[1].padStart(2, '0');
+        } else {
+          // Formato sin minutos: "4" o "11" → asumir :00
+          horas = parseInt(hora, 10);
+          minutos = '00';
+        }
+        
+        // Validar que horas sea un número válido
+        if (isNaN(horas)) return null;
         
         // Convertir a formato 24 horas
         if (esPM && horas !== 12) {
@@ -336,25 +346,43 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
       for (let i = 1; i < filas.length; i++) {
         const celdas = Array.from(filas[i].querySelectorAll('td, th')).map(c => c.textContent.trim());
         
-        // Tu formato tiene 7-8 columnas:
-        // [0] Fecha, [1] Hora inicio, [2] Hora fin, [3] Tiempo, [4] Costo/hora, [5] Costo total, [6] Paciente
+        // Soportar dos formatos de tabla:
+        // Formato A (7 columnas): Fecha, Hora inicio, Hora fin, Tiempo, Costo/hora, Costo total, Paciente
+        // Formato B (6 columnas): Fecha, Hora inicio, Hora fin, Costo/hora, Costo total, Paciente
+        
+        let fechaOriginal, horaInicioOriginal, horaFinOriginal, costoPorHoraOriginal, pacienteNombre;
+        
         if (celdas.length >= 7) {
-          const fechaOriginal = celdas[0];
-          const horaInicioOriginal = celdas[1];
-          const horaFinOriginal = celdas[2];
+          // Formato A: 7 columnas (incluye "Tiempo total")
+          fechaOriginal = celdas[0];
+          horaInicioOriginal = celdas[1];
+          horaFinOriginal = celdas[2];
           // celdas[3] = tiempo total (no lo usamos, lo calculamos)
-          const costoPorHoraOriginal = celdas[4];
+          costoPorHoraOriginal = celdas[4];
           // celdas[5] = costo total (no lo usamos, lo calculamos)
-          let pacienteNombre = celdas[6];
-          
-          // Limpiar nombre del paciente (puede tener saltos de línea con notas)
-          pacienteNombre = pacienteNombre.split('\n')[0].trim();
-          
-          // Validar campos requeridos
-          if (!fechaOriginal || !horaInicioOriginal || !horaFinOriginal || !pacienteNombre) {
-            console.warn(`⚠️ Fila ${i + 1}: Datos incompletos, saltando...`);
-            continue;
-          }
+          pacienteNombre = celdas[6];
+        } else if (celdas.length >= 6) {
+          // Formato B: 6 columnas (sin "Tiempo total")
+          fechaOriginal = celdas[0];
+          horaInicioOriginal = celdas[1];
+          horaFinOriginal = celdas[2];
+          costoPorHoraOriginal = celdas[3];
+          // celdas[4] = costo total (no lo usamos, lo calculamos)
+          pacienteNombre = celdas[5];
+        } else {
+          // Menos de 6 columnas, saltar fila
+          console.warn(`⚠️ Fila ${i + 1}: Solo tiene ${celdas.length} columnas, saltando...`);
+          continue;
+        }
+        
+        // Limpiar nombre del paciente (puede tener saltos de línea con notas)
+        pacienteNombre = pacienteNombre.split('\n')[0].trim();
+        
+        // Validar campos requeridos
+        if (!fechaOriginal || !horaInicioOriginal || !horaFinOriginal || !pacienteNombre) {
+          console.warn(`⚠️ Fila ${i + 1}: Datos incompletos, saltando...`);
+          continue;
+        }
 
           // Convertir formatos
           const fechaConvertida = convertirFecha(fechaOriginal);
@@ -414,7 +442,6 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
           });
 
           console.log(`✅ Fila ${i + 1}: ${fechaConvertida} | ${clienteObj.nombre} | ${horaInicio}-${horaFin}`);
-        }
       }
 
       // ========================================

@@ -22,6 +22,7 @@ import {
   CheckSquare,
   Layers
 } from 'lucide-react';
+import ModalCargoSombra from './ModalCargoSombra';
 
 /**
  * Componente de Recibos con interfaz estilo Gemini
@@ -38,7 +39,12 @@ const RecibosGemini = ({
   onAgregarCita,
   onEditarCita,
   onEliminarCita,
-  onGenerarRecibo
+  onGenerarRecibo,
+    // Nuevos props para cargos de sombra
+  cargosSombra = [],
+  onAgregarCargoSombra,
+  onEditarCargoSombra,
+  onEliminarCargoSombra
 }) => {
   // Estados
   const [mesSeleccionado, setMesSeleccionado] = useState(new Date().toISOString().slice(0, 7));
@@ -72,6 +78,10 @@ const RecibosGemini = ({
 
   // Estados para selección de citas
   const [citasSeleccionadas, setCitasSeleccionadas] = useState(new Set());
+
+  // Estados para modal de cargo de sombra
+  const [mostrarModalSombra, setMostrarModalSombra] = useState(false);
+  const [cargoSombraEditando, setCargoSombraEditando] = useState(null);
 
   // Tipos de terapia desde servicios (prop) con fallback
   const tiposTerapia = useMemo(() => {
@@ -231,6 +241,38 @@ const RecibosGemini = ({
   }, [citasDelMes, clientes]);
 
   /**
+   * Filtra los cargos de sombra del mes seleccionado
+   */
+  const cargosSombraDelMes = useMemo(() => {
+    return cargosSombra.filter(cargo => cargo.mes === mesSeleccionado);
+  }, [cargosSombra, mesSeleccionado]);
+
+  /**
+   * Obtiene los cargos de sombra del cliente seleccionado
+   */
+  const cargosSombraCliente = useMemo(() => {
+    if (!clienteSeleccionado) return [];
+    return cargosSombraDelMes.filter(
+      cargo => cargo.clienteId === clienteSeleccionado.clienteId
+    );
+  }, [cargosSombraDelMes, clienteSeleccionado]);
+
+  /**
+   * Calcula el total de cargos de sombra del cliente
+   */
+  const totalCargosSombra = useMemo(() => {
+    return cargosSombraCliente.reduce((acc, cargo) => {
+      return {
+        montoCliente: acc.montoCliente + (cargo.montoCliente || 0),
+        montoTerapeuta: acc.montoTerapeuta + (cargo.montoTerapeuta || 0),
+        utilidad: acc.utilidad + (cargo.utilidad || 0),
+        iva: acc.iva + ((cargo.montoCliente || 0) * 0.16),
+        total: acc.total + ((cargo.montoCliente || 0) * 1.16)
+      };
+    }, { montoCliente: 0, montoTerapeuta: 0, utilidad: 0, iva: 0, total: 0 });
+  }, [cargosSombraCliente]);
+
+  /**
    * Actualiza clienteSeleccionado cuando cambian las citas
    * Esto asegura que los datos se refresquen sin necesidad de reload
    */
@@ -339,6 +381,56 @@ const RecibosGemini = ({
       .filter(c => !c.cortesia && c.tipoTerapia !== 'Servicios de Sombra')
       .map(c => c.id);
     setCitasSeleccionadas(new Set(ids));
+  };
+
+  /**
+   * Abre modal para agregar cargo de sombra
+   */
+  const abrirModalAgregarSombra = () => {
+    setCargoSombraEditando(null);
+    setMostrarModalSombra(true);
+  };
+
+  /**
+   * Abre modal para editar cargo de sombra
+   */
+  const abrirModalEditarSombra = (cargo) => {
+    setCargoSombraEditando(cargo);
+    setMostrarModalSombra(true);
+  };
+
+  /**
+   * Guarda cargo de sombra (crear o actualizar)
+   */
+  const guardarCargoSombra = async (cargoData, cargoId) => {
+    try {
+      if (cargoId) {
+        // Actualizar existente
+        await onEditarCargoSombra(cargoId, cargoData);
+      } else {
+        // Crear nuevo
+        await onAgregarCargoSombra(cargoData);
+      }
+      setMostrarModalSombra(false);
+      setCargoSombraEditando(null);
+    } catch (error) {
+      console.error('Error al guardar cargo de sombra:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Elimina cargo de sombra
+   */
+  const eliminarCargoSombra = async (cargoId) => {
+    if (!window.confirm('¿Estás seguro de eliminar este cargo de sombra?')) return;
+    
+    try {
+      await onEliminarCargoSombra(cargoId);
+    } catch (error) {
+      console.error('Error al eliminar cargo de sombra:', error);
+      alert('Error al eliminar el cargo');
+    }
   };
 
   /**
@@ -480,10 +572,18 @@ const RecibosGemini = ({
       }
 
       // Calcular totales de las citas a incluir
-      const totalCitas = citasParaRecibo.length;
-      const totalHoras = citasParaRecibo.reduce((sum, c) => sum + c.duracion, 0);
-      const totalPrecio = citasParaRecibo.reduce((sum, c) => sum + c.precio, 0);
-      const totalIva = citasParaRecibo.reduce((sum, c) => sum + c.iva, 0);
+      const totalCitasCount = citasParaRecibo.length;
+      const totalHorasCitas = citasParaRecibo.reduce((sum, c) => sum + c.duracion, 0);
+      const subtotalCitas = citasParaRecibo.reduce((sum, c) => sum + c.precio, 0);
+      const ivaCitas = citasParaRecibo.reduce((sum, c) => sum + c.iva, 0);
+
+      // Calcular totales de cargos de sombra
+      const subtotalSombra = totalCargosSombra.montoCliente;
+      const ivaSombra = totalCargosSombra.iva;
+
+      // Totales generales (citas + sombra)
+      const totalPrecio = subtotalCitas + subtotalSombra;
+      const totalIva = ivaCitas + ivaSombra;
       const totalGeneral = totalPrecio + totalIva;
 
       // Preparar datos del recibo
@@ -497,15 +597,33 @@ const RecibosGemini = ({
         mesNumero: parseInt(month),
         periodoISO: mesSeleccionado,
         
-        // Totales de las citas incluidas
-        totalCitas,
-        totalHoras,
+        // Totales de citas
+        totalCitas: totalCitasCount,
+        totalHoras: totalHorasCitas,
+        subtotalCitas,
+        ivaCitas,
+        
+        // Totales de sombra
+        cargosSombra: cargosSombraCliente.map(cargo => ({
+          id: cargo.id,
+          descripcion: cargo.descripcion,
+          terapeutaId: cargo.terapeutaId,
+          terapeutaNombre: cargo.terapeutaNombre,
+          montoCliente: cargo.montoCliente,
+          montoTerapeuta: cargo.montoTerapeuta,
+          utilidad: cargo.utilidad
+        })),
+        subtotalSombra,
+        ivaSombra,
+        
+        // Totales generales
         totalPrecio,
         totalIva,
         totalGeneral,
         
         // Info adicional
         esReciboPartial: citasSeleccionadas.size > 0,
+        tieneCargosSombra: cargosSombraCliente.length > 0,
         
         // Citas incluidas
         citas: citasParaRecibo.map(c => ({
@@ -534,7 +652,13 @@ const RecibosGemini = ({
       setCitasSeleccionadas(new Set());
       
       setMostrarModalRecibo(false);
-      alert(`✅ Recibo ${reciboId} generado con ${totalCitas} citas`);
+      
+      // Mensaje de éxito con info de sombra si aplica
+      let mensaje = `✅ Recibo ${reciboId} generado con ${totalCitasCount} citas`;
+      if (cargosSombraCliente.length > 0) {
+        mensaje += ` y ${cargosSombraCliente.length} cargo(s) de sombra`;
+      }
+      alert(mensaje);
       
     } catch (error) {
       console.error('Error generando recibo:', error);
@@ -830,6 +954,13 @@ const RecibosGemini = ({
                     <Plus size={20} />
                     Agregar Cita
                   </button>
+                  <button
+                    onClick={abrirModalAgregarSombra}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    <Plus size={20} />
+                    Cargo Sombra
+                  </button>
                 </div>
               </div>
 
@@ -856,6 +987,60 @@ const RecibosGemini = ({
                   </p>
                 </div>
               </div>
+
+              {/* Cargos de Sombra del Cliente */}
+              {cargosSombraCliente.length > 0 && (
+                <div className="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-purple-900 flex items-center gap-2">
+                      <Layers size={18} />
+                      Cargos de Sombra ({cargosSombraCliente.length})
+                    </h3>
+                    <span className="text-purple-700 font-bold">
+                      ${totalCargosSombra.total.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {cargosSombraCliente.map(cargo => (
+                      <div 
+                        key={cargo.id} 
+                        className="flex items-center justify-between bg-white rounded-lg p-3 border border-purple-100"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900">{cargo.descripcion}</p>
+                          <p className="text-sm text-gray-500">
+                            Terapeuta: {cargo.terapeutaNombre}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="font-semibold text-purple-700">
+                              ${cargo.montoCliente?.toLocaleString('es-MX')}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              +IVA: ${(cargo.montoCliente * 0.16).toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                            </p>
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => abrirModalEditarSombra(cargo)}
+                              className="p-1.5 hover:bg-purple-100 rounded text-purple-600"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => eliminarCargoSombra(cargo.id)}
+                              className="p-1.5 hover:bg-red-100 rounded text-red-600"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Tabla de Citas */}
@@ -1409,6 +1594,13 @@ const RecibosGemini = ({
                     ? totalesSeleccionados
                     : clienteSeleccionado;
                   
+                  // Calcular totales incluyendo cargos de sombra
+                  const subtotalCitas = datos.totalPrecio;
+                  const subtotalSombra = totalCargosSombra.montoCliente;
+                  const subtotalGeneral = subtotalCitas + subtotalSombra;
+                  const ivaTotal = datos.totalIva + totalCargosSombra.iva;
+                  const granTotal = datos.totalGeneral + totalCargosSombra.total;
+                  
                   return (
                     <>
                       <div className="flex justify-between text-sm">
@@ -1420,17 +1612,32 @@ const RecibosGemini = ({
                         <span className="font-medium">{datos.totalHoras.toFixed(2)}h</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Subtotal:</span>
-                        <span className="font-medium">${datos.totalPrecio.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                        <span className="text-gray-600">Subtotal citas:</span>
+                        <span className="font-medium">${subtotalCitas.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
                       </div>
+                      
+                      {/* Mostrar cargos de sombra si hay */}
+                      {cargosSombraCliente.length > 0 && (
+                        <>
+                          <div className="flex justify-between text-sm text-purple-700 bg-purple-50 -mx-4 px-4 py-1">
+                            <span>Cargos de Sombra ({cargosSombraCliente.length}):</span>
+                            <span className="font-medium">${subtotalSombra.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Subtotal general:</span>
+                            <span className="font-medium">${subtotalGeneral.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                          </div>
+                        </>
+                      )}
+                      
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">IVA (16%):</span>
-                        <span className="font-medium">${datos.totalIva.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                        <span className="font-medium">${ivaTotal.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
                       </div>
                       <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
                         <span className="font-semibold text-gray-900">Total:</span>
                         <span className="font-bold text-green-600 text-lg">
-                          ${datos.totalGeneral.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                          ${granTotal.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
                         </span>
                       </div>
                     </>
@@ -1492,6 +1699,20 @@ const RecibosGemini = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Cargo de Sombra */}
+      <ModalCargoSombra
+        isOpen={mostrarModalSombra}
+        onClose={() => {
+          setMostrarModalSombra(false);
+          setCargoSombraEditando(null);
+        }}
+        onSave={guardarCargoSombra}
+        clientes={clientes}
+        terapeutas={terapeutas}
+        cargoExistente={cargoSombraEditando}
+        mesActual={mesSeleccionado}
+      />
     </div>
   );
 };

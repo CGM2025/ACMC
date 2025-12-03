@@ -88,3 +88,15 @@ export {
   subirLogo,
   eliminarLogo
 } from './configuracion';
+
+// Cargos de Sombra
+export {
+  obtenerCargosSombra,
+  obtenerCargosSombraPorMes,
+  obtenerCargosSombraPorCliente,
+  obtenerCargosSombraPorTerapeuta,
+  crearCargoSombra,
+  actualizarCargoSombra,
+  eliminarCargoSombra,
+  verificarCargoExistente
+} from './cargosSombra';
