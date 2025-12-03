@@ -2348,6 +2348,8 @@ const SistemaGestion = () => {
                 {mostrarCerrarMes && (
                   <CerrarMes
                     pagos={pagos}
+                    citas={citas}
+                    cargosSombra={cargosSombra}
                     utilidadHistorica={utilidadHistorica}
                     onGuardar={async (datos) => {
                       const resultado = await guardarCierreMes(datos);

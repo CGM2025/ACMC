@@ -12,15 +12,21 @@ import {
   ChevronLeft,
   ChevronRight,
   Save,
-  FileText
+  FileText,
+  Users,
+  RefreshCw,
+  Layers
 } from 'lucide-react';
 
 /**
  * Componente para cerrar el mes y calcular utilidad
  * Calcula ingresos automáticamente y permite ingresar gastos manualmente
+ * El pago a terapeutas se calcula automáticamente desde citas + cargos de sombra
  */
 const CerrarMes = ({ 
   pagos = [],
+  citas = [],
+  cargosSombra = [],
   utilidadHistorica = [],
   onGuardar,
   onCerrar 
@@ -33,6 +39,7 @@ const CerrarMes = ({
   const [gastos, setGastos] = useState({
     nomina: '',
     pagoTerapeutas: '',
+    pagoTerapeutasManual: false, // Flag para saber si el usuario lo editó manualmente
     renta: '',
     servicios: '',
     otros: ''
@@ -43,6 +50,7 @@ const CerrarMes = ({
   const [error, setError] = useState('');
   const [exito, setExito] = useState(false);
   const [notasMes, setNotasMes] = useState('');
+  const [mostrarDetalleTerapeutas, setMostrarDetalleTerapeutas] = useState(false);
 
   // Nombres de los meses
   const nombresMeses = [
@@ -79,9 +87,90 @@ const CerrarMes = ({
     };
   }, [pagos, año, mes]);
 
+  /**
+   * Calcula el pago a terapeutas automáticamente
+   * Basado en: citas completadas + cargos de sombra del mes
+   */
+  const pagoTerapeutasCalculado = useMemo(() => {
+    const mesISO = `${año}-${String(mes + 1).padStart(2, '0')}`;
+    
+    // Filtrar citas del mes
+    const citasDelMes = citas.filter(cita => {
+      if (cita.estado !== 'completada') return false;
+      const [citaYear, citaMonth] = cita.fecha.split('-');
+      return citaYear === String(año) && citaMonth === String(mes + 1).padStart(2, '0');
+    });
+
+    // Filtrar cargos de sombra del mes
+    const cargosSombraDelMes = cargosSombra.filter(cargo => cargo.mes === mesISO);
+
+    // Calcular pago por citas
+    const pagoPorCitas = citasDelMes.reduce((sum, cita) => {
+      return sum + (cita.costoTerapeutaTotal || 0);
+    }, 0);
+
+    // Calcular pago por sombra
+    const pagoPorSombra = cargosSombraDelMes.reduce((sum, cargo) => {
+      return sum + (cargo.montoTerapeuta || 0);
+    }, 0);
+
+    // Agrupar por terapeuta para el desglose
+    const porTerapeuta = {};
+    
+    citasDelMes.forEach(cita => {
+      if (!porTerapeuta[cita.terapeuta]) {
+        porTerapeuta[cita.terapeuta] = {
+          nombre: cita.terapeuta,
+          pagoCitas: 0,
+          pagoSombra: 0,
+          numCitas: 0,
+          numSombra: 0
+        };
+      }
+      porTerapeuta[cita.terapeuta].pagoCitas += (cita.costoTerapeutaTotal || 0);
+      porTerapeuta[cita.terapeuta].numCitas += 1;
+    });
+
+    cargosSombraDelMes.forEach(cargo => {
+      if (!porTerapeuta[cargo.terapeutaNombre]) {
+        porTerapeuta[cargo.terapeutaNombre] = {
+          nombre: cargo.terapeutaNombre,
+          pagoCitas: 0,
+          pagoSombra: 0,
+          numCitas: 0,
+          numSombra: 0
+        };
+      }
+      porTerapeuta[cargo.terapeutaNombre].pagoSombra += (cargo.montoTerapeuta || 0);
+      porTerapeuta[cargo.terapeutaNombre].numSombra += 1;
+    });
+
+    return {
+      total: pagoPorCitas + pagoPorSombra,
+      pagoPorCitas,
+      pagoPorSombra,
+      numCitas: citasDelMes.length,
+      numCargosSombra: cargosSombraDelMes.length,
+      porTerapeuta: Object.values(porTerapeuta).sort((a, b) => 
+        (b.pagoCitas + b.pagoSombra) - (a.pagoCitas + a.pagoSombra)
+      )
+    };
+  }, [citas, cargosSombra, año, mes]);
+
+  // Actualizar el gasto de terapeutas cuando cambie el cálculo (si no fue editado manualmente)
+  useEffect(() => {
+    if (!gastos.pagoTerapeutasManual && pagoTerapeutasCalculado.total > 0) {
+      setGastos(prev => ({
+        ...prev,
+        pagoTerapeutas: pagoTerapeutasCalculado.total.toString()
+      }));
+    }
+  }, [pagoTerapeutasCalculado.total, gastos.pagoTerapeutasManual]);
+
   // Calcular total de gastos
   const totalGastos = useMemo(() => {
-    return Object.values(gastos).reduce((sum, valor) => {
+    return Object.entries(gastos).reduce((sum, [key, valor]) => {
+      if (key === 'pagoTerapeutasManual') return sum; // Ignorar el flag
       return sum + (parseFloat(valor) || 0);
     }, 0);
   }, [gastos]);
@@ -112,20 +201,40 @@ const CerrarMes = ({
     setGastos({
       nomina: '',
       pagoTerapeutas: '',
+      pagoTerapeutasManual: false,
       renta: '',
       servicios: '',
       otros: ''
     });
     setNotasMes('');
+    setMostrarDetalleTerapeutas(false);
   };
 
   // Manejar cambio en gastos
   const handleGastoChange = (campo, valor) => {
     // Solo permitir números y punto decimal
     const valorLimpio = valor.replace(/[^0-9.]/g, '');
+    
+    if (campo === 'pagoTerapeutas') {
+      setGastos(prev => ({
+        ...prev,
+        pagoTerapeutas: valorLimpio,
+        pagoTerapeutasManual: true // Marcar como editado manualmente
+      }));
+    } else {
+      setGastos(prev => ({
+        ...prev,
+        [campo]: valorLimpio
+      }));
+    }
+  };
+
+  // Restaurar valor automático de pago a terapeutas
+  const restaurarPagoTerapeutasAutomatico = () => {
     setGastos(prev => ({
       ...prev,
-      [campo]: valorLimpio
+      pagoTerapeutas: pagoTerapeutasCalculado.total.toString(),
+      pagoTerapeutasManual: false
     }));
   };
 
@@ -160,6 +269,15 @@ const CerrarMes = ({
           renta: parseFloat(gastos.renta) || 0,
           servicios: parseFloat(gastos.servicios) || 0,
           otros: parseFloat(gastos.otros) || 0
+        },
+        // Detalle del pago a terapeutas
+        detallePagoTerapeutas: {
+          calculadoAutomaticamente: !gastos.pagoTerapeutasManual,
+          pagoPorCitas: pagoTerapeutasCalculado.pagoPorCitas,
+          pagoPorSombra: pagoTerapeutasCalculado.pagoPorSombra,
+          numCitas: pagoTerapeutasCalculado.numCitas,
+          numCargosSombra: pagoTerapeutasCalculado.numCargosSombra,
+          porTerapeuta: pagoTerapeutasCalculado.porTerapeuta
         },
         totalGastos: totalGastos,
         utilidad: utilidadNeta,
@@ -228,30 +346,29 @@ const CerrarMes = ({
           </button>
         </div>
 
-        {/* Contenido */}
+        {/* Contenido Scrolleable */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* Selector de Mes */}
           <div className="flex items-center justify-center gap-4 mb-6">
             <button
               onClick={() => cambiarMes('anterior')}
-              className="p-2 hover:bg-gray-100 rounded-lg"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <ChevronLeft size={24} />
             </button>
-            <div className="text-center min-w-[200px]">
-              <h4 className="text-2xl font-bold text-gray-900">
+            <div className="text-center min-w-48">
+              <p className="text-2xl font-bold text-gray-900">
                 {nombresMeses[mes]} {año}
-              </h4>
+              </p>
               {mesCerrado && (
-                <span className="inline-flex items-center gap-1 text-sm text-amber-600 mt-1">
-                  <AlertCircle size={14} />
-                  Mes ya cerrado
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                  ✓ Mes cerrado
                 </span>
               )}
             </div>
             <button
               onClick={() => cambiarMes('siguiente')}
-              className="p-2 hover:bg-gray-100 rounded-lg"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <ChevronRight size={24} />
             </button>
@@ -287,14 +404,11 @@ const CerrarMes = ({
             </div>
           </div>
 
-          {/* GASTOS (Manual) */}
+          {/* GASTOS */}
           <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <TrendingDown size={20} className="text-red-600" />
               <h4 className="font-semibold text-red-800">Gastos del Mes</h4>
-              <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded-full ml-auto">
-                Manual
-              </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -316,10 +430,27 @@ const CerrarMes = ({
                 </div>
               </div>
 
-              {/* Pago a Terapeutas */}
+              {/* Pago a Terapeutas - AUTOMÁTICO */}
               <div>
-                <label className="block text-sm font-medium text-red-800 mb-1">
-                  Pago a Terapeutas
+                <label className="block text-sm font-medium text-red-800 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Users size={14} />
+                    Pago a Terapeutas
+                  </span>
+                  {!gastos.pagoTerapeutasManual ? (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                      Automático
+                    </span>
+                  ) : (
+                    <button
+                      onClick={restaurarPagoTerapeutasAutomatico}
+                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      title="Restaurar valor automático"
+                    >
+                      <RefreshCw size={12} />
+                      Restaurar
+                    </button>
+                  )}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
@@ -327,11 +458,67 @@ const CerrarMes = ({
                     type="text"
                     value={gastos.pagoTerapeutas}
                     onChange={(e) => handleGastoChange('pagoTerapeutas', e.target.value)}
-                    className="w-full pl-7 pr-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 bg-white"
+                    className={`w-full pl-7 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 bg-white ${
+                      gastos.pagoTerapeutasManual ? 'border-amber-400' : 'border-blue-300'
+                    }`}
                     placeholder="0.00"
                     disabled={mesCerrado}
                   />
                 </div>
+                
+                {/* Desglose del cálculo */}
+                {pagoTerapeutasCalculado.total > 0 && (
+                  <div className="mt-2">
+                    <button
+                      onClick={() => setMostrarDetalleTerapeutas(!mostrarDetalleTerapeutas)}
+                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                    >
+                      {mostrarDetalleTerapeutas ? '▼' : '▶'} Ver desglose ({pagoTerapeutasCalculado.porTerapeuta.length} terapeutas)
+                    </button>
+                    
+                    {mostrarDetalleTerapeutas && (
+                      <div className="mt-2 bg-white border border-gray-200 rounded-lg p-3 text-xs">
+                        {/* Resumen */}
+                        <div className="flex justify-between mb-2 pb-2 border-b">
+                          <span className="text-gray-600">
+                            Citas ({pagoTerapeutasCalculado.numCitas}):
+                          </span>
+                          <span className="font-medium">
+                            ${pagoTerapeutasCalculado.pagoPorCitas.toLocaleString('es-MX')}
+                          </span>
+                        </div>
+                        {pagoTerapeutasCalculado.pagoPorSombra > 0 && (
+                          <div className="flex justify-between mb-2 pb-2 border-b text-purple-700">
+                            <span className="flex items-center gap-1">
+                              <Layers size={12} />
+                              Sombra ({pagoTerapeutasCalculado.numCargosSombra}):
+                            </span>
+                            <span className="font-medium">
+                              ${pagoTerapeutasCalculado.pagoPorSombra.toLocaleString('es-MX')}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Por terapeuta */}
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {pagoTerapeutasCalculado.porTerapeuta.map(t => (
+                            <div key={t.nombre} className="flex justify-between text-gray-700">
+                              <span className="truncate pr-2">{t.nombre}</span>
+                              <span className="font-medium whitespace-nowrap">
+                                ${(t.pagoCitas + t.pagoSombra).toLocaleString('es-MX')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="flex justify-between mt-2 pt-2 border-t font-semibold text-green-700">
+                          <span>Total calculado:</span>
+                          <span>${pagoTerapeutasCalculado.total.toLocaleString('es-MX')}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Renta */}
