@@ -138,7 +138,12 @@ const SistemaGestion = () => {
     cargosSombra,
     cargarCargosSombra,
     guardarCargoSombra,
-    eliminarCargoSombra
+    eliminarCargoSombra,
+    // Pagos a Terapeutas
+    pagosTerapeutas,
+    cargarPagosTerapeutas,
+    registrarPagoTerapeuta,
+    eliminarPagoTerapeuta
   } = useData(currentUser, isLoggedIn);
 
   const [mostrarCerrarMes, setMostrarCerrarMes] = useState(false);
@@ -1482,6 +1487,15 @@ const SistemaGestion = () => {
                             terapeutas={terapeutas}
                             cargosSombra={cargosSombra}
                             servicios={servicios}
+                            pagosTerapeutas={pagosTerapeutas}
+                            onRegistrarPago={async (pagoData) => {
+                              await registrarPagoTerapeuta(pagoData);
+                              await cargarPagosTerapeutas();
+                            }}
+                            onEliminarPago={async (pagoId) => {
+                              await eliminarPagoTerapeuta(pagoId);
+                              await cargarPagosTerapeutas();
+                            }}
                           />
                         )}
 

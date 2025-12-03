@@ -7,29 +7,42 @@ import {
   DollarSign,
   Clock,
   Calendar,
-  FileText,
   CheckCircle,
   Layers,
-  TrendingUp,
-  Download,
-  Printer
+  Printer,
+  CreditCard,
+  X,
+  AlertCircle,
+  Undo2,
+  FileText
 } from 'lucide-react';
 
 /**
  * Componente de Pagos a Terapeutas con interfaz estilo Gemini
  * Muestra una lista de terapeutas en sidebar y detalles de pago del seleccionado
  * Calcula automáticamente el pago basado en citas completadas + cargos de sombra
+ * Permite marcar pagos como realizados
  */
 const PagosTerapeutasGemini = ({ 
   citas = [], 
   terapeutas = [],
   cargosSombra = [],
-  servicios = []
+  servicios = [],
+  pagosTerapeutas = [],
+  onRegistrarPago,
+  onEliminarPago
 }) => {
   // Estados
   const [mesSeleccionado, setMesSeleccionado] = useState(new Date().toISOString().slice(0, 7));
   const [terapeutaSeleccionado, setTerapeutaSeleccionado] = useState(null);
   const [busquedaTerapeuta, setBusquedaTerapeuta] = useState('');
+  
+  // Estados para modal de pago
+  const [mostrarModalPago, setMostrarModalPago] = useState(false);
+  const [metodoPago, setMetodoPago] = useState('transferencia');
+  const [notasPago, setNotasPago] = useState('');
+  const [procesandoPago, setProcesandoPago] = useState(false);
+  const [errorPago, setErrorPago] = useState('');
 
   // Nombres de los meses
   const meses = [
@@ -118,6 +131,20 @@ const PagosTerapeutasGemini = ({
   }, [cargosSombra, mesSeleccionado]);
 
   /**
+   * Obtiene los pagos realizados del mes
+   */
+  const pagosDelMes = useMemo(() => {
+    return pagosTerapeutas.filter(pago => pago.mes === mesSeleccionado);
+  }, [pagosTerapeutas, mesSeleccionado]);
+
+  /**
+   * Verifica si una terapeuta ya fue pagada este mes
+   */
+  const obtenerPagoTerapeuta = (nombreTerapeuta) => {
+    return pagosDelMes.find(pago => pago.terapeutaNombre === nombreTerapeuta);
+  };
+
+  /**
    * Agrupa las citas y cargos por terapeuta
    */
   const terapeutasConPagos = useMemo(() => {
@@ -128,7 +155,6 @@ const PagosTerapeutasGemini = ({
       const nombreTerapeuta = cita.terapeuta;
       
       if (!terapeutasMap[nombreTerapeuta]) {
-        // Buscar el objeto terapeuta para obtener su ID
         const terapeutaObj = terapeutas.find(t => t.nombre === nombreTerapeuta);
         
         terapeutasMap[nombreTerapeuta] = {
@@ -182,21 +208,36 @@ const PagosTerapeutasGemini = ({
       terapeutasMap[nombreTerapeuta].totalPagoSombra += (cargo.montoTerapeuta || 0);
     });
 
-    // Calcular totales finales
+    // Calcular totales finales y agregar estado de pago
     Object.values(terapeutasMap).forEach(terapeuta => {
       terapeuta.totalPago = terapeuta.totalPagoCitas + terapeuta.totalPagoSombra;
+      terapeuta.pagoRegistrado = obtenerPagoTerapeuta(terapeuta.nombre);
     });
 
     return Object.values(terapeutasMap).sort((a, b) => 
       a.nombre.localeCompare(b.nombre)
     );
-  }, [citasDelMes, cargosSombraDelMes, terapeutas]);
+  }, [citasDelMes, cargosSombraDelMes, terapeutas, pagosDelMes]);
 
   /**
    * Calcula el total general a pagar a todas las terapeutas
    */
-  const totalGeneralPago = useMemo(() => {
-    return terapeutasConPagos.reduce((sum, t) => sum + t.totalPago, 0);
+  const totalesGenerales = useMemo(() => {
+    const totalAPagar = terapeutasConPagos.reduce((sum, t) => sum + t.totalPago, 0);
+    const totalPagado = terapeutasConPagos
+      .filter(t => t.pagoRegistrado)
+      .reduce((sum, t) => sum + t.totalPago, 0);
+    const totalPendiente = totalAPagar - totalPagado;
+    const terapeutasPagados = terapeutasConPagos.filter(t => t.pagoRegistrado).length;
+    const terapeutasPendientes = terapeutasConPagos.filter(t => !t.pagoRegistrado).length;
+
+    return {
+      totalAPagar,
+      totalPagado,
+      totalPendiente,
+      terapeutasPagados,
+      terapeutasPendientes
+    };
   }, [terapeutasConPagos]);
 
   /**
@@ -239,6 +280,81 @@ const PagosTerapeutasGemini = ({
     );
   }, [terapeutaSeleccionado]);
 
+  /**
+   * Abre el modal para marcar como pagado
+   */
+  const abrirModalPago = () => {
+    setMetodoPago('transferencia');
+    setNotasPago('');
+    setErrorPago('');
+    setMostrarModalPago(true);
+  };
+
+  /**
+   * Registra el pago
+   */
+  const confirmarPago = async () => {
+    if (!terapeutaSeleccionado || !onRegistrarPago) return;
+    
+    setProcesandoPago(true);
+    setErrorPago('');
+    
+    try {
+      const datosPago = {
+        terapeutaId: terapeutaSeleccionado.terapeutaId,
+        terapeutaNombre: terapeutaSeleccionado.nombre,
+        mes: mesSeleccionado,
+        mesNombre: obtenerNombreMes(mesSeleccionado),
+        montoPagado: terapeutaSeleccionado.totalPago,
+        pagoPorCitas: terapeutaSeleccionado.totalPagoCitas,
+        pagoPorSombra: terapeutaSeleccionado.totalPagoSombra,
+        numCitas: terapeutaSeleccionado.totalCitas,
+        numCargosSombra: terapeutaSeleccionado.cargosSombra.length,
+        totalHoras: terapeutaSeleccionado.totalHoras,
+        metodoPago,
+        notas: notasPago
+      };
+      
+      await onRegistrarPago(datosPago);
+      
+      setMostrarModalPago(false);
+      // Actualizar el terapeuta seleccionado para reflejar el pago
+      setTerapeutaSeleccionado(prev => ({
+        ...prev,
+        pagoRegistrado: { ...datosPago, id: 'temp' }
+      }));
+    } catch (error) {
+      console.error('Error al registrar pago:', error);
+      setErrorPago(error.message || 'Error al registrar el pago');
+    } finally {
+      setProcesandoPago(false);
+    }
+  };
+
+  /**
+   * Revierte un pago (elimina el registro)
+   */
+  const revertirPago = async () => {
+    if (!terapeutaSeleccionado?.pagoRegistrado || !onEliminarPago) return;
+    
+    const confirmar = window.confirm(
+      `¿Estás seguro de revertir el pago a ${terapeutaSeleccionado.nombre}?\n\nEsto eliminará el registro de pago pero NO afectará las citas ni cargos.`
+    );
+    
+    if (!confirmar) return;
+    
+    try {
+      await onEliminarPago(terapeutaSeleccionado.pagoRegistrado.id);
+      setTerapeutaSeleccionado(prev => ({
+        ...prev,
+        pagoRegistrado: null
+      }));
+    } catch (error) {
+      console.error('Error al revertir pago:', error);
+      alert('Error al revertir el pago: ' + error.message);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-120px)] bg-gray-50">
       {/* Sidebar - Lista de Terapeutas */}
@@ -279,15 +395,33 @@ const PagosTerapeutasGemini = ({
             </div>
           </div>
 
-          {/* Total del mes */}
-          <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg p-3 text-white mb-4">
-            <p className="text-xs opacity-90">Total a pagar este mes</p>
-            <p className="text-2xl font-bold">
-              ${totalGeneralPago.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
-            </p>
-            <p className="text-xs opacity-75 mt-1">
-              {terapeutasConPagos.length} terapeutas
-            </p>
+          {/* Resumen de totales */}
+          <div className="space-y-2 mb-4">
+            {/* Total a pagar */}
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-3 text-white">
+              <p className="text-xs opacity-90">Total del mes</p>
+              <p className="text-xl font-bold">
+                ${totalesGenerales.totalAPagar.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
+              </p>
+            </div>
+            
+            {/* Pagado vs Pendiente */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-2">
+                <p className="text-xs text-green-700">Pagado</p>
+                <p className="text-lg font-bold text-green-600">
+                  ${totalesGenerales.totalPagado.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
+                </p>
+                <p className="text-xs text-green-600">{totalesGenerales.terapeutasPagados} terapeutas</p>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+                <p className="text-xs text-amber-700">Pendiente</p>
+                <p className="text-lg font-bold text-amber-600">
+                  ${totalesGenerales.totalPendiente.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
+                </p>
+                <p className="text-xs text-amber-600">{totalesGenerales.terapeutasPendientes} terapeutas</p>
+              </div>
+            </div>
           </div>
 
           {/* Buscador */}
@@ -314,36 +448,48 @@ const PagosTerapeutasGemini = ({
               </div>
             </div>
           ) : (
-            terapeutasFiltrados.map((terapeuta) => (
-              <div
-                key={terapeuta.nombre}
-                onClick={() => setTerapeutaSeleccionado(terapeuta)}
-                className={`p-4 border-b border-gray-100 cursor-pointer transition-colors ${
-                  terapeutaSeleccionado?.nombre === terapeuta.nombre
-                    ? 'bg-green-50 border-l-4 border-l-green-500'
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-gray-900">{terapeuta.nombre}</div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      {terapeuta.totalCitas} citas • {terapeuta.totalHoras.toFixed(1)}h
-                      {terapeuta.cargosSombra.length > 0 && (
-                        <span className="ml-2 text-purple-600">
-                          + {terapeuta.cargosSombra.length} sombra
-                        </span>
-                      )}
+            terapeutasFiltrados.map((terapeuta) => {
+              const estaPagado = !!terapeuta.pagoRegistrado;
+              
+              return (
+                <div
+                  key={terapeuta.nombre}
+                  onClick={() => setTerapeutaSeleccionado(terapeuta)}
+                  className={`p-4 border-b border-gray-100 cursor-pointer transition-colors ${
+                    terapeutaSeleccionado?.nombre === terapeuta.nombre
+                      ? 'bg-green-50 border-l-4 border-l-green-500'
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{terapeuta.nombre}</span>
+                        {estaPagado && (
+                          <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <CheckCircle size={12} />
+                            Pagado
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-500 mt-1">
+                        {terapeuta.totalCitas} citas • {terapeuta.totalHoras.toFixed(1)}h
+                        {terapeuta.cargosSombra.length > 0 && (
+                          <span className="ml-2 text-purple-600">
+                            + {terapeuta.cargosSombra.length} sombra
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-green-600">
-                      ${terapeuta.totalPago.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
+                    <div className="text-right">
+                      <div className={`text-lg font-bold ${estaPagado ? 'text-green-600' : 'text-gray-900'}`}>
+                        ${terapeuta.totalPago.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -363,14 +509,39 @@ const PagosTerapeutasGemini = ({
             <div className="bg-white border-b border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {terapeutaSeleccionado.nombre}
-                  </h1>
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-2xl font-bold text-gray-900">
+                      {terapeutaSeleccionado.nombre}
+                    </h1>
+                    {terapeutaSeleccionado.pagoRegistrado && (
+                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full flex items-center gap-1 text-sm">
+                        <CheckCircle size={16} />
+                        Pagado
+                      </span>
+                    )}
+                  </div>
                   <p className="text-gray-500">
                     {obtenerNombreMes(mesSeleccionado)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {terapeutaSeleccionado.pagoRegistrado ? (
+                    <button
+                      onClick={revertirPago}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      <Undo2 size={20} />
+                      Revertir Pago
+                    </button>
+                  ) : (
+                    <button
+                      onClick={abrirModalPago}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      <CreditCard size={20} />
+                      Marcar como Pagado
+                    </button>
+                  )}
                   <button
                     className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                     onClick={() => window.print()}
@@ -380,6 +551,33 @@ const PagosTerapeutasGemini = ({
                   </button>
                 </div>
               </div>
+
+              {/* Info del pago si ya está pagado */}
+              {terapeutaSeleccionado.pagoRegistrado && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-4">
+                      <span className="text-green-700">
+                        <strong>Método:</strong> {terapeutaSeleccionado.pagoRegistrado.metodoPago || 'No especificado'}
+                      </span>
+                      {terapeutaSeleccionado.pagoRegistrado.fechaPago && (
+                        <span className="text-green-600">
+                          <strong>Fecha:</strong> {
+                            terapeutaSeleccionado.pagoRegistrado.fechaPago.toDate 
+                              ? terapeutaSeleccionado.pagoRegistrado.fechaPago.toDate().toLocaleDateString('es-MX')
+                              : new Date(terapeutaSeleccionado.pagoRegistrado.fechaPago).toLocaleDateString('es-MX')
+                          }
+                        </span>
+                      )}
+                    </div>
+                    {terapeutaSeleccionado.pagoRegistrado.notas && (
+                      <span className="text-green-600 italic">
+                        "{terapeutaSeleccionado.pagoRegistrado.notas}"
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Resumen de Pago */}
               <div className="grid grid-cols-4 gap-4">
@@ -526,10 +724,19 @@ const PagosTerapeutasGemini = ({
               )}
 
               {/* Resumen Final */}
-              <div className="mt-6 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
+              <div className={`mt-6 border rounded-lg p-4 ${
+                terapeutaSeleccionado.pagoRegistrado 
+                  ? 'bg-green-50 border-green-200' 
+                  : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
+              }`}>
                 <h3 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
                   <DollarSign size={20} />
                   Resumen de Pago - {terapeutaSeleccionado.nombre}
+                  {terapeutaSeleccionado.pagoRegistrado && (
+                    <span className="ml-2 bg-green-200 text-green-800 text-xs px-2 py-1 rounded-full">
+                      ✓ PAGADO
+                    </span>
+                  )}
                 </h3>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
@@ -560,6 +767,120 @@ const PagosTerapeutasGemini = ({
           </>
         )}
       </div>
+
+      {/* Modal de Confirmación de Pago */}
+      {mostrarModalPago && terapeutaSeleccionado && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CreditCard size={28} />
+                  <div>
+                    <h3 className="text-xl font-bold">Confirmar Pago</h3>
+                    <p className="text-green-100 text-sm">Registrar pago a terapeuta</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMostrarModalPago(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+
+            {/* Contenido */}
+            <div className="p-6">
+              {/* Error */}
+              {errorPago && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+                  <AlertCircle size={18} className="text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800">{errorPago}</p>
+                </div>
+              )}
+
+              {/* Resumen del pago */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                <p className="text-sm text-gray-600 mb-1">Terapeuta</p>
+                <p className="font-semibold text-gray-900">{terapeutaSeleccionado.nombre}</p>
+                
+                <p className="text-sm text-gray-600 mt-3 mb-1">Período</p>
+                <p className="font-semibold text-gray-900">{obtenerNombreMes(mesSeleccionado)}</p>
+                
+                <p className="text-sm text-gray-600 mt-3 mb-1">Monto a pagar</p>
+                <p className="text-2xl font-bold text-green-600">
+                  ${terapeutaSeleccionado.totalPago.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {terapeutaSeleccionado.totalCitas} citas + {terapeutaSeleccionado.cargosSombra.length} sombra
+                </p>
+              </div>
+
+              {/* Método de pago */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Método de pago
+                </label>
+                <select
+                  value={metodoPago}
+                  onChange={(e) => setMetodoPago(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                >
+                  <option value="transferencia">Transferencia bancaria</option>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+
+              {/* Notas */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <FileText size={14} className="inline mr-1" />
+                  Notas (opcional)
+                </label>
+                <textarea
+                  value={notasPago}
+                  onChange={(e) => setNotasPago(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  rows={2}
+                  placeholder="Ej: Referencia de transferencia, observaciones..."
+                />
+              </div>
+
+              {/* Botones */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setMostrarModalPago(false)}
+                  disabled={procesandoPago}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmarPago}
+                  disabled={procesandoPago}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50"
+                >
+                  {procesandoPago ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={20} />
+                      Confirmar Pago
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

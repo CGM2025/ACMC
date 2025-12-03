@@ -100,3 +100,14 @@ export {
   eliminarCargoSombra,
   verificarCargoExistente
 } from './cargosSombra';
+
+// Pagos a Terapeutas
+export {
+  obtenerPagosTerapeutas,
+  obtenerPagosTerapeutasPorMes,
+  obtenerPagosPorTerapeuta,
+  registrarPagoTerapeuta,
+  actualizarPagoTerapeuta,
+  eliminarPagoTerapeuta,
+  verificarPagoExistente
+} from './pagosTerapeutas';

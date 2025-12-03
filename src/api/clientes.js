@@ -5,22 +5,37 @@ import {
   getDocs, 
   updateDoc, 
   deleteDoc, 
-  doc 
+  doc,
+  query,
+  where,
+  serverTimestamp
 } from 'firebase/firestore';
 
 /**
  * API para gestión de clientes en Firebase
+ * Con soporte multi-tenant (organizationId)
  */
 
 const COLLECTION_NAME = 'clientes';
 
 /**
- * Obtiene todos los clientes
+ * Obtiene todos los clientes de una organización
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} - Array de clientes
  */
-export const obtenerClientes = async () => {
+export const obtenerClientes = async (organizationId) => {
   try {
-    const snapshot = await getDocs(collection(db, COLLECTION_NAME));
+    if (!organizationId) {
+      console.warn('obtenerClientes: organizationId no proporcionado');
+      return [];
+    }
+
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('organizationId', '==', organizationId)
+    );
+    
+    const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     console.error('Error al obtener clientes:', error);
@@ -31,11 +46,23 @@ export const obtenerClientes = async () => {
 /**
  * Crea un nuevo cliente
  * @param {Object} clienteData - Datos del cliente
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<string>} - ID del cliente creado
  */
-export const crearCliente = async (clienteData) => {
+export const crearCliente = async (clienteData, organizationId) => {
   try {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), clienteData);
+    if (!organizationId) {
+      throw new Error('organizationId es requerido para crear un cliente');
+    }
+
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+      ...clienteData,
+      organizationId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    
+    console.log('✅ Cliente creado:', docRef.id);
     return docRef.id;
   } catch (error) {
     console.error('Error al crear cliente:', error);
@@ -51,7 +78,15 @@ export const crearCliente = async (clienteData) => {
  */
 export const actualizarCliente = async (clienteId, clienteData) => {
   try {
-    await updateDoc(doc(db, COLLECTION_NAME, clienteId), clienteData);
+    // Remover organizationId si viene en los datos para evitar modificarlo
+    const { organizationId, ...datosActualizar } = clienteData;
+    
+    await updateDoc(doc(db, COLLECTION_NAME, clienteId), {
+      ...datosActualizar,
+      updatedAt: serverTimestamp()
+    });
+    
+    console.log('✅ Cliente actualizado:', clienteId);
   } catch (error) {
     console.error('Error al actualizar cliente:', error);
     throw error;
@@ -66,6 +101,7 @@ export const actualizarCliente = async (clienteId, clienteData) => {
 export const eliminarCliente = async (clienteId) => {
   try {
     await deleteDoc(doc(db, COLLECTION_NAME, clienteId));
+    console.log('✅ Cliente eliminado:', clienteId);
   } catch (error) {
     console.error('Error al eliminar cliente:', error);
     throw error;

@@ -67,6 +67,12 @@ import {
   eliminarCargoSombra as eliminarCargoSombraAPI
 } from '../api/cargosSombra';
 
+import {
+  obtenerPagosTerapeutas,
+  registrarPagoTerapeuta as registrarPagoTerapeutaAPI,
+  eliminarPagoTerapeuta as eliminarPagoTerapeutaAPI
+} from '../api/pagosTerapeutas';
+
 /**
  * Custom Hook para manejar la carga, guardado y eliminación de datos
  * 
@@ -80,6 +86,8 @@ export const useData = (currentUser, isLoggedIn) => {
   const organizationId = currentUser?.organizationId || null;
   
   const [servicios, setServicios] = useState([]);
+
+  const [pagosTerapeutas, setPagosTerapeutas] = useState([]);
 
   // Estados para datos
   const [clientes, setClientes] = useState([]);
@@ -267,6 +275,19 @@ export const useData = (currentUser, isLoggedIn) => {
   }, [organizationId]);
 
   /**
+     * Carga todos los pagos a terapeutas
+     */
+  const cargarPagosTerapeutas = useCallback(async () => {
+    try {
+      const data = await obtenerPagosTerapeutas(organizationId);
+      setPagosTerapeutas(data);
+      console.log('✅ Pagos a terapeutas cargados:', data.length);
+    } catch (error) {
+      console.error('Error al cargar pagos a terapeutas:', error);
+    }
+  }, [organizationId]);
+
+  /**
    * Carga todos los datos del sistema
    */
   const cargarTodosLosDatos = useCallback(async () => {
@@ -281,7 +302,8 @@ export const useData = (currentUser, isLoggedIn) => {
         cargarRecibos(),
         cargarUtilidadHistorica(),
         cargarServicios(),
-        cargarCargosSombra()  // ← AGREGAR ESTO
+        cargarCargosSombra(),
+        cargarPagosTerapeutas(),
       ]);
       console.log('✅ Todos los datos cargados');
     } catch (error) {
@@ -369,6 +391,21 @@ export const useData = (currentUser, isLoggedIn) => {
 
   // ==================== FUNCIONES DE GUARDADO ====================
 
+  /**
+   * registra o elimina pagos a terapeutas
+   */
+  const registrarPagoTerapeuta = async (pagoData) => {
+    await registrarPagoTerapeutaAPI(pagoData, organizationId);
+    await cargarPagosTerapeutas();
+    return { success: true };
+  };
+
+  const eliminarPagoTerapeuta = async (pagoId) => {
+    await eliminarPagoTerapeutaAPI(pagoId);
+    await cargarPagosTerapeutas();
+    return { success: true };
+  };
+  
   /**
    * Guarda o actualiza horas trabajadas usando la API
    */
@@ -794,9 +831,15 @@ export const useData = (currentUser, isLoggedIn) => {
     desactivarServicio,
     obtenerPreciosBase,
 
-      // Usuarios
+    // Usuarios
     usuarios,
     cargarUsuarios,
-    vincularUsuario
+    vincularUsuario,
+
+    // Comprobantes de pago a terapeutas
+    pagosTerapeutas,
+    cargarPagosTerapeutas,
+    registrarPagoTerapeuta,
+    eliminarPagoTerapeuta,
   };
 };
