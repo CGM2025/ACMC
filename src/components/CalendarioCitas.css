@@ -4,47 +4,75 @@
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 24px;
-  height: 700px;
+  padding: 16px;
+  height: calc(100vh - 280px);
+  min-height: 500px;
+  max-height: 700px;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
-/* Barra de herramientas */
+/* ==========================================
+   CONTENEDOR DEL CALENDARIO
+   ========================================== */
+.rbc-calendar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden;
+}
+
+/* ==========================================
+   BARRA DE HERRAMIENTAS (TOOLBAR)
+   ========================================== */
 .rbc-toolbar {
   display: flex !important;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 10px;
-  margin-bottom: 15px;
+  padding: 8px;
+  margin-bottom: 8px;
   background-color: #f9fafb;
   border-radius: 8px;
   border: 1px solid #e5e7eb;
+  gap: 8px;
+  min-height: 45px;
+  flex-shrink: 0;
 }
 
 .rbc-toolbar-label {
-  font-size: 1.25rem !important;
+  font-size: 1rem !important;
   font-weight: 600 !important;
   color: #1f2937 !important;
   flex-grow: 1;
   text-align: center;
-  padding: 0 20px;
+  padding: 0 8px;
 }
 
 .rbc-btn-group {
   display: flex !important;
-  gap: 5px;
+  gap: 3px;
+  flex-wrap: nowrap;
 }
 
 .rbc-toolbar button {
-  padding: 8px 16px !important;
-  border-radius: 6px !important;
+  padding: 5px 10px !important;
+  border-radius: 5px !important;
   border: 1px solid #d1d5db !important;
   background-color: white !important;
   color: #374151 !important;
   font-weight: 500 !important;
-  font-size: 0.875rem !important;
+  font-size: 0.75rem !important;
   cursor: pointer !important;
   transition: all 0.2s !important;
+  white-space: nowrap;
 }
 
 .rbc-toolbar button:hover {
@@ -56,4 +84,374 @@
   background-color: #3b82f6 !important;
   color: white !important;
   border-color: #3b82f6 !important;
+}
+
+/* ==========================================
+   VISTA DE MES - CONTROL DE ANCHO
+   ========================================== */
+.rbc-month-view {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed;
+}
+
+.rbc-month-header {
+  background-color: #f9fafb;
+  flex-shrink: 0;
+  display: flex;
+  width: 100%;
+}
+
+.rbc-header {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 2px !important;
+  font-weight: 600 !important;
+  font-size: 0.7rem !important;
+  color: #374151 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  text-transform: capitalize;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rbc-row-bg,
+.rbc-row-content {
+  width: 100% !important;
+}
+
+.rbc-month-row {
+  flex: 1;
+  min-height: 50px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.rbc-row {
+  display: flex;
+  width: 100%;
+}
+
+.rbc-row-segment {
+  flex: 1;
+  min-width: 0;
+  padding: 0 1px;
+}
+
+.rbc-day-bg {
+  flex: 1;
+  min-width: 0;
+}
+
+.rbc-date-cell {
+  padding: 2px 3px !important;
+  text-align: right;
+  font-size: 0.7rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.rbc-date-cell > a {
+  color: #374151 !important;
+  font-weight: 500;
+}
+
+.rbc-off-range-bg {
+  background-color: #f9fafb !important;
+}
+
+.rbc-today {
+  background-color: #eff6ff !important;
+}
+
+.rbc-current {
+  font-weight: bold;
+  color: #3b82f6 !important;
+}
+
+/* ==========================================
+   VISTA DE SEMANA Y DÍA
+   ========================================== */
+.rbc-time-view {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100% !important;
+}
+
+.rbc-time-header {
+  background-color: #f9fafb;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.rbc-time-header-content {
+  border-left: 1px solid #e5e7eb;
+  min-width: 0;
+  flex: 1;
+}
+
+.rbc-time-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.rbc-time-gutter {
+  background-color: #f9fafb;
+  flex-shrink: 0;
+  width: 50px !important;
+  min-width: 50px !important;
+}
+
+.rbc-day-slot {
+  min-width: 0;
+  flex: 1;
+}
+
+.rbc-timeslot-group {
+  min-height: 40px !important;
+}
+
+.rbc-time-slot {
+  border-top: 1px solid #f3f4f6 !important;
+}
+
+.rbc-label {
+  font-size: 0.65rem !important;
+  color: #6b7280 !important;
+  padding: 3px !important;
+}
+
+/* ==========================================
+   VISTA DE AGENDA
+   ========================================== */
+.rbc-agenda-view {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: auto;
+  flex: 1;
+  width: 100% !important;
+}
+
+.rbc-agenda-table {
+  border: none !important;
+  width: 100% !important;
+  table-layout: fixed;
+}
+
+.rbc-agenda-date-cell,
+.rbc-agenda-time-cell {
+  padding: 6px !important;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+
+.rbc-agenda-event-cell {
+  padding: 6px !important;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================
+   EVENTOS (CITAS)
+   ========================================== */
+.rbc-event {
+  border-radius: 3px !important;
+  padding: 1px 3px !important;
+  font-size: 0.65rem !important;
+  cursor: pointer !important;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rbc-event:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.rbc-event-label {
+  font-size: 0.6rem !important;
+  display: none;
+}
+
+.rbc-event-content {
+  font-size: 0.65rem !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rbc-selected {
+  box-shadow: 0 0 0 2px #1e40af !important;
+}
+
+/* ==========================================
+   DRAG AND DROP
+   ========================================== */
+.rbc-addons-dnd .rbc-event {
+  transition: opacity 0.15s;
+}
+
+.rbc-addons-dnd-dragged-event {
+  opacity: 0.5;
+}
+
+.rbc-addons-dnd .rbc-event.rbc-addons-dnd-drag-preview {
+  background-color: #3b82f6 !important;
+  opacity: 0.8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 1000;
+}
+
+.rbc-addons-dnd-over {
+  background-color: #dbeafe !important;
+}
+
+/* ==========================================
+   POPUP "VER MÁS"
+   ========================================== */
+.rbc-overlay {
+  background-color: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
+  padding: 8px !important;
+  max-height: 250px;
+  max-width: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.rbc-overlay-header {
+  font-weight: 600 !important;
+  font-size: 0.8rem !important;
+  color: #1f2937 !important;
+  padding: 5px !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  margin-bottom: 5px !important;
+}
+
+.rbc-show-more {
+  font-size: 0.65rem !important;
+  color: #3b82f6 !important;
+  font-weight: 500;
+  background: transparent !important;
+  padding: 1px 3px !important;
+}
+
+/* ==========================================
+   RESPONSIVE
+   ========================================== */
+@media (max-width: 1400px) {
+  .calendario-container {
+    height: calc(100vh - 260px);
+  }
+  
+  .rbc-header {
+    font-size: 0.65rem !important;
+  }
+  
+  .rbc-event {
+    font-size: 0.6rem !important;
+  }
+}
+
+@media (max-width: 1200px) {
+  .calendario-container {
+    height: calc(100vh - 240px);
+    padding: 12px;
+  }
+  
+  .rbc-toolbar button {
+    padding: 4px 8px !important;
+    font-size: 0.7rem !important;
+  }
+  
+  .rbc-toolbar-label {
+    font-size: 0.9rem !important;
+  }
+  
+  .rbc-header {
+    font-size: 0.6rem !important;
+    padding: 4px 1px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .calendario-container {
+    height: calc(100vh - 200px);
+    min-height: 350px;
+    padding: 8px;
+  }
+  
+  .rbc-toolbar {
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+  }
+  
+  .rbc-toolbar-label {
+    order: -1;
+    width: 100%;
+    text-align: center;
+    font-size: 0.85rem !important;
+  }
+  
+  .rbc-btn-group {
+    justify-content: center;
+  }
+  
+  .rbc-toolbar button {
+    padding: 4px 6px !important;
+    font-size: 0.65rem !important;
+  }
+  
+  .rbc-header {
+    font-size: 0.55rem !important;
+    padding: 3px 1px !important;
+  }
+  
+  .rbc-event {
+    font-size: 0.55rem !important;
+    padding: 1px 2px !important;
+  }
+  
+  .rbc-show-more {
+    font-size: 0.55rem !important;
+  }
+}
+
+/* ==========================================
+   SLOTS SELECCIONABLES
+   ========================================== */
+.rbc-day-slot .rbc-time-slot {
+  cursor: pointer;
+}
+
+.rbc-day-slot .rbc-time-slot:hover {
+  background-color: #f0f9ff;
+}
+
+.rbc-month-row .rbc-day-bg {
+  cursor: pointer;
+}
+
+.rbc-month-row .rbc-day-bg:hover {
+  background-color: #f0f9ff;
 }

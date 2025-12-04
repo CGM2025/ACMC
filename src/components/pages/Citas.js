@@ -1,36 +1,9 @@
-import React from 'react';
-import { Plus, Upload, Search, Filter, X, Calendar, Edit, Trash2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Upload, Search, Filter, X, Calendar, Edit, Trash2, Users, User } from 'lucide-react';
 import CalendarioCitas from '../CalendarioCitas';
 
 /**
  * Componente Citas - Gestión de citas programadas
- * 
- * @param {Object} props
- * @param {Array} props.citas - Lista de todas las citas
- * @param {string} props.searchTerm - Término de búsqueda
- * @param {Function} props.setSearchTerm - Función para actualizar búsqueda
- * @param {boolean} props.showFilters - Si se muestran los filtros
- * @param {Function} props.setShowFilters - Función para toggle filtros
- * @param {string} props.filterEstado - Filtro de estado actual
- * @param {Function} props.setFilterEstado - Función para actualizar filtro estado
- * @param {string} props.filterTerapeuta - Filtro de terapeuta actual
- * @param {Function} props.setFilterTerapeuta - Función para actualizar filtro terapeuta
- * @param {string} props.filterFechaInicio - Filtro fecha inicio
- * @param {Function} props.setFilterFechaInicio - Función para actualizar fecha inicio
- * @param {string} props.filterFechaFin - Filtro fecha fin
- * @param {Function} props.setFilterFechaFin - Función para actualizar fecha fin
- * @param {string} props.vistaCalendario - Vista actual ('lista' o 'calendario')
- * @param {Function} props.setVistaCalendario - Función para cambiar vista
- * @param {boolean} props.importandoWord - Si está importando desde Word
- * @param {Function} props.filtrarCitas - Función para filtrar citas
- * @param {Function} props.contarFiltrosActivos - Función para contar filtros activos
- * @param {Function} props.limpiarFiltros - Función para limpiar filtros
- * @param {Function} props.openModal - Función para abrir modal
- * @param {Function} props.eliminarCita - Función para eliminar cita
- * @param {Function} props.importarDesdeWord - Función para importar desde Word
- * @param {Function} props.handleCalendarioSelectCita - Handler para seleccionar cita en calendario
- * @param {Function} props.handleCalendarioSelectSlot - Handler para seleccionar slot en calendario
- * @param {Function} props.handleCalendarioEventDrop - Handler para arrastrar evento en calendario
  */
 const Citas = ({
   citas,
@@ -59,200 +32,245 @@ const Citas = ({
   handleCalendarioSelectSlot,
   handleCalendarioEventDrop
 }) => {
-  const citasFiltradas = filtrarCitas();
+  // Estado local para filtro de cliente
+  const [filterCliente, setFilterCliente] = useState('todos');
+
+  // Obtener listas únicas de terapeutas y clientes
+  const terapeutasUnicos = useMemo(() => {
+    return [...new Set(citas.map(c => c.terapeuta))].filter(Boolean).sort();
+  }, [citas]);
+
+  const clientesUnicos = useMemo(() => {
+    return [...new Set(citas.map(c => c.cliente))].filter(Boolean).sort();
+  }, [citas]);
+
+  // Filtrar citas incluyendo el filtro de cliente
+  const citasFiltradas = useMemo(() => {
+    let resultado = filtrarCitas();
+    
+    // Aplicar filtro de cliente adicional
+    if (filterCliente !== 'todos') {
+      resultado = resultado.filter(cita => cita.cliente === filterCliente);
+    }
+    
+    return resultado;
+  }, [filtrarCitas, filterCliente]);
+
+  // Contar filtros activos incluyendo cliente
+  const filtrosActivosTotal = useMemo(() => {
+    let count = contarFiltrosActivos();
+    if (filterCliente !== 'todos') count++;
+    return count;
+  }, [contarFiltrosActivos, filterCliente]);
+
+  // Limpiar todos los filtros
+  const limpiarTodosFiltros = () => {
+    limpiarFiltros();
+    setFilterCliente('todos');
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Citas Programadas</h2>
-        <div className="flex gap-2">
-          {/* Botón Nueva Cita */}
-          <button
-            onClick={() => openModal('cita')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-          >
-            <Plus size={18} />
-            Nueva Cita
-          </button>
+    <div className="space-y-4 w-full overflow-hidden">
+      {/* Header - Botones a la izquierda */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <h2 className="text-2xl font-bold mr-2">Citas</h2>
+        
+        {/* Botón Nueva Cita */}
+        <button
+          onClick={() => openModal('cita')}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+        >
+          <Plus size={18} />
+          Nueva Cita
+        </button>
 
-          {/* Botón Importar Word */}
-          <label className={`px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-all ${
-            importandoWord 
-              ? 'bg-gray-400 cursor-not-allowed' 
-              : 'bg-green-600 hover:bg-green-700 text-white'
-          }`}>
-            <Upload size={18} />
-            {importandoWord ? 'Importando...' : 'Importar Word'}
-            <input
-              type="file"
-              accept=".docx"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  importarDesdeWord(file);
-                }
-                e.target.value = '';
-              }}
-              disabled={importandoWord}
-            />
-          </label>
-          
-          {/* Botones de vista Lista/Calendario */}
+        {/* Botón Importar Word */}
+        <label className={`px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-all text-sm ${
+          importandoWord 
+            ? 'bg-gray-400 cursor-not-allowed' 
+            : 'bg-green-600 hover:bg-green-700 text-white'
+        }`}>
+          <Upload size={18} />
+          {importandoWord ? 'Importando...' : 'Importar Word'}
+          <input
+            type="file"
+            accept=".docx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files[0];
+              if (file) {
+                importarDesdeWord(file);
+              }
+              e.target.value = '';
+            }}
+            disabled={importandoWord}
+          />
+        </label>
+        
+        {/* Botones de vista Lista/Calendario */}
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
           <button
             onClick={() => setVistaCalendario('lista')}
-            className={`px-4 py-2 rounded-lg transition-all ${
+            className={`px-3 py-1.5 rounded-md transition-all text-sm ${
               vistaCalendario === 'lista' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ? 'bg-white text-gray-800 shadow-sm' 
+                : 'text-gray-600 hover:text-gray-800'
             }`}
           >
             Lista
           </button>
           <button
             onClick={() => setVistaCalendario('calendario')}
-            className={`px-4 py-2 rounded-lg transition-all ${
+            className={`px-3 py-1.5 rounded-md transition-all text-sm ${
               vistaCalendario === 'calendario' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ? 'bg-white text-gray-800 shadow-sm' 
+                : 'text-gray-600 hover:text-gray-800'
             }`}
           >
             Calendario
           </button>
         </div>
+
+        {/* Contador de citas */}
+        <span className="text-sm text-gray-500 ml-auto">
+          {citasFiltradas.length} de {citas.length} citas
+        </span>
       </div>
 
-      {/* Barra de búsqueda y filtros */}
-      <div className="bg-white rounded-lg shadow p-6 space-y-4">
-        <div className="flex gap-3">
-          {/* Búsqueda */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Buscar por terapeuta, cliente o fecha..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+      {/* Filtros rápidos - Visibles en ambas vistas */}
+      <div className="bg-white rounded-lg shadow p-3">
+        <div className="flex gap-3 flex-wrap items-center">
+          {/* Filtro Terapeuta */}
+          <div className="flex items-center gap-2">
+            <User size={16} className="text-gray-400" />
+            <select
+              value={filterTerapeuta}
+              onChange={(e) => setFilterTerapeuta(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm min-w-[180px]"
+            >
+              <option value="todos">Todos los terapeutas</option>
+              {terapeutasUnicos.map((terapeuta, index) => (
+                <option key={index} value={terapeuta}>{terapeuta}</option>
+              ))}
+            </select>
           </div>
 
-          {/* Botón Filtros */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
-              showFilters ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            <Filter size={20} />
-            Filtros
-            {contarFiltrosActivos() > 0 && (
-              <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                {contarFiltrosActivos()}
-              </span>
-            )}
-          </button>
+          {/* Filtro Cliente */}
+          <div className="flex items-center gap-2">
+            <Users size={16} className="text-gray-400" />
+            <select
+              value={filterCliente}
+              onChange={(e) => setFilterCliente(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm min-w-[180px]"
+            >
+              <option value="todos">Todos los clientes</option>
+              {clientesUnicos.map((cliente, index) => (
+                <option key={index} value={cliente}>{cliente}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro Estado - Solo en vista lista o siempre visible */}
+          <div className="flex items-center gap-2">
+            <select
+              value={filterEstado}
+              onChange={(e) => setFilterEstado(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="todos">Todos los estados</option>
+              <option value="pendiente">🟡 Pendiente</option>
+              <option value="confirmada">🔵 Confirmada</option>
+              <option value="cancelada">🔴 Cancelada</option>
+              <option value="completada">🟢 Completada</option>
+            </select>
+          </div>
 
           {/* Botón Limpiar Filtros */}
-          {contarFiltrosActivos() > 0 && (
+          {filtrosActivosTotal > 0 && (
             <button
-              onClick={limpiarFiltros}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+              onClick={limpiarTodosFiltros}
+              className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all text-sm"
             >
-              <X size={20} />
-              Limpiar
+              <X size={16} />
+              Limpiar ({filtrosActivosTotal})
+            </button>
+          )}
+
+          {/* Más filtros - Solo vista lista */}
+          {vistaCalendario === 'lista' && (
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border transition-all text-sm ml-auto ${
+                showFilters ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <Filter size={16} />
+              Más filtros
             </button>
           )}
         </div>
 
-        {/* Panel de Filtros */}
-        {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t">
-            {/* Filtro Estado */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
-              <select
-                value={filterEstado}
-                onChange={(e) => setFilterEstado(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="todos">Todos</option>
-                <option value="pendiente">Pendiente</option>
-                <option value="confirmada">Confirmada</option>
-                <option value="cancelada">Cancelada</option>
-                <option value="completada">Completada</option>
-              </select>
-            </div>
-
-            {/* Filtro Terapeuta */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Terapeuta</label>
-              <select
-                value={filterTerapeuta}
-                onChange={(e) => setFilterTerapeuta(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="todos">Todos</option>
-                {[...new Set(citas.map(c => c.terapeuta))].map((terapeuta, index) => (
-                  <option key={index} value={terapeuta}>{terapeuta}</option>
-                ))}
-              </select>
+        {/* Panel de Filtros adicionales - Solo en vista Lista */}
+        {vistaCalendario === 'lista' && showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3 mt-3 border-t">
+            {/* Búsqueda */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+              />
             </div>
 
             {/* Filtro Fecha Inicio */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Desde</label>
               <input
                 type="date"
                 value={filterFechaInicio}
                 onChange={(e) => setFilterFechaInicio(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                placeholder="Desde"
               />
             </div>
 
             {/* Filtro Fecha Fin */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hasta</label>
               <input
                 type="date"
                 value={filterFechaFin}
                 onChange={(e) => setFilterFechaFin(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                placeholder="Hasta"
               />
             </div>
           </div>
         )}
-
-        {/* Contador de citas */}
-        <div className="flex items-center justify-between text-sm text-gray-600 pt-2 border-t">
-          <span>Mostrando {citasFiltradas.length} de {citas.length} citas</span>
-          {contarFiltrosActivos() > 0 && (
-            <span className="text-blue-600 font-medium">{contarFiltrosActivos()} filtro(s) activo(s)</span>
-          )}
-        </div>
       </div>
 
       {/* Vista de Calendario o Lista */}
       {vistaCalendario === 'calendario' ? (
-        <CalendarioCitas
-          citas={citasFiltradas}
-          onSelectCita={handleCalendarioSelectCita}
-          onSelectSlot={handleCalendarioSelectSlot}
-          onEventDrop={handleCalendarioEventDrop}
-        />
+        <div className="w-full overflow-hidden">
+          <CalendarioCitas
+            citas={citasFiltradas}
+            onSelectCita={handleCalendarioSelectCita}
+            onSelectSlot={handleCalendarioSelectSlot}
+            onEventDrop={handleCalendarioEventDrop}
+          />
+        </div>
       ) : (
         <>
           {citasFiltradas.length > 0 ? (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Citas ({citasFiltradas.length})</h3>
-              <div className="max-h-96 overflow-y-auto space-y-2">
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="max-h-[calc(100vh-380px)] overflow-y-auto space-y-2">
                 {citasFiltradas.map((cita) => (
                   <div key={cita.id} className="bg-blue-50 rounded-lg p-3 border border-blue-200 flex justify-between items-center hover:bg-blue-100 transition-all">
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-800">{cita.terapeuta} con {cita.cliente}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-800 truncate">{cita.terapeuta} con {cita.cliente}</p>
                       <p className="text-sm text-gray-600">{cita.fecha} | {cita.horaInicio} - {cita.horaFin}</p>
-                      <p className="text-sm text-gray-600 mt-1">📋 {cita.tipoTerapia || 'No especificado'}</p>
+                      <p className="text-sm text-gray-600 mt-1 truncate">📋 {cita.tipoTerapia || 'No especificado'}</p>
                       <span className={`inline-block mt-1 px-2 py-1 text-xs rounded-full font-medium ${
                         cita.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
                         cita.estado === 'confirmada' ? 'bg-green-100 text-green-800' :
@@ -262,7 +280,7 @@ const Citas = ({
                         {cita.estado}
                       </span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-shrink-0 ml-2">
                       <button 
                         onClick={() => openModal('cita', cita)} 
                         className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-all"
@@ -285,7 +303,9 @@ const Citas = ({
               <Calendar className="mx-auto text-gray-300 mb-4" size={64} />
               <p className="text-gray-500 text-lg">No se encontraron citas</p>
               <p className="text-gray-400 mt-2">
-                {contarFiltrosActivos() > 0 ? 'Intenta ajustar los filtros' : 'Ve a "Bloques de Citas" para generar nuevas citas'}
+                {filtrosActivosTotal > 0 
+                  ? 'Intenta ajustar los filtros' 
+                  : 'Ve a Configuración → Horarios Recurrentes para generar citas'}
               </p>
             </div>
           )}
