@@ -34,7 +34,6 @@ import Pagos from './components/pages/Pagos';
 import Horas from './components/pages/Horas';
 import Terapeutas from './components/pages/Terapeutas';
 import Clientes from './components/pages/Clientes';
-import BloquesCitas from './components/pages/BloquesCitas';
 import Citas from './components/pages/Citas';
 import Dashboard from './components/pages/Dashboard';
 import EstadoCuentaClientes from './components/pages/EstadoCuentaClientes';
@@ -256,11 +255,6 @@ const SistemaGestion = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // ← AGREGAR ESTA LÍNEA
   const [refreshKey, setRefreshKey] = useState(0); // ← NUEVO estado
 
-  const diasSemanaOptions = [
-    { value: 1, label: 'Lunes' }, { value: 2, label: 'Martes' }, { value: 3, label: 'Miércoles' },
-    { value: 4, label: 'Jueves' }, { value: 5, label: 'Viernes' }, { value: 6, label: 'Sábado' }, { value: 0, label: 'Domingo' }
-  ];
-
   const meses = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
@@ -345,16 +339,10 @@ const SistemaGestion = () => {
     dragOverDay,
     
     // Estados de generación
-    horarios,
-    setHorarios,
-    nuevoHorario,
-    setNuevoHorario,
     fechaInicio,
     setFechaInicio,
     fechaFin,
     setFechaFin,
-    citasGeneradas,
-    mostrarResultado,
     
     // Estados de importación
     importandoWord,
@@ -994,15 +982,6 @@ const SistemaGestion = () => {
     }
   };
 
-  const toggleDia = (dia) => {
-    setNuevoHorario(prev => ({
-      ...prev,
-      diasSemana: prev.diasSemana.includes(dia)
-        ? prev.diasSemana.filter(d => d !== dia)
-        : [...prev.diasSemana, dia]
-    }));
-  };
-
   // ========================================
   // HANDLERS PARA CALENDARIO
   // ========================================
@@ -1226,27 +1205,6 @@ const SistemaGestion = () => {
                             guardandoRecibos={guardandoRecibos} // ← AGREGAR
                             reporteGenerado={reporteGenerado} // ← AGREGAR
                           />
-                        )}
-
-                        {activeTab === 'bloques' && hasPermission('bloques') && (
-                          <BloquesCitas
-                            terapeutas={terapeutas}
-                            clientes={clientes}
-                            diasSemanaOptions={diasSemanaOptions}
-                            nuevoHorario={nuevoHorario}
-                            setNuevoHorario={setNuevoHorario}
-                            horarios={horarios}
-                            fechaInicio={fechaInicio}
-                            setFechaInicio={setFechaInicio}
-                            fechaFin={fechaFin}
-                            setFechaFin={setFechaFin}
-                            citasGeneradas={citasGeneradas}
-                            mostrarResultado={mostrarResultado}
-                            toggleDia={toggleDia}
-                            agregarHorario={agregarHorario}
-                            eliminarHorario={eliminarHorario}
-                            generarCitas={generarCitas}
-                            guardarCitas={guardarCitas} />
                         )}
 
                         {activeTab === 'citas' && hasPermission('citas') && (

@@ -12,10 +12,9 @@ import { actualizarCita, crearCitasEnBatch } from '../api';
  * @param {Function} cargarCitas - Función para recargar citas desde Firebase
  * @param {Object} preciosBasePorTerapia - Precios base por tipo de terapia
  * @param {string} organizationId - ID de la organización
- * @param {Array} asignaciones - Lista de asignaciones de servicio (NUEVO)
  * @returns {Object} Estados y funciones para gestionar citas
  */
-export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePorTerapia, organizationId, asignaciones = []) => {
+export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePorTerapia, organizationId) => {
   
   // ========================================
   // ESTADOS DE FILTRADO Y BÚSQUEDA
@@ -40,86 +39,9 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
   const [dragOverDay, setDragOverDay] = useState(null);
 
   // ========================================
-  // ESTADOS DE GENERACIÓN DE CITAS
-  // ========================================
-  const [horarios, setHorarios] = useState([]);
-  const [nuevoHorario, setNuevoHorario] = useState({ 
-    terapeuta: '', 
-    cliente: '', 
-    diasSemana: [], 
-    horaInicio: '08:00', 
-    horaFin: '12:00' 
-  });
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
-  const [citasGeneradas, setCitasGeneradas] = useState([]);
-  const [mostrarResultado, setMostrarResultado] = useState(false);
-
-  // ========================================
   // ESTADOS DE IMPORTACIÓN
   // ========================================
   const [importandoWord, setImportandoWord] = useState(false);
-
-  // ========================================
-  // FUNCIÓN: BUSCAR ASIGNACIÓN (NUEVO)
-  // ========================================
-  const buscarAsignacionParaCita = useCallback((clienteNombre, terapeutaNombre, horaInicio) => {
-    if (!asignaciones || asignaciones.length === 0) return null;
-    
-    // Normalizar nombres para comparación flexible
-    const normalizar = (str) => (str || '').toLowerCase().trim();
-    
-    const nombresCoinciden = (nombre1, nombre2) => {
-      const n1 = normalizar(nombre1);
-      const n2 = normalizar(nombre2);
-      if (!n1 || !n2) return false;
-      
-      // Comparación exacta
-      if (n1 === n2) return true;
-      
-      // Uno contiene al otro
-      if (n1.includes(n2) || n2.includes(n1)) return true;
-      
-      // Comparar solo primer nombre
-      const primerNombre1 = n1.split(' ')[0];
-      const primerNombre2 = n2.split(' ')[0];
-      if (primerNombre1 === primerNombre2 && primerNombre1.length > 2) return true;
-      
-      return false;
-    };
-    
-    // Filtrar asignaciones activas que coincidan
-    const asignacionesActivas = asignaciones.filter(a => a.activo !== false);
-    
-    const asignacionesCoincidentes = asignacionesActivas.filter(asig => {
-      const matchCliente = nombresCoinciden(asig.clienteNombre, clienteNombre);
-      const matchTerapeuta = nombresCoinciden(asig.terapeutaNombre, terapeutaNombre);
-      return matchCliente && matchTerapeuta;
-    });
-
-    if (asignacionesCoincidentes.length === 0) return null;
-    if (asignacionesCoincidentes.length === 1) return asignacionesCoincidentes[0];
-
-    // Si hay múltiples, intentar filtrar por horario
-    if (horaInicio) {
-      const horaNum = parseInt(horaInicio.split(':')[0]);
-      
-      for (const asig of asignacionesCoincidentes) {
-        if (asig.condicion?.tipo === 'horario' && asig.condicion.horaInicio && asig.condicion.horaFin) {
-          const inicioNum = parseInt(asig.condicion.horaInicio.split(':')[0]);
-          const finNum = parseInt(asig.condicion.horaFin.split(':')[0]);
-          
-          if (horaNum >= inicioNum && horaNum < finNum) {
-            return asig;
-          }
-        }
-      }
-    }
-
-    // Retornar la primera que tenga condición "siempre" o la primera disponible
-    return asignacionesCoincidentes.find(a => !a.condicion?.tipo || a.condicion.tipo === 'siempre') 
-      || asignacionesCoincidentes[0];
-  }, [asignaciones]);
 
   // ========================================
   // FUNCIÓN: FILTRAR CITAS
@@ -244,7 +166,6 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
     }
 
     try {
-      // ✅ Usar la función de la API
       await actualizarCita(draggedCita.id, { fecha: nuevaFechaStr });
       
       await cargarCitas();
@@ -263,205 +184,148 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
   }, []);
 
   // ========================================
-  // FUNCIÓN: IMPORTAR DESDE WORD (ACTUALIZADA CON ASIGNACIONES)
+  // FUNCIÓN: IMPORTAR DESDE WORD
   // ========================================
-  // 
-  // Esta versión soporta el formato real de tus documentos Word:
-  // Columnas: [Fecha, Hora inicio, Hora fin, Tiempo total, Costo/hora, Costo total, Paciente]
-  // Fecha formato: dd-mm-yy (ej: 04-11-25)
-  // Hora formato: 12h con am/pm (ej: 3:30 pm)
-  // El nombre del terapeuta se extrae del nombre del archivo
-  //
-  // ✨ NUEVO: Usa las asignaciones configuradas para determinar servicio y precios
-  //
   const importarDesdeWord = useCallback(async (file) => {
     setImportandoWord(true);
     try {
-      // ========================================
-      // PASO 1: Extraer nombre del terapeuta del archivo
-      // ========================================
+      // Extraer nombre del terapeuta del archivo
       const nombreArchivo = file.name.replace('.docx', '').replace('.doc', '');
-      const partesNombre = nombreArchivo.split('_');
-      const posibleNombreTerapeuta = partesNombre[0];
       
+      // Buscar terapeuta por primer nombre
+      const primerNombreArchivo = nombreArchivo.split('_')[0].toLowerCase();
       const terapeutaObj = terapeutas.find(t => 
-        t.nombre.toLowerCase().includes(posibleNombreTerapeuta.toLowerCase()) ||
-        posibleNombreTerapeuta.toLowerCase().includes(t.nombre.split(' ')[0].toLowerCase())
+        t.nombre.toLowerCase().startsWith(primerNombreArchivo) ||
+        t.nombre.toLowerCase().includes(primerNombreArchivo)
       );
 
       if (!terapeutaObj) {
-        alert(`❌ No se encontró un terapeuta que coincida con "${posibleNombreTerapeuta}".\n\nAsegúrate de que el nombre del archivo comience con el nombre del terapeuta (ej: Liz_F_Horas_octubre.docx)`);
-        setImportandoWord(false);
+        alert(`❌ No se encontró un terapeuta que coincida con "${primerNombreArchivo}"\n\nAsegúrate que el nombre del archivo empiece con el nombre del terapeuta.`);
         return;
       }
 
       console.log(`✅ Terapeuta identificado: ${terapeutaObj.nombre}`);
 
-      // ========================================
-      // PASO 2: Leer el documento Word
-      // ========================================
+      // Leer contenido del Word
       const arrayBuffer = await file.arrayBuffer();
-      const result = await mammoth.convertToHtml({ arrayBuffer });
-      const html = result.value;
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      const texto = result.value;
       
-      const parser = new DOMParser();
-      const docHtml = parser.parseFromString(html, 'text/html');
-      const tabla = docHtml.querySelector('table');
-      
-      if (!tabla) {
-        alert('❌ No se encontró una tabla en el documento');
-        setImportandoWord(false);
-        return;
-      }
+      console.log('📄 Contenido extraído:', texto.substring(0, 500));
 
-      // ========================================
-      // PASO 3: Funciones de conversión
-      // ========================================
+      // Parsear las líneas
+      const lineas = texto.split('\n').filter(l => l.trim());
       
+      // Función para convertir hora 12h a 24h
+      const convertirHora12a24 = (horaStr) => {
+        if (!horaStr) return null;
+        
+        const hora = horaStr.toLowerCase().trim();
+        const match = hora.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?/i);
+        
+        if (!match) return null;
+        
+        let horas = parseInt(match[1]);
+        const minutos = match[2] ? match[2] : '00';
+        const periodo = match[3]?.toLowerCase().replace('.', '');
+        
+        if (periodo === 'pm' && horas !== 12) {
+          horas += 12;
+        } else if (periodo === 'am' && horas === 12) {
+          horas = 0;
+        }
+        
+        return `${String(horas).padStart(2, '0')}:${minutos}`;
+      };
+
+      // Función para convertir fecha
       const convertirFecha = (fechaStr) => {
         if (!fechaStr) return null;
-        const partes = fechaStr.trim().split('-');
+        
+        const partes = fechaStr.split(/[-\/]/);
         if (partes.length !== 3) return null;
         
-        let [dia, mes, anio] = partes;
-        if (anio.length === 2) anio = '20' + anio;
-        dia = dia.padStart(2, '0');
-        mes = mes.padStart(2, '0');
+        let dia = partes[0].padStart(2, '0');
+        let mes = partes[1].padStart(2, '0');
+        let año = partes[2];
         
-        return `${anio}-${mes}-${dia}`;
-      };
-
-      const convertirHora = (horaStr) => {
-        if (!horaStr) return null;
-        let hora = horaStr.trim().toLowerCase();
-        
-        const esPM = hora.includes('pm');
-        const esAM = hora.includes('am');
-        hora = hora.replace('pm', '').replace('am', '').trim();
-        
-        let horas, minutos;
-        
-        if (hora.includes(':')) {
-          const partes = hora.split(':');
-          horas = parseInt(partes[0], 10);
-          minutos = partes[1].padStart(2, '0');
-        } else {
-          horas = parseInt(hora, 10);
-          minutos = '00';
+        if (año.length === 2) {
+          año = '20' + año;
         }
         
-        if (isNaN(horas)) return null;
-        
-        if (esPM && horas !== 12) horas += 12;
-        else if (esAM && horas === 12) horas = 0;
-        
-        return `${horas.toString().padStart(2, '0')}:${minutos}`;
-      };
-      
-      const calcularDuracionHoras = (horaInicio, horaFin) => {
-        const [horasInicio, minutosInicio] = horaInicio.split(':').map(Number);
-        const [horasFin, minutosFin] = horaFin.split(':').map(Number);
-        
-        const totalMinutosInicio = horasInicio * 60 + minutosInicio;
-        const totalMinutosFin = horasFin * 60 + minutosFin;
-        
-        return (totalMinutosFin - totalMinutosInicio) / 60;
+        return `${año}-${mes}-${dia}`;
       };
 
-      // ========================================
-      // PASO 4: Procesar las filas de la tabla
-      // ========================================
-      const filas = Array.from(tabla.querySelectorAll('tr'));
+      // Función para calcular duración
+      const calcularDuracionHoras = (horaInicio, horaFin) => {
+        const [h1, m1] = horaInicio.split(':').map(Number);
+        const [h2, m2] = horaFin.split(':').map(Number);
+        const minutosInicio = h1 * 60 + m1;
+        const minutosFin = h2 * 60 + m2;
+        return (minutosFin - minutosInicio) / 60;
+      };
+
       const citasImportadas = [];
       const errores = [];
-      let asignacionesUsadas = 0;
-      let asignacionesNoEncontradas = 0;
 
-      for (let i = 1; i < filas.length; i++) {
-        const celdas = Array.from(filas[i].querySelectorAll('td, th')).map(c => c.textContent.trim());
+      // Procesar cada línea (saltar header)
+      for (let i = 1; i < lineas.length; i++) {
+        const linea = lineas[i].trim();
+        if (!linea) continue;
+
+        // Separar por tabs o múltiples espacios
+        const columnas = linea.split(/\t+|\s{2,}/).map(c => c.trim()).filter(c => c);
         
-        let fechaOriginal, horaInicioOriginal, horaFinOriginal, costoPorHoraOriginal, pacienteNombre;
-        
-        if (celdas.length >= 7) {
-          fechaOriginal = celdas[0];
-          horaInicioOriginal = celdas[1];
-          horaFinOriginal = celdas[2];
-          costoPorHoraOriginal = celdas[4];
-          pacienteNombre = celdas[6];
-        } else if (celdas.length >= 6) {
-          fechaOriginal = celdas[0];
-          horaInicioOriginal = celdas[1];
-          horaFinOriginal = celdas[2];
-          costoPorHoraOriginal = celdas[3];
-          pacienteNombre = celdas[5];
-        } else {
-          console.warn(`⚠️ Fila ${i + 1}: Solo tiene ${celdas.length} columnas, saltando...`);
-          continue;
-        }
-        
-        pacienteNombre = pacienteNombre.split('\n')[0].trim();
-        
-        if (!fechaOriginal || !horaInicioOriginal || !horaFinOriginal || !pacienteNombre) {
-          console.warn(`⚠️ Fila ${i + 1}: Datos incompletos, saltando...`);
+        if (columnas.length < 7) {
+          if (columnas.length > 0 && columnas[0].match(/\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/)) {
+            errores.push(`Fila ${i + 1}: Formato incompleto - ${columnas.join(' | ')}`);
+          }
           continue;
         }
 
-        const fechaConvertida = convertirFecha(fechaOriginal);
-        const horaInicio = convertirHora(horaInicioOriginal);
-        const horaFin = convertirHora(horaFinOriginal);
+        const [fechaStr, horaInicioStr, horaFinStr, , , , clienteStr] = columnas;
 
-        if (!fechaConvertida || !horaInicio || !horaFin) {
-          errores.push(`Fila ${i + 1}: Error al convertir fecha/hora (${fechaOriginal}, ${horaInicioOriginal}, ${horaFinOriginal})`);
+        // Convertir fecha
+        const fechaConvertida = convertirFecha(fechaStr);
+        if (!fechaConvertida) {
+          errores.push(`Fila ${i + 1}: Fecha inválida "${fechaStr}"`);
+          continue;
+        }
+
+        // Convertir horas
+        const horaInicio = convertirHora12a24(horaInicioStr);
+        const horaFin = convertirHora12a24(horaFinStr);
+        
+        if (!horaInicio || !horaFin) {
+          errores.push(`Fila ${i + 1}: Hora inválida - inicio: "${horaInicioStr}", fin: "${horaFinStr}"`);
           continue;
         }
 
         // Buscar cliente
+        const nombreClienteLower = clienteStr.toLowerCase().trim();
         const clienteObj = clientes.find(c => 
-          c.nombre.toLowerCase() === pacienteNombre.toLowerCase() ||
-          c.nombre.toLowerCase().includes(pacienteNombre.toLowerCase()) ||
-          pacienteNombre.toLowerCase().includes(c.nombre.toLowerCase())
+          c.nombre.toLowerCase() === nombreClienteLower ||
+          c.nombre.toLowerCase().includes(nombreClienteLower) ||
+          nombreClienteLower.includes(c.nombre.toLowerCase().split(' ')[0])
         );
 
         if (!clienteObj) {
-          errores.push(`Fila ${i + 1}: Cliente no encontrado: "${pacienteNombre}"`);
+          errores.push(`Fila ${i + 1}: Cliente no encontrado "${clienteStr}"`);
           continue;
         }
 
-        // ========================================
-        // ✨ NUEVO: Buscar asignación configurada
-        // ========================================
-        const asignacion = buscarAsignacionParaCita(clienteObj.nombre, terapeutaObj.nombre, horaInicio);
-        
-        let tipoTerapia, costoPorHora, costoTerapeuta;
-        
-        if (asignacion) {
-          // ✅ Usar datos de la asignación
-          tipoTerapia = asignacion.servicioNombre;
-          costoPorHora = asignacion.precioCliente;
-          costoTerapeuta = asignacion.pagoTerapeuta;
-          asignacionesUsadas++;
-        } else {
-          // ❌ Fallback: Usar comportamiento anterior
-          tipoTerapia = 'Sesión de ABA estándar';
-          asignacionesNoEncontradas++;
-          
-          // Usar el costo del documento si está disponible
-          costoPorHora = parseFloat(costoPorHoraOriginal) || 0;
-          if (!costoPorHora || costoPorHora === 0) {
-            const precioCliente = clienteObj.preciosPersonalizados?.[tipoTerapia];
-            const precioBase = preciosBasePorTerapia[tipoTerapia] || 450;
-            costoPorHora = precioCliente || precioBase;
-          }
-          
-          // Costo del terapeuta (fallback)
-          const costoTerapeutaCliente = terapeutaObj.costosPorCliente?.[clienteObj.id];
-          const costoTerapeutaServicio = terapeutaObj.costosPorServicio?.[tipoTerapia];
-          costoTerapeuta = costoTerapeutaCliente || costoTerapeutaServicio || 200;
-        }
+        // Determinar tipo de terapia y precios
+        const tipoTerapia = 'Sesión de ABA estándar';
+        const precioCliente = clienteObj.preciosPersonalizados?.[tipoTerapia];
+        const precioBase = preciosBasePorTerapia[tipoTerapia] || 450;
+        const costoPorHora = precioCliente || precioBase;
 
-        // Calcular totales
         const duracionHoras = calcularDuracionHoras(horaInicio, horaFin);
         const costoTotal = costoPorHora * duracionHoras;
+
+        const costoTerapeutaCliente = terapeutaObj.costosPorCliente?.[clienteObj.id];
+        const costoTerapeutaServicio = terapeutaObj.costosPorServicio?.[tipoTerapia];
+        const costoTerapeuta = costoTerapeutaCliente || costoTerapeutaServicio || 200;
         const costoTerapeutaTotal = costoTerapeuta * duracionHoras;
 
         citasImportadas.push({
@@ -472,20 +336,16 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
           horaFin: horaFin,
           estado: 'completada',
           tipoTerapia: tipoTerapia,
-          servicio: tipoTerapia, // Agregar también como servicio
           costoPorHora,
           costoTotal,
           costoTerapeuta,
-          costoTerapeutaTotal,
-          // Marcar si vino de una asignación
-          tieneAsignacion: !!asignacion,
-          asignacionId: asignacion?.id || null
+          costoTerapeutaTotal
         });
+
+        console.log(`✅ Fila ${i + 1}: ${fechaConvertida} | ${clienteObj.nombre} | ${horaInicio}-${horaFin}`);
       }
 
-      // ========================================
-      // PASO 5: Mostrar resultados y guardar
-      // ========================================
+      // Mostrar resultados y guardar
       if (errores.length > 0) {
         console.warn('⚠️ Errores encontrados:', errores);
       }
@@ -493,20 +353,13 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
       if (citasImportadas.length > 0) {
         await crearCitasEnBatch(citasImportadas, organizationId);
         
-        let mensaje = `✅ ${citasImportadas.length} citas importadas para ${terapeutaObj.nombre}`;
-        
-        // Mostrar estadísticas de asignaciones
-        mensaje += `\n\n📊 Asignaciones:`;
-        mensaje += `\n   • ${asignacionesUsadas} citas con asignación configurada`;
-        mensaje += `\n   • ${asignacionesNoEncontradas} citas sin asignación (usaron "Sesión ABA estándar")`;
-        
+        let mensaje = `✅ ${citasImportadas.length} citas importadas correctamente para ${terapeutaObj.nombre}`;
         if (errores.length > 0) {
           mensaje += `\n\n⚠️ ${errores.length} filas no se pudieron importar:\n${errores.slice(0, 5).join('\n')}`;
           if (errores.length > 5) {
             mensaje += `\n... y ${errores.length - 5} errores más (ver consola)`;
           }
         }
-        
         alert(mensaje);
         await cargarCitas();
       } else {
@@ -522,118 +375,7 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
     } finally {
       setImportandoWord(false);
     }
-  }, [clientes, terapeutas, preciosBasePorTerapia, cargarCitas, organizationId, buscarAsignacionParaCita]);
-
-  // ========================================
-  // FUNCIÓN: AGREGAR HORARIO
-  // ========================================
-  const agregarHorario = useCallback(() => {
-    if (!nuevoHorario.terapeuta || !nuevoHorario.cliente || nuevoHorario.diasSemana.length === 0) {
-      alert('⚠️ Completa todos los campos del horario');
-      return;
-    }
-    
-    setHorarios([...horarios, { ...nuevoHorario, id: Date.now() }]);
-    setNuevoHorario({ terapeuta: '', cliente: '', diasSemana: [], horaInicio: '08:00', horaFin: '12:00' });
-  }, [horarios, nuevoHorario]);
-
-  // ========================================
-  // FUNCIÓN: ELIMINAR HORARIO
-  // ========================================
-  const eliminarHorario = useCallback((id) => {
-    setHorarios(horarios.filter(h => h.id !== id));
-  }, [horarios]);
-
-  // ========================================
-  // FUNCIÓN: GENERAR CITAS RECURRENTES (ACTUALIZADA CON ASIGNACIONES)
-  // ========================================
-  const generarCitas = useCallback(() => {
-    if (!fechaInicio || !fechaFin || horarios.length === 0) {
-      alert('⚠️ Completa las fechas y agrega al menos un horario');
-      return;
-    }
-
-    const inicio = new Date(fechaInicio);
-    const fin = new Date(fechaFin);
-    const nuevasCitas = [];
-
-    horarios.forEach(horario => {
-      const clienteObj = clientes.find(c => c.nombre === horario.cliente);
-      const terapeutaObj = terapeutas.find(t => t.nombre === horario.terapeuta);
-      
-      if (!clienteObj || !terapeutaObj) return;
-
-      for (let fecha = new Date(inicio); fecha <= fin; fecha.setDate(fecha.getDate() + 1)) {
-        const diaSemana = fecha.getDay();
-        
-        if (horario.diasSemana.includes(diaSemana)) {
-          const fechaStr = fecha.toISOString().split('T')[0];
-          
-          // ✨ NUEVO: Buscar asignación
-          const asignacion = buscarAsignacionParaCita(clienteObj.nombre, terapeutaObj.nombre, horario.horaInicio);
-          
-          let tipoTerapia, costoPorHora, costoTerapeuta;
-          
-          if (asignacion) {
-            tipoTerapia = asignacion.servicioNombre;
-            costoPorHora = asignacion.precioCliente;
-            costoTerapeuta = asignacion.pagoTerapeuta;
-          } else {
-            tipoTerapia = 'Sesión de ABA estándar';
-            const precioCliente = clienteObj.preciosPersonalizados?.[tipoTerapia];
-            const precioBase = preciosBasePorTerapia[tipoTerapia] || 450;
-            costoPorHora = precioCliente || precioBase;
-            
-            const costoTerapeutaCliente = terapeutaObj.costosPorCliente?.[clienteObj.id];
-            const costoTerapeutaServicio = terapeutaObj.costosPorServicio?.[tipoTerapia];
-            costoTerapeuta = costoTerapeutaCliente || costoTerapeutaServicio || 200;
-          }
-
-          const inicioHora = new Date(`2000-01-01T${horario.horaInicio}`);
-          const finHora = new Date(`2000-01-01T${horario.horaFin}`);
-          const duracionHoras = (finHora - inicioHora) / (1000 * 60 * 60);
-          const costoTotal = costoPorHora * duracionHoras;
-          const costoTerapeutaTotal = costoTerapeuta * duracionHoras;
-
-          nuevasCitas.push({
-            fecha: fechaStr,
-            terapeuta: horario.terapeuta,
-            cliente: horario.cliente,
-            horaInicio: horario.horaInicio,
-            horaFin: horario.horaFin,
-            estado: 'pendiente',
-            tipoTerapia,
-            servicio: tipoTerapia,
-            costoPorHora,
-            costoTotal,
-            costoTerapeuta,
-            costoTerapeutaTotal,
-            tieneAsignacion: !!asignacion
-          });
-        }
-      }
-    });
-
-    setCitasGeneradas(nuevasCitas);
-    setMostrarResultado(true);
-  }, [fechaInicio, fechaFin, horarios, clientes, terapeutas, preciosBasePorTerapia, buscarAsignacionParaCita]);
-
-  // ========================================
-  // FUNCIÓN: GUARDAR CITAS GENERADAS
-  // ========================================
-  const guardarCitas = useCallback(async () => {
-    try {
-      await crearCitasEnBatch(citasGeneradas, organizationId);
-      
-      alert(`✅ ${citasGeneradas.length} citas guardadas`);
-      setCitasGeneradas([]);
-      setMostrarResultado(false);
-      await cargarCitas();
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Error al guardar citas');
-    }
-  }, [citasGeneradas, cargarCitas, organizationId]);
+  }, [clientes, terapeutas, preciosBasePorTerapia, cargarCitas, organizationId]);
 
   // ========================================
   // RETURN: EXPORTAR TODO
@@ -663,18 +405,6 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
     draggedCita,
     dragOverDay,
     
-    // Estados de generación
-    horarios,
-    setHorarios,
-    nuevoHorario,
-    setNuevoHorario,
-    fechaInicio,
-    setFechaInicio,
-    fechaFin,
-    setFechaFin,
-    citasGeneradas,
-    mostrarResultado,
-    
     // Estados de importación
     importandoWord,
     
@@ -689,13 +419,6 @@ export const useCitas = (citas, terapeutas, clientes, cargarCitas, preciosBasePo
     handleDragOver,
     handleDrop,
     handleDragLeave,
-    importarDesdeWord,
-    agregarHorario,
-    eliminarHorario,
-    generarCitas,
-    guardarCitas,
-    
-    // Nueva función expuesta
-    buscarAsignacionParaCita
+    importarDesdeWord
   };
 };

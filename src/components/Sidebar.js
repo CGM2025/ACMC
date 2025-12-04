@@ -9,7 +9,7 @@ import {
   ChevronLeft, 
   ChevronRight, 
   FileText,
-  Settings  // ← AGREGAR
+  Settings
 } from 'lucide-react';
 import { FileCheck } from 'lucide-react';
 import { Calculator } from 'lucide-react';
@@ -35,10 +35,11 @@ const Sidebar = ({
   setSidebarCollapsed,
   hasPermission,
   handleLogout,
-  onCerrarMes  // ← AGREGAR ESTO 
+  onCerrarMes
 }) => {
   // Obtener configuración de empresa
   const { configuracion } = useConfiguracion();
+  
   // Configuración de los items del menú
   const menuItems = [
     { 
@@ -67,13 +68,6 @@ const Sidebar = ({
       label: 'Terapeutas', 
       icon: Users, 
       permission: 'terapeutas',
-      color: 'blue' 
-    },
-    { 
-      id: 'bloques', 
-      label: 'Bloques de Citas', 
-      icon: Calendar, 
-      permission: 'bloques',
       color: 'blue' 
     },
     { 
