@@ -406,6 +406,7 @@ export const useData = (currentUser, isLoggedIn) => {
         cargarPagosTerapeutas(),
         cargarAsignaciones(),
         cargarContratos(),
+        cargarHorariosRecurrentes(),
       ]);
       console.log('✅ Todos los datos cargados');
     } catch (error) {
