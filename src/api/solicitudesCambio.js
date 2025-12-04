@@ -18,15 +18,6 @@ const COLLECTION_NAME = 'solicitudesCambio';
 /**
  * Crear una solicitud de cambio de cita
  * @param {Object} solicitud - Datos de la solicitud
- * @param {string} solicitud.citaId - ID de la cita
- * @param {string} solicitud.tipo - 'cambio_horario' o 'transferencia'
- * @param {string} solicitud.terapeutaId - ID del terapeuta que solicita
- * @param {string} solicitud.terapeutaNombre - Nombre del terapeuta
- * @param {string} solicitud.clienteNombre - Nombre del cliente
- * @param {Object} solicitud.citaActual - Datos actuales de la cita
- * @param {Object} solicitud.datosPropuestos - Nuevos datos propuestos
- * @param {string} solicitud.motivo - Razón del cambio
- * @param {string} solicitud.organizationId - ID de la organización
  */
 export const crearSolicitudCambio = async (solicitud) => {
   try {
@@ -35,7 +26,9 @@ export const crearSolicitudCambio = async (solicitud) => {
       estado: 'pendiente', // pendiente, aprobada, rechazada
       fechaSolicitud: serverTimestamp(),
       fechaRespuesta: null,
-      respuestaAdmin: null
+      respuestaAdmin: null,
+      adminId: null,
+      adminNombre: null
     });
     return { id: docRef.id, ...solicitud };
   } catch (error) {
@@ -58,7 +51,8 @@ export const obtenerSolicitudes = async (organizationId) => {
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-      fechaSolicitud: doc.data().fechaSolicitud?.toDate?.() || new Date()
+      fechaSolicitud: doc.data().fechaSolicitud?.toDate?.() || new Date(),
+      fechaRespuesta: doc.data().fechaRespuesta?.toDate?.() || null
     }));
   } catch (error) {
     console.error('Error al obtener solicitudes:', error);
@@ -103,7 +97,8 @@ export const obtenerSolicitudesTerapeuta = async (terapeutaId) => {
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-      fechaSolicitud: doc.data().fechaSolicitud?.toDate?.() || new Date()
+      fechaSolicitud: doc.data().fechaSolicitud?.toDate?.() || new Date(),
+      fechaRespuesta: doc.data().fechaRespuesta?.toDate?.() || null
     }));
   } catch (error) {
     console.error('Error al obtener solicitudes del terapeuta:', error);
@@ -113,14 +108,19 @@ export const obtenerSolicitudesTerapeuta = async (terapeutaId) => {
 
 /**
  * Aprobar solicitud de cambio
+ * @param {string} solicitudId - ID de la solicitud
+ * @param {Object} adminInfo - { adminId, adminNombre }
+ * @param {string} respuestaAdmin - Mensaje opcional
  */
-export const aprobarSolicitud = async (solicitudId, respuestaAdmin = '') => {
+export const aprobarSolicitud = async (solicitudId, adminInfo, respuestaAdmin = '') => {
   try {
     const docRef = doc(db, COLLECTION_NAME, solicitudId);
     await updateDoc(docRef, {
       estado: 'aprobada',
       fechaRespuesta: serverTimestamp(),
-      respuestaAdmin
+      respuestaAdmin,
+      adminId: adminInfo.adminId,
+      adminNombre: adminInfo.adminNombre
     });
   } catch (error) {
     console.error('Error al aprobar solicitud:', error);
@@ -130,14 +130,19 @@ export const aprobarSolicitud = async (solicitudId, respuestaAdmin = '') => {
 
 /**
  * Rechazar solicitud de cambio
+ * @param {string} solicitudId - ID de la solicitud
+ * @param {Object} adminInfo - { adminId, adminNombre }
+ * @param {string} respuestaAdmin - Mensaje de rechazo
  */
-export const rechazarSolicitud = async (solicitudId, respuestaAdmin = '') => {
+export const rechazarSolicitud = async (solicitudId, adminInfo, respuestaAdmin = '') => {
   try {
     const docRef = doc(db, COLLECTION_NAME, solicitudId);
     await updateDoc(docRef, {
       estado: 'rechazada',
       fechaRespuesta: serverTimestamp(),
-      respuestaAdmin
+      respuestaAdmin,
+      adminId: adminInfo.adminId,
+      adminNombre: adminInfo.adminNombre
     });
   } catch (error) {
     console.error('Error al rechazar solicitud:', error);
@@ -154,5 +159,18 @@ export const eliminarSolicitud = async (solicitudId) => {
   } catch (error) {
     console.error('Error al eliminar solicitud:', error);
     throw error;
+  }
+};
+
+/**
+ * Contar solicitudes pendientes (para badge)
+ */
+export const contarSolicitudesPendientes = async (organizationId) => {
+  try {
+    const solicitudes = await obtenerSolicitudesPendientes(organizationId);
+    return solicitudes.length;
+  } catch (error) {
+    console.error('Error al contar solicitudes:', error);
+    return 0;
   }
 };

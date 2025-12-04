@@ -64,6 +64,7 @@ import GestionServicios from './components/pages/GestionServicios';
 
 import { actualizarCita as actualizarCitaDirecta, crearCita } from './api/citas';
 import PortalTerapeuta from './components/PortalTerapeuta';
+import SolicitudesCambio from './components/pages/SolicitudesCambio';
 import ConfiguracionEmpresa from './components/ConfiguracionEmpresa';
 import { ConfiguracionProvider } from './contexts/ConfiguracionContext';
 import AsignacionesServicio from './components/configuracion/AsignacionesServicio';
@@ -79,6 +80,7 @@ import {
   actualizarHorarioRecurrente,
   eliminarHorarioRecurrente
 } from './api/horariosRecurrentes';
+
 
 // Firebase configuration
 const firebaseConfig = {
@@ -1658,7 +1660,13 @@ const SistemaGestion = () => {
                             onRecargar={cargarComprobantes}
                           />
                         )}
-
+                        {activeTab === 'solicitudes' && hasPermission('admin') && (
+                          <SolicitudesCambio
+                            currentUser={currentUser}
+                            terapeutas={terapeutas}
+                            onActualizarCita={actualizarCitaDirecta}
+                          />
+                        )}
                       </main>
 
                       {/* MODALES (igual que antes - código omitido) */}

@@ -14,6 +14,7 @@ import {
 import { FileCheck } from 'lucide-react';
 import { Calculator } from 'lucide-react';
 import { Package } from 'lucide-react';
+import { Send } from 'lucide-react';
 
 /**
  * Componente Sidebar - Barra lateral de navegación
@@ -55,6 +56,13 @@ const Sidebar = ({
       icon: Clock, 
       permission: 'horas',
       color: 'blue' 
+    },
+    {
+      id: 'solicitudes',
+      label: 'Solicitudes',
+      icon: Send,
+      permission: 'admin',
+      color: 'blue'
     },
     { 
       id: 'reportes', 

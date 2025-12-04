@@ -1,7 +1,7 @@
 // src/components/PortalTerapeuta.jsx
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useConfiguracion } from '../contexts/ConfiguracionContext';
-import { Calendar, Clock, DollarSign, Upload, LogOut, Star, Plus, X, ArrowRightLeft, CalendarClock, Send, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { Calendar, Clock, DollarSign, Upload, LogOut, Star, Plus, X, ArrowRightLeft, CalendarClock, Send, AlertCircle, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'moment/locale/es';
@@ -17,7 +17,7 @@ const localizer = momentLocalizer(moment);
 const PortalTerapeuta = ({
   currentUser,
   terapeuta,
-  terapeutas = [], // Lista de todos los terapeutas para transferencias
+  terapeutas = [],
   citas,
   clientes,
   onActualizarCita,
@@ -43,7 +43,7 @@ const PortalTerapeuta = ({
 
   // Estados para solicitudes
   const [mostrarFormularioSolicitud, setMostrarFormularioSolicitud] = useState(false);
-  const [tipoSolicitud, setTipoSolicitud] = useState(''); // 'cambio_horario' o 'transferencia'
+  const [tipoSolicitud, setTipoSolicitud] = useState('');
   const [solicitudData, setSolicitudData] = useState({
     nuevaFecha: '',
     nuevaHoraInicio: '',
@@ -54,6 +54,7 @@ const PortalTerapeuta = ({
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false);
   const [misSolicitudes, setMisSolicitudes] = useState([]);
   const [cargandoSolicitudes, setCargandoSolicitudes] = useState(false);
+  const [mostrarConfirmacionWhatsApp, setMostrarConfirmacionWhatsApp] = useState(null);
 
   // Cargar solicitudes del terapeuta
   useEffect(() => {
@@ -266,6 +267,34 @@ const PortalTerapeuta = ({
   };
 
   // ========================================
+  // GENERAR LINK DE WHATSAPP PARA ADMIN
+  // ========================================
+  const generarLinkWhatsAppAdmin = (solicitudInfo) => {
+    const telefono = configuracion?.whatsappAdmin || configuracion?.telefono || '';
+    if (!telefono) return null;
+
+    const tipoTexto = solicitudInfo.tipo === 'cambio_horario' ? 'Cambio de Horario' : 'Transferencia';
+    
+    const mensaje = encodeURIComponent(
+      `📋 *Nueva Solicitud de Cambio*\n\n` +
+      `👤 *Terapeuta:* ${terapeuta.nombre}\n` +
+      `👶 *Cliente:* ${solicitudInfo.clienteNombre}\n` +
+      `📌 *Tipo:* ${tipoTexto}\n\n` +
+      `📅 *Cita actual:*\n` +
+      `${solicitudInfo.citaActual.fecha}\n` +
+      `${solicitudInfo.citaActual.horaInicio} - ${solicitudInfo.citaActual.horaFin}\n\n` +
+      (solicitudInfo.tipo === 'cambio_horario' 
+        ? `🔄 *Propuesta:*\n${solicitudInfo.datosPropuestos.fecha}\n${solicitudInfo.datosPropuestos.horaInicio} - ${solicitudInfo.datosPropuestos.horaFin}\n\n`
+        : `🔄 *Transferir a:* ${solicitudInfo.datosPropuestos.terapeutaNombre}\n\n`
+      ) +
+      `💬 *Motivo:* ${solicitudInfo.motivo}\n\n` +
+      `Por favor revisa en el sistema.`
+    );
+
+    return `https://wa.me/${telefono.replace(/\D/g, '')}?text=${mensaje}`;
+  };
+
+  // ========================================
   // ENVIAR SOLICITUD DE CAMBIO
   // ========================================
   const handleEnviarSolicitud = async () => {
@@ -293,7 +322,7 @@ const PortalTerapeuta = ({
         ? terapeutas.find(t => t.id === solicitudData.terapeutaDestinoId)
         : null;
 
-      const solicitud = {
+      const solicitudInfo = {
         citaId: citaSeleccionada.id,
         tipo: tipoSolicitud,
         terapeutaId: terapeuta.id,
@@ -320,15 +349,25 @@ const PortalTerapeuta = ({
         organizationId: currentUser?.organizationId || 'org_acmc_001'
       };
 
-      await crearSolicitudCambio(solicitud);
+      await crearSolicitudCambio(solicitudInfo);
       
       // Recargar solicitudes
       const nuevasSolicitudes = await obtenerSolicitudesTerapeuta(terapeuta.id);
       setMisSolicitudes(nuevasSolicitudes);
 
-      alert('✅ Solicitud enviada correctamente. El administrador la revisará pronto.');
+      // Generar link de WhatsApp
+      const whatsappLink = generarLinkWhatsAppAdmin(solicitudInfo);
+      
       setMostrarFormularioSolicitud(false);
       setCitaSeleccionada(null);
+
+      // Mostrar confirmación con opción de WhatsApp
+      if (whatsappLink) {
+        setMostrarConfirmacionWhatsApp(whatsappLink);
+      } else {
+        alert('✅ Solicitud enviada correctamente. El administrador la revisará pronto.');
+      }
+
     } catch (error) {
       console.error('Error al enviar solicitud:', error);
       alert('❌ Error al enviar la solicitud: ' + error.message);
@@ -404,16 +443,9 @@ const PortalTerapeuta = ({
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
           <div className="text-6xl mb-4">😕</div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">
-            Sin terapeuta vinculado
-          </h2>
-          <p className="text-gray-600 mb-6">
-            Tu cuenta no está vinculada a ningún terapeuta. Contacta al administrador.
-          </p>
-          <button
-            onClick={onLogout}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-          >
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Sin terapeuta vinculado</h2>
+          <p className="text-gray-600 mb-6">Tu cuenta no está vinculada a ningún terapeuta. Contacta al administrador.</p>
+          <button onClick={onLogout} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
             Cerrar Sesión
           </button>
         </div>
@@ -429,11 +461,7 @@ const PortalTerapeuta = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {configuracion?.logo && (
-                <img 
-                  src={configuracion.logo} 
-                  alt="Logo" 
-                  className="h-10 w-auto object-contain"
-                />
+                <img src={configuracion.logo} alt="Logo" className="h-10 w-auto object-contain" />
               )}
               <div>
                 <h1 className="text-xl font-bold text-gray-800">Mi Calendario</h1>
@@ -453,17 +481,14 @@ const PortalTerapeuta = ({
 
       {/* Contenido Principal */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Estadísticas Rápidas */}
+        {/* Estadísticas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {/* Citas de Hoy */}
           <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 uppercase tracking-wide">Hoy</p>
                 <p className="text-3xl font-bold text-gray-800">{citasHoy.length}</p>
-                <p className="text-sm text-gray-500">
-                  {citasHoy.filter(c => c.estado === 'completada').length} completadas
-                </p>
+                <p className="text-sm text-gray-500">{citasHoy.filter(c => c.estado === 'completada').length} completadas</p>
               </div>
               <div className="bg-blue-100 p-3 rounded-full">
                 <Calendar className="text-blue-600" size={24} />
@@ -471,7 +496,6 @@ const PortalTerapeuta = ({
             </div>
           </div>
 
-          {/* Horas del Mes */}
           <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
             <div className="flex items-center justify-between">
               <div>
@@ -487,7 +511,6 @@ const PortalTerapeuta = ({
             </div>
           </div>
 
-          {/* Ganado o Sesiones */}
           {terapeuta.tipoPago === 'fijo' ? (
             <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-amber-500">
               <div className="flex items-center justify-between">
@@ -506,12 +529,8 @@ const PortalTerapeuta = ({
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-500 uppercase tracking-wide">Ganancia</p>
-                  <p className="text-3xl font-bold text-gray-800">
-                    ${estadisticasMes.totalGanado.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {mesCalendario.toLocaleDateString('es-MX', { month: 'short' })}
-                  </p>
+                  <p className="text-3xl font-bold text-gray-800">${estadisticasMes.totalGanado.toLocaleString()}</p>
+                  <p className="text-sm text-gray-500">{mesCalendario.toLocaleDateString('es-MX', { month: 'short' })}</p>
                 </div>
                 <div className="bg-green-100 p-3 rounded-full">
                   <DollarSign className="text-green-600" size={24} />
@@ -521,7 +540,7 @@ const PortalTerapeuta = ({
           )}
         </div>
 
-        {/* Navegación de Pestañas */}
+        {/* Navegación */}
         <div className="flex gap-2 mb-6 flex-wrap">
           <button
             onClick={() => setMostrarFormularioCita(true)}
@@ -533,9 +552,7 @@ const PortalTerapeuta = ({
           <button
             onClick={() => setVistaActiva('citas')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              vistaActiva === 'citas'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-50'
+              vistaActiva === 'citas' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
             }`}
           >
             Mis Citas
@@ -543,24 +560,18 @@ const PortalTerapeuta = ({
           <button
             onClick={() => setVistaActiva('solicitudes')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-              vistaActiva === 'solicitudes'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-50'
+              vistaActiva === 'solicitudes' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
             }`}
           >
             Mis Solicitudes
             {solicitudesPendientes > 0 && (
-              <span className="bg-yellow-500 text-white text-xs px-2 py-0.5 rounded-full">
-                {solicitudesPendientes}
-              </span>
+              <span className="bg-yellow-500 text-white text-xs px-2 py-0.5 rounded-full">{solicitudesPendientes}</span>
             )}
           </button>
           <button
             onClick={() => setVistaActiva('registrar')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              vistaActiva === 'registrar'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-50'
+              vistaActiva === 'registrar' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
             }`}
           >
             Registrar Horas
@@ -570,7 +581,6 @@ const PortalTerapeuta = ({
         {/* Vista de Citas */}
         {vistaActiva === 'citas' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Columna Izquierda */}
             <div className="lg:col-span-1 space-y-6">
               {/* Citas de Hoy */}
               <div className="bg-white rounded-xl shadow-sm p-6">
@@ -578,7 +588,6 @@ const PortalTerapeuta = ({
                   <Calendar size={20} className="text-blue-600" />
                   Citas de Hoy
                 </h2>
-                
                 {citasHoy.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <div className="text-4xl mb-2">🎉</div>
@@ -591,25 +600,19 @@ const PortalTerapeuta = ({
                         key={cita.id}
                         onClick={() => setCitaSeleccionada(cita)}
                         className={`p-4 rounded-lg border-l-4 cursor-pointer hover:shadow-md transition-shadow ${
-                          cita.estado === 'completada'
-                            ? 'bg-green-50 border-green-500'
-                            : cita.estado === 'cancelada'
-                            ? 'bg-red-50 border-red-500'
-                            : 'bg-gray-50 border-blue-500'
+                          cita.estado === 'completada' ? 'bg-green-50 border-green-500' :
+                          cita.estado === 'cancelada' ? 'bg-red-50 border-red-500' : 'bg-gray-50 border-blue-500'
                         }`}
                       >
                         <div className="flex justify-between items-start">
                           <div>
                             <p className="font-semibold text-gray-800">{cita.cliente}</p>
-                            <p className="text-sm text-gray-500">
-                              {cita.horaInicio} - {cita.horaFin}
-                            </p>
+                            <p className="text-sm text-gray-500">{cita.horaInicio} - {cita.horaFin}</p>
                           </div>
                           <span className={`text-xs px-2 py-1 rounded-full ${
                             cita.estado === 'completada' ? 'bg-green-100 text-green-700' :
                             cita.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' :
-                            cita.estado === 'cancelada' ? 'bg-red-100 text-red-700' :
-                            'bg-yellow-100 text-yellow-700'
+                            cita.estado === 'cancelada' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
                           }`}>
                             {cita.estado}
                           </span>
@@ -626,11 +629,8 @@ const PortalTerapeuta = ({
                   <Clock size={20} className="text-purple-600" />
                   Próximos 7 días
                 </h2>
-                
                 {citasProximas.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No hay citas programadas</p>
-                  </div>
+                  <div className="text-center py-8 text-gray-500"><p>No hay citas programadas</p></div>
                 ) : (
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {citasProximas.slice(0, 10).map(cita => (
@@ -648,8 +648,7 @@ const PortalTerapeuta = ({
                           </div>
                           <span className={`text-xs px-2 py-1 rounded-full ${
                             cita.estado === 'completada' ? 'bg-green-100 text-green-700' :
-                            cita.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' :
-                            'bg-yellow-100 text-yellow-700'
+                            cita.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
                           }`}>
                             {cita.estado}
                           </span>
@@ -661,24 +660,14 @@ const PortalTerapeuta = ({
               </div>
             </div>
 
-            {/* Columna Derecha: Calendario */}
+            {/* Calendario */}
             <div className="lg:col-span-2">
               <div className="bg-white rounded-xl shadow-sm p-6 h-[600px]">
                 <div className="flex gap-4 mb-4 text-xs flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-                    <span>Pendiente</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                    <span>Confirmada</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-green-500 rounded"></div>
-                    <span>Completada</span>
-                  </div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-yellow-500 rounded"></div><span>Pendiente</span></div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded"></div><span>Confirmada</span></div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-500 rounded"></div><span>Completada</span></div>
                 </div>
-
                 <BigCalendar
                   localizer={localizer}
                   events={eventosCalendario}
@@ -727,8 +716,7 @@ const PortalTerapeuta = ({
                       key={solicitud.id}
                       className={`p-4 rounded-lg border-l-4 ${
                         solicitud.estado === 'pendiente' ? 'bg-yellow-50 border-yellow-500' :
-                        solicitud.estado === 'aprobada' ? 'bg-green-50 border-green-500' :
-                        'bg-red-50 border-red-500'
+                        solicitud.estado === 'aprobada' ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'
                       }`}
                     >
                       <div className="flex justify-between items-start mb-2">
@@ -744,8 +732,7 @@ const PortalTerapeuta = ({
                         </div>
                         <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
                           solicitud.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' :
-                          solicitud.estado === 'aprobada' ? 'bg-green-100 text-green-700' :
-                          'bg-red-100 text-red-700'
+                          solicitud.estado === 'aprobada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}>
                           {solicitud.estado === 'pendiente' && <AlertCircle size={12} />}
                           {solicitud.estado === 'aprobada' && <CheckCircle2 size={12} />}
@@ -754,10 +741,7 @@ const PortalTerapeuta = ({
                         </span>
                       </div>
 
-                      <p className="text-sm text-gray-600 mb-2">
-                        <strong>Cliente:</strong> {solicitud.clienteNombre}
-                      </p>
-                      
+                      <p className="text-sm text-gray-600 mb-2"><strong>Cliente:</strong> {solicitud.clienteNombre}</p>
                       <div className="text-sm text-gray-600 mb-2">
                         <strong>Actual:</strong> {solicitud.citaActual?.fecha} | {solicitud.citaActual?.horaInicio} - {solicitud.citaActual?.horaFin}
                       </div>
@@ -773,15 +757,20 @@ const PortalTerapeuta = ({
                       )}
 
                       <p className="text-sm text-gray-500 italic">"{solicitud.motivo}"</p>
-                      
-                      <p className="text-xs text-gray-400 mt-2">
-                        Enviada: {formatearFechaCorta(solicitud.fechaSolicitud)}
-                      </p>
+                      <p className="text-xs text-gray-400 mt-2">Enviada: {formatearFechaCorta(solicitud.fechaSolicitud)}</p>
 
-                      {solicitud.respuestaAdmin && (
-                        <div className="mt-2 p-2 bg-white rounded border">
-                          <p className="text-xs text-gray-500">Respuesta del admin:</p>
-                          <p className="text-sm text-gray-700">{solicitud.respuestaAdmin}</p>
+                      {/* Mostrar quién aprobó/rechazó */}
+                      {solicitud.estado !== 'pendiente' && solicitud.adminNombre && (
+                        <div className={`mt-3 p-3 rounded-lg ${
+                          solicitud.estado === 'aprobada' ? 'bg-green-100' : 'bg-red-100'
+                        }`}>
+                          <p className="text-sm font-medium">
+                            {solicitud.estado === 'aprobada' ? '✅ Aprobada' : '❌ Rechazada'} por {solicitud.adminNombre}
+                          </p>
+                          <p className="text-xs text-gray-500">{formatearFechaCorta(solicitud.fechaRespuesta)}</p>
+                          {solicitud.respuestaAdmin && (
+                            <p className="text-sm mt-1 italic">"{solicitud.respuestaAdmin}"</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -796,65 +785,30 @@ const PortalTerapeuta = ({
         {vistaActiva === 'registrar' && (
           <div className="max-w-2xl mx-auto">
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-6">
-                📝 Registrar Horas Trabajadas
-              </h2>
-
+              <h2 className="text-xl font-bold text-gray-800 mb-6">📝 Registrar Horas Trabajadas</h2>
               <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-700 mb-3">
-                  Opción 1: Importar desde Word
-                </h3>
-                <p className="text-gray-500 text-sm mb-4">
-                  Sube tu documento de horas en formato Word (.docx) con la tabla de sesiones.
-                </p>
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Opción 1: Importar desde Word</h3>
+                <p className="text-gray-500 text-sm mb-4">Sube tu documento de horas en formato Word (.docx).</p>
                 <label className={`flex items-center justify-center gap-3 px-6 py-4 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-                  importandoWord
-                    ? 'border-gray-300 bg-gray-50 cursor-not-allowed'
-                    : 'border-blue-300 hover:border-blue-500 hover:bg-blue-50'
+                  importandoWord ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : 'border-blue-300 hover:border-blue-500 hover:bg-blue-50'
                 }`}>
                   <Upload size={24} className={importandoWord ? 'text-gray-400' : 'text-blue-600'} />
                   <span className={importandoWord ? 'text-gray-400' : 'text-blue-600 font-medium'}>
                     {importandoWord ? 'Importando...' : 'Seleccionar archivo Word'}
                   </span>
-                  <input
-                    type="file"
-                    accept=".docx"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (file) onImportarWord(file);
-                      e.target.value = '';
-                    }}
-                    disabled={importandoWord}
-                  />
+                  <input type="file" accept=".docx" className="hidden" onChange={(e) => { if (e.target.files[0]) onImportarWord(e.target.files[0]); e.target.value = ''; }} disabled={importandoWord} />
                 </label>
               </div>
-
               <div className="relative my-8">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200"></div>
-                </div>
-                <div className="relative flex justify-center">
-                  <span className="bg-white px-4 text-sm text-gray-500">o</span>
-                </div>
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
+                <div className="relative flex justify-center"><span className="bg-white px-4 text-sm text-gray-500">o</span></div>
               </div>
-
               <div>
-                <h3 className="text-lg font-semibold text-gray-700 mb-3">
-                  Opción 2: Marcar citas como completadas
-                </h3>
-                <p className="text-gray-500 text-sm mb-4">
-                  Marca tus citas como "Completada" desde el calendario.
-                </p>
-                <button
-                  onClick={() => setVistaActiva('citas')}
-                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                >
-                  Ir a Mis Citas →
-                </button>
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Opción 2: Marcar citas como completadas</h3>
+                <p className="text-gray-500 text-sm mb-4">Marca tus citas como "Completada" desde el calendario.</p>
+                <button onClick={() => setVistaActiva('citas')} className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200">Ir a Mis Citas →</button>
               </div>
             </div>
-
             <div className="bg-white rounded-xl shadow-sm p-6 mt-6">
               <h3 className="text-lg font-semibold text-gray-700 mb-4">📊 Resumen del Mes</h3>
               <div className="grid grid-cols-2 gap-4">
@@ -878,133 +832,61 @@ const PortalTerapeuta = ({
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white">
               <h2 className="text-xl font-bold text-gray-800">Detalle de Cita</h2>
-              <button
-                onClick={() => setCitaSeleccionada(null)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X size={20} className="text-gray-500" />
-              </button>
+              <button onClick={() => setCitaSeleccionada(null)} className="p-2 hover:bg-gray-100 rounded-lg"><X size={20} className="text-gray-500" /></button>
             </div>
-
             <div className="p-6 space-y-4">
-              <div>
-                <p className="text-sm text-gray-500">Cliente</p>
-                <p className="font-semibold text-gray-800">{citaSeleccionada.cliente}</p>
-              </div>
-              
+              <div><p className="text-sm text-gray-500">Cliente</p><p className="font-semibold text-gray-800">{citaSeleccionada.cliente}</p></div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Fecha</p>
-                  <p className="font-medium text-gray-800">{formatearFecha(citaSeleccionada.fecha)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Horario</p>
-                  <p className="font-medium text-gray-800">{citaSeleccionada.horaInicio} - {citaSeleccionada.horaFin}</p>
-                </div>
+                <div><p className="text-sm text-gray-500">Fecha</p><p className="font-medium text-gray-800">{formatearFecha(citaSeleccionada.fecha)}</p></div>
+                <div><p className="text-sm text-gray-500">Horario</p><p className="font-medium text-gray-800">{citaSeleccionada.horaInicio} - {citaSeleccionada.horaFin}</p></div>
               </div>
-
-              <div>
-                <p className="text-sm text-gray-500">Tipo de terapia</p>
-                <p className="font-medium text-gray-800">{citaSeleccionada.tipoTerapia || 'Sesión de ABA'}</p>
-              </div>
-
+              <div><p className="text-sm text-gray-500">Tipo de terapia</p><p className="font-medium text-gray-800">{citaSeleccionada.tipoTerapia || 'Sesión de ABA'}</p></div>
               <div>
                 <p className="text-sm text-gray-500">Estado actual</p>
                 <span className={`inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium ${
                   citaSeleccionada.estado === 'completada' ? 'bg-green-100 text-green-700' :
                   citaSeleccionada.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' :
-                  citaSeleccionada.estado === 'cancelada' ? 'bg-red-100 text-red-700' :
-                  'bg-yellow-100 text-yellow-700'
-                }`}>
-                  {citaSeleccionada.estado}
-                </span>
+                  citaSeleccionada.estado === 'cancelada' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                }`}>{citaSeleccionada.estado}</span>
               </div>
-
-              {/* Cambiar Estado */}
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-3">Cambiar estado a:</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleCambiarEstado('pendiente')}
-                    disabled={citaSeleccionada.estado === 'pendiente'}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      citaSeleccionada.estado === 'pendiente'
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                    }`}
-                  >
-                    Pendiente
-                  </button>
-                  <button
-                    onClick={() => handleCambiarEstado('confirmada')}
-                    disabled={citaSeleccionada.estado === 'confirmada'}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      citaSeleccionada.estado === 'confirmada'
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                    }`}
-                  >
-                    Confirmada
-                  </button>
-                  <button
-                    onClick={() => handleCambiarEstado('completada')}
-                    disabled={citaSeleccionada.estado === 'completada'}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      citaSeleccionada.estado === 'completada'
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-green-100 text-green-700 hover:bg-green-200'
-                    }`}
-                  >
-                    Completada
-                  </button>
-                  <button
-                    onClick={() => handleCambiarEstado('cancelada')}
-                    disabled={citaSeleccionada.estado === 'cancelada'}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      citaSeleccionada.estado === 'cancelada'
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-red-100 text-red-700 hover:bg-red-200'
-                    }`}
-                  >
-                    Cancelada
-                  </button>
+                  {['pendiente', 'confirmada', 'completada', 'cancelada'].map(estado => (
+                    <button
+                      key={estado}
+                      onClick={() => handleCambiarEstado(estado)}
+                      disabled={citaSeleccionada.estado === estado}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        citaSeleccionada.estado === estado ? 'bg-gray-100 text-gray-400 cursor-not-allowed' :
+                        estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' :
+                        estado === 'confirmada' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
+                        estado === 'completada' ? 'bg-green-100 text-green-700 hover:bg-green-200' :
+                        'bg-red-100 text-red-700 hover:bg-red-200'
+                      }`}
+                    >
+                      {estado.charAt(0).toUpperCase() + estado.slice(1)}
+                    </button>
+                  ))}
                 </div>
               </div>
-
-              {/* Solicitar Cambios - Solo para citas pendientes o confirmadas */}
               {(citaSeleccionada.estado === 'pendiente' || citaSeleccionada.estado === 'confirmada') && (
                 <div className="pt-4 border-t">
                   <p className="text-sm font-medium text-gray-700 mb-3">Solicitar cambio:</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => abrirFormularioSolicitud('cambio_horario')}
-                      className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      <CalendarClock size={18} />
-                      <span className="text-sm font-medium">Cambiar Horario</span>
+                    <button onClick={() => abrirFormularioSolicitud('cambio_horario')} className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100">
+                      <CalendarClock size={18} /><span className="text-sm font-medium">Cambiar Horario</span>
                     </button>
-                    <button
-                      onClick={() => abrirFormularioSolicitud('transferencia')}
-                      className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors"
-                    >
-                      <ArrowRightLeft size={18} />
-                      <span className="text-sm font-medium">Transferir</span>
+                    <button onClick={() => abrirFormularioSolicitud('transferencia')} className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100">
+                      <ArrowRightLeft size={18} /><span className="text-sm font-medium">Transferir</span>
                     </button>
                   </div>
-                  <p className="text-xs text-gray-400 mt-2 text-center">
-                    Las solicitudes requieren aprobación del administrador
-                  </p>
+                  <p className="text-xs text-gray-400 mt-2 text-center">Las solicitudes requieren aprobación del administrador</p>
                 </div>
               )}
             </div>
-
             <div className="p-6 border-t bg-gray-50 rounded-b-xl">
-              <button
-                onClick={() => setCitaSeleccionada(null)}
-                className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                Cerrar
-              </button>
+              <button onClick={() => setCitaSeleccionada(null)} className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100">Cerrar</button>
             </div>
           </div>
         </div>
@@ -1016,136 +898,77 @@ const PortalTerapeuta = ({
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-6 border-b">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                {tipoSolicitud === 'cambio_horario' ? (
-                  <>
-                    <CalendarClock size={24} className="text-blue-600" />
-                    Solicitar Cambio de Horario
-                  </>
-                ) : (
-                  <>
-                    <ArrowRightLeft size={24} className="text-purple-600" />
-                    Solicitar Transferencia
-                  </>
-                )}
+                {tipoSolicitud === 'cambio_horario' ? <><CalendarClock size={24} className="text-blue-600" />Cambio de Horario</> : <><ArrowRightLeft size={24} className="text-purple-600" />Transferencia</>}
               </h2>
-              <button
-                onClick={() => setMostrarFormularioSolicitud(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X size={20} className="text-gray-500" />
-              </button>
+              <button onClick={() => setMostrarFormularioSolicitud(false)} className="p-2 hover:bg-gray-100 rounded-lg"><X size={20} className="text-gray-500" /></button>
             </div>
-
             <div className="p-6 space-y-4">
-              {/* Info de la cita actual */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-sm text-gray-500 mb-1">Cita actual:</p>
                 <p className="font-medium text-gray-800">{citaSeleccionada?.cliente}</p>
-                <p className="text-sm text-gray-600">
-                  {citaSeleccionada?.fecha} | {citaSeleccionada?.horaInicio} - {citaSeleccionada?.horaFin}
-                </p>
+                <p className="text-sm text-gray-600">{citaSeleccionada?.fecha} | {citaSeleccionada?.horaInicio} - {citaSeleccionada?.horaFin}</p>
               </div>
-
-              {/* Campos para cambio de horario */}
               {tipoSolicitud === 'cambio_horario' && (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nueva Fecha
-                    </label>
-                    <input
-                      type="date"
-                      value={solicitudData.nuevaFecha}
-                      onChange={(e) => setSolicitudData({ ...solicitudData, nuevaFecha: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Nueva Fecha</label><input type="date" value={solicitudData.nuevaFecha} onChange={(e) => setSolicitudData({ ...solicitudData, nuevaFecha: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" /></div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Nueva Hora Inicio
-                      </label>
-                      <input
-                        type="time"
-                        value={solicitudData.nuevaHoraInicio}
-                        onChange={(e) => setSolicitudData({ ...solicitudData, nuevaHoraInicio: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Nueva Hora Fin
-                      </label>
-                      <input
-                        type="time"
-                        value={solicitudData.nuevaHoraFin}
-                        onChange={(e) => setSolicitudData({ ...solicitudData, nuevaHoraFin: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Nueva Hora Inicio</label><input type="time" value={solicitudData.nuevaHoraInicio} onChange={(e) => setSolicitudData({ ...solicitudData, nuevaHoraInicio: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Nueva Hora Fin</label><input type="time" value={solicitudData.nuevaHoraFin} onChange={(e) => setSolicitudData({ ...solicitudData, nuevaHoraFin: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" /></div>
                   </div>
                 </>
               )}
-
-              {/* Campo para transferencia */}
               {tipoSolicitud === 'transferencia' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Transferir a
-                  </label>
-                  <select
-                    value={solicitudData.terapeutaDestinoId}
-                    onChange={(e) => setSolicitudData({ ...solicitudData, terapeutaDestinoId: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                  >
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Transferir a</label>
+                  <select value={solicitudData.terapeutaDestinoId} onChange={(e) => setSolicitudData({ ...solicitudData, terapeutaDestinoId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
                     <option value="">Seleccionar terapeuta...</option>
-                    {otrosTerapeutas.map(t => (
-                      <option key={t.id} value={t.id}>{t.nombre}</option>
-                    ))}
+                    {otrosTerapeutas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                   </select>
-                  {otrosTerapeutas.length === 0 && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      No hay otros terapeutas disponibles
-                    </p>
-                  )}
                 </div>
               )}
-
-              {/* Motivo */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Motivo de la solicitud *
-                </label>
-                <textarea
-                  value={solicitudData.motivo}
-                  onChange={(e) => setSolicitudData({ ...solicitudData, motivo: e.target.value })}
-                  placeholder="Explica brevemente el motivo del cambio..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Motivo de la solicitud *</label>
+                <textarea value={solicitudData.motivo} onChange={(e) => setSolicitudData({ ...solicitudData, motivo: e.target.value })} placeholder="Explica brevemente el motivo del cambio..." rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
             </div>
-
             <div className="flex gap-3 p-6 border-t bg-gray-50 rounded-b-xl">
-              <button
-                onClick={() => setMostrarFormularioSolicitud(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-                disabled={enviandoSolicitud}
-              >
-                Cancelar
+              <button onClick={() => setMostrarFormularioSolicitud(false)} disabled={enviandoSolicitud} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100">Cancelar</button>
+              <button onClick={handleEnviarSolicitud} disabled={enviandoSolicitud} className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2 ${tipoSolicitud === 'cambio_horario' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-purple-600 text-white hover:bg-purple-700'} ${enviandoSolicitud ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <Send size={18} />{enviandoSolicitud ? 'Enviando...' : 'Enviar Solicitud'}
               </button>
-              <button
-                onClick={handleEnviarSolicitud}
-                disabled={enviandoSolicitud}
-                className={`flex-1 px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                  tipoSolicitud === 'cambio_horario'
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-purple-600 text-white hover:bg-purple-700'
-                } ${enviandoSolicitud ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Send size={18} />
-                {enviandoSolicitud ? 'Enviando...' : 'Enviar Solicitud'}
-              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación con WhatsApp */}
+      {mostrarConfirmacionWhatsApp && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm text-center">
+            <div className="p-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 size={32} className="text-green-600" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-800 mb-2">¡Solicitud Enviada!</h2>
+              <p className="text-gray-600 mb-6">Tu solicitud ha sido registrada. ¿Deseas notificar al administrador por WhatsApp?</p>
+              <div className="space-y-3">
+                <a
+                  href={mostrarConfirmacionWhatsApp}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  onClick={() => setMostrarConfirmacionWhatsApp(null)}
+                >
+                  <ExternalLink size={18} />
+                  Notificar por WhatsApp
+                </a>
+                <button
+                  onClick={() => setMostrarConfirmacionWhatsApp(null)}
+                  className="w-full px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  No, gracias
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1157,67 +980,24 @@ const PortalTerapeuta = ({
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-6 border-b">
               <h2 className="text-xl font-bold text-gray-800">Nueva Cita</h2>
-              <button
-                onClick={() => setMostrarFormularioCita(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X size={20} className="text-gray-500" />
-              </button>
+              <button onClick={() => setMostrarFormularioCita(false)} className="p-2 hover:bg-gray-100 rounded-lg"><X size={20} className="text-gray-500" /></button>
             </div>
-
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
-                <input
-                  type="date"
-                  value={nuevaCita.fecha}
-                  onChange={(e) => setNuevaCita({ ...nuevaCita, fecha: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label><input type="date" value={nuevaCita.fecha} onChange={(e) => setNuevaCita({ ...nuevaCita, fecha: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hora Inicio</label>
-                  <input
-                    type="time"
-                    value={nuevaCita.horaInicio}
-                    onChange={(e) => setNuevaCita({ ...nuevaCita, horaInicio: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hora Fin</label>
-                  <input
-                    type="time"
-                    value={nuevaCita.horaFin}
-                    onChange={(e) => setNuevaCita({ ...nuevaCita, horaFin: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Hora Inicio</label><input type="time" value={nuevaCita.horaInicio} onChange={(e) => setNuevaCita({ ...nuevaCita, horaInicio: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Hora Fin</label><input type="time" value={nuevaCita.horaFin} onChange={(e) => setNuevaCita({ ...nuevaCita, horaFin: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" /></div>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-                <select
-                  value={nuevaCita.clienteId}
-                  onChange={(e) => setNuevaCita({ ...nuevaCita, clienteId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
+                <select value={nuevaCita.clienteId} onChange={(e) => setNuevaCita({ ...nuevaCita, clienteId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
                   <option value="">Seleccionar cliente...</option>
-                  {clientes.map(cliente => (
-                    <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>
-                  ))}
+                  {clientes.map(cliente => <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>)}
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Terapia</label>
-                <select
-                  value={nuevaCita.tipoTerapia}
-                  onChange={(e) => setNuevaCita({ ...nuevaCita, tipoTerapia: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
+                <select value={nuevaCita.tipoTerapia} onChange={(e) => setNuevaCita({ ...nuevaCita, tipoTerapia: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
                   <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
                   <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
                   <option value="Terapia Ocupacional">Terapia Ocupacional</option>
@@ -1226,32 +1006,11 @@ const PortalTerapeuta = ({
                   <option value="Servicios de Sombra">Servicios de Sombra</option>
                 </select>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notas (opcional)</label>
-                <textarea
-                  value={nuevaCita.notas}
-                  onChange={(e) => setNuevaCita({ ...nuevaCita, notas: e.target.value })}
-                  placeholder="Notas adicionales..."
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
-                />
-              </div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Notas (opcional)</label><textarea value={nuevaCita.notas} onChange={(e) => setNuevaCita({ ...nuevaCita, notas: e.target.value })} placeholder="Notas adicionales..." rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none" /></div>
             </div>
-
             <div className="flex gap-3 p-6 border-t bg-gray-50 rounded-b-xl">
-              <button
-                onClick={() => setMostrarFormularioCita(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleCrearCita}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Crear Cita
-              </button>
+              <button onClick={() => setMostrarFormularioCita(false)} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100">Cancelar</button>
+              <button onClick={handleCrearCita} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Crear Cita</button>
             </div>
           </div>
         </div>
