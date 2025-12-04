@@ -1,3 +1,9 @@
+import {
+  obtenerAsignaciones,
+  crearAsignacion as crearAsignacionAPI,
+  actualizarAsignacion as actualizarAsignacionAPI,
+  eliminarAsignacion as eliminarAsignacionAPI
+} from '../api/asignacionesServicio';
 import { useState, useEffect, useCallback } from 'react';
 import { 
   registrarPagoVinculado,
@@ -73,6 +79,13 @@ import {
   eliminarPagoTerapeuta as eliminarPagoTerapeutaAPI
 } from '../api/pagosTerapeutas';
 
+import {
+  obtenerContratos,
+  crearContrato as crearContratoAPI,
+  actualizarContrato as actualizarContratoAPI,
+  eliminarContrato as eliminarContratoAPI
+} from '../api/contratosMensuales';
+
 /**
  * Custom Hook para manejar la carga, guardado y eliminación de datos
  * 
@@ -110,8 +123,35 @@ export const useData = (currentUser, isLoggedIn) => {
   // Usuarios
   const [usuarios, setUsuarios] = useState([]);
 
+  //Asignaciones de servicios, costos y terapeutas a clientes
+  const [asignaciones, setAsignaciones] = useState([]);
+  const [contratos, setContratos] = useState([]);
+
   // ==================== FUNCIONES DE CARGA ====================
 
+  /**
+   * Carga las asignaciones de servicios, costos y terapeutas a clientes
+   */
+  const cargarAsignaciones = useCallback(async () => {
+    try {
+      const data = await obtenerAsignaciones(organizationId);
+      setAsignaciones(data);
+      console.log('✅ Asignaciones cargadas:', data.length);
+    } catch (error) {
+      console.error('Error al cargar asignaciones:', error);
+    }
+  }, [organizationId]);
+
+  const cargarContratos = useCallback(async () => {
+    try {
+      const data = await obtenerContratos(organizationId);
+      setContratos(data);
+      console.log('✅ Contratos cargados:', data.length);
+    } catch (error) {
+      console.error('Error al cargar contratos:', error);
+    }
+  }, [organizationId]);
+  
   /**
    * Carga las citas desde Firestore usando la API
    */
@@ -304,6 +344,8 @@ export const useData = (currentUser, isLoggedIn) => {
         cargarServicios(),
         cargarCargosSombra(),
         cargarPagosTerapeutas(),
+        cargarAsignaciones(),
+        cargarContratos(),
       ]);
       console.log('✅ Todos los datos cargados');
     } catch (error) {
@@ -516,6 +558,61 @@ export const useData = (currentUser, isLoggedIn) => {
     }
   };
   
+  /**
+   * Guarda y elimina las asignaciones de servicios y costos de los clientes
+   */
+  const guardarAsignacion = async (datos, editingId = null) => {
+    try {
+      if (editingId) {
+        await actualizarAsignacionAPI(editingId, datos);
+      } else {
+        await crearAsignacionAPI(datos, organizationId);
+      }
+      await cargarAsignaciones();
+      return { success: true };
+    } catch (error) {
+      console.error('Error al guardar asignación:', error);
+      return { success: false, error };
+    }
+  };
+
+  const eliminarAsignacionFn = async (asignacionId) => {
+    try {
+      await eliminarAsignacionAPI(asignacionId);
+      await cargarAsignaciones();
+      return { success: true };
+    } catch (error) {
+      console.error('Error al eliminar asignación:', error);
+      return { success: false, error };
+    }
+  };
+
+  const guardarContrato = async (datos, editingId = null) => {
+    try {
+      if (editingId) {
+        await actualizarContratoAPI(editingId, datos);
+      } else {
+        await crearContratoAPI(datos, organizationId);
+      }
+      await cargarContratos();
+      return { success: true };
+    } catch (error) {
+      console.error('Error al guardar contrato:', error);
+      return { success: false, error };
+    }
+  };
+
+  const eliminarContratoFn = async (contratoId) => {
+    try {
+      await eliminarContratoAPI(contratoId);
+      await cargarContratos();
+      return { success: true };
+    } catch (error) {
+      console.error('Error al eliminar contrato:', error);
+      return { success: false, error };
+    }
+  };
+
   /**
    * Actualiza el estado de pago de un recibo basándose en sus pagos
    * ← NUEVA FUNCIÓN AUXILIAR
@@ -841,5 +938,15 @@ export const useData = (currentUser, isLoggedIn) => {
     cargarPagosTerapeutas,
     registrarPagoTerapeuta,
     eliminarPagoTerapeuta,
+
+    // Asignaciones de costos y terapeutas a clientes
+    asignaciones,
+    cargarAsignaciones,
+    guardarAsignacion,
+    eliminarAsignacion: eliminarAsignacionFn,
+    contratos,
+    cargarContratos,
+    guardarContrato,
+    eliminarContrato: eliminarContratoFn,
   };
 };

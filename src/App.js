@@ -67,6 +67,8 @@ import { actualizarCita as actualizarCitaDirecta, crearCita } from './api/citas'
 import PortalTerapeuta from './components/PortalTerapeuta';
 import ConfiguracionEmpresa from './components/ConfiguracionEmpresa';
 import { ConfiguracionProvider } from './contexts/ConfiguracionContext';
+import AsignacionesServicio from './components/configuracion/AsignacionesServicio';
+import ContratosMensuales from './components/configuracion/ContratosMensuales';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -143,9 +145,20 @@ const SistemaGestion = () => {
     pagosTerapeutas,
     cargarPagosTerapeutas,
     registrarPagoTerapeuta,
-    eliminarPagoTerapeuta
+    eliminarPagoTerapeuta,
+    // Asignaciones de servicios y terapeutas a clientes
+    asignaciones,
+    cargarAsignaciones,
+    guardarAsignacion,
+    eliminarAsignacion,
+    contratos,
+    guardarContrato,
+    eliminarContrato,
+    contratosMensuales,
   } = useData(currentUser, isLoggedIn);
 
+  const [configTab, setConfigTab] = useState('empresa');
+  
   const [mostrarCerrarMes, setMostrarCerrarMes] = useState(false);
 
   // ← AQUÍ DEBE IR el useState de usuariosPortal
@@ -346,7 +359,7 @@ const SistemaGestion = () => {
     eliminarHorario,
     generarCitas,
     guardarCitas
-  } = useCitas(citas, terapeutas, clientes, cargarCitas, preciosBasePorTerapia, currentUser?.organizationId);
+  } = useCitas(citas, terapeutas, clientes, cargarCitas, preciosBasePorTerapia, currentUser?.organizationId, asignaciones);
 
   const horasDesdeCitas = useMemo(() => {
     // Convertir objeto a array con estructura esperada
@@ -1397,8 +1410,90 @@ const SistemaGestion = () => {
                         {/* Pestaña de Configuración */}
                         {activeTab === 'configuracion' && currentUser?.rol === 'admin' && (
                           <div className="space-y-6">
-                            <h2 className="text-2xl font-bold text-gray-800">Configuración de Empresa</h2>
-                            <ConfiguracionEmpresa />
+                            {/* Sub-tabs de configuración */}
+                            <div className="flex gap-4 border-b">
+                              <button
+                                onClick={() => setConfigTab('empresa')}
+                                className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                                  configTab === 'empresa'
+                                    ? 'border-blue-600 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                                }`}
+                              >
+                                Empresa
+                              </button>
+                              <button
+                                onClick={() => setConfigTab('asignaciones')}
+                                className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                                  configTab === 'asignaciones'
+                                    ? 'border-blue-600 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                                }`}
+                              >
+                                Asignaciones
+                              </button>
+                              <button
+                                onClick={() => setConfigTab('contratos')}
+                                className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                                  configTab === 'contratos'
+                                    ? 'border-purple-600 text-purple-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                                }`}
+                              >
+                                Contratos
+                              </button>
+                            </div>
+
+                            {/* Contenido según sub-tab */}
+                            {configTab === 'empresa' && (
+                              <>
+                                <h2 className="text-2xl font-bold text-gray-800">Configuración de Empresa</h2>
+                                <ConfiguracionEmpresa />
+                              </>
+                            )}
+
+                            {configTab === 'asignaciones' && (
+                              <AsignacionesServicio
+                                asignaciones={asignaciones}
+                                clientes={clientes}
+                                terapeutas={terapeutas}
+                                servicios={servicios}
+                                citas={citas}
+                                onCrear={async (datos) => {
+                                  await guardarAsignacion(datos);
+                                }}
+                                onActualizar={async (id, datos) => {
+                                  await guardarAsignacion(datos, id);
+                                }}
+                                onEliminar={async (id) => {
+                                  await eliminarAsignacion(id);
+                                }}
+                                onActualizarCita={async (citaId, datos) => {  // ← NUEVO
+                                  await actualizarCitaDirecta(citaId, datos);
+                                  await cargarCitas();
+                                }}
+                              />
+                            )}
+
+                            {configTab === 'contratos' && (
+                              <ContratosMensuales
+                                contratos={contratos}
+                                clientes={clientes}
+                                terapeutas={terapeutas}
+                                servicios={servicios}
+                                asignaciones={asignaciones}
+                                onCrear={async (datos) => {
+                                  await guardarContrato(datos);
+                                }}
+                                onActualizar={async (id, datos) => {
+                                  await guardarContrato(datos, id);
+                                }}
+                                onEliminar={async (id) => {
+                                  await eliminarContrato(id);
+                                }}
+                                onCrearAsignacion={guardarAsignacion}
+                              />
+                            )}
                           </div>
                         )}
 
@@ -1477,6 +1572,7 @@ const SistemaGestion = () => {
                                 throw error;
                               }
                             }}
+                            contratosMensuales={contratos}
                           />
                         )}
 

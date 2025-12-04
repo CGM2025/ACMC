@@ -3,6 +3,18 @@
  * Este archivo facilita los imports desde otros módulos
  */
 
+// Asignaciones de Servicio
+export {
+  obtenerAsignaciones,
+  obtenerAsignacionesPorCliente,
+  obtenerAsignacionesPorTerapeuta,
+  buscarAsignacion,
+  crearAsignacion,
+  actualizarAsignacion,
+  eliminarAsignacion,
+  importarAsignaciones
+} from './asignacionesServicio';
+
 // Citas
 export {
   obtenerCitas,

@@ -44,7 +44,9 @@ const RecibosGemini = ({
   cargosSombra = [],
   onAgregarCargoSombra,
   onEditarCargoSombra,
-  onEliminarCargoSombra
+  onEliminarCargoSombra,
+  // Nuevo prop para contratos mensuales
+  contratosMensuales = []
 }) => {
   // Estados
   const [mesSeleccionado, setMesSeleccionado] = useState(new Date().toISOString().slice(0, 7));
@@ -271,6 +273,115 @@ const RecibosGemini = ({
       };
     }, { montoCliente: 0, montoTerapeuta: 0, utilidad: 0, iva: 0, total: 0 });
   }, [cargosSombraCliente]);
+
+  /**
+   * Detecta contratos mensuales activos del cliente seleccionado
+   */
+  const contratosClienteActivos = useMemo(() => {
+    if (!clienteSeleccionado || !contratosMensuales || contratosMensuales.length === 0) {
+      return [];
+    }
+    
+    return contratosMensuales.filter(contrato => {
+      // Comparación flexible de cliente
+      const clienteIdMatch = contrato.clienteId === clienteSeleccionado.clienteId;
+      const nombreMatch = contrato.clienteNombre?.toLowerCase().trim() === 
+                          clienteSeleccionado.nombre?.toLowerCase().trim();
+      const nombreParcialMatch = contrato.clienteNombre?.toLowerCase().includes(
+        clienteSeleccionado.nombre?.toLowerCase().split(' ')[0]
+      );
+      
+      const matchCliente = clienteIdMatch || nombreMatch || nombreParcialMatch;
+      const activo = contrato.activo !== false;
+      
+      return matchCliente && activo;
+    });
+  }, [clienteSeleccionado, contratosMensuales]);
+
+  /**
+   * Contratos que aún no tienen cargo de sombra aplicado este mes
+   */
+  const contratosSinCargo = useMemo(() => {
+    if (contratosClienteActivos.length === 0) return [];
+    
+    return contratosClienteActivos.filter(contrato => {
+      const yaTieneCargo = cargosSombraCliente.some(
+        cargo => cargo.contratoId === contrato.id
+      );
+      return !yaTieneCargo;
+    });
+  }, [contratosClienteActivos, cargosSombraCliente]);
+
+  /**
+   * Agrega automáticamente un cargo de sombra basado en un contrato mensual
+   */
+  const agregarCargoDesdeContrato = async (contrato) => {
+    if (!clienteSeleccionado || !contrato) return;
+    
+    // Obtener nombre del mes para la descripción
+    const [year, month] = mesSeleccionado.split('-');
+    const nombreMes = meses[parseInt(month) - 1]?.toLowerCase() || 'mes';
+    
+    // Crear descripción basada en el contrato
+    const descripcion = contrato.descripcionRecibo || 
+      `${contrato.servicio} - mes de ${nombreMes}`;
+    
+    // Obtener el monto mensual del cobro al cliente
+    const montoCliente = contrato.cobroCliente?.montoMensual || 0;
+    
+    // Calcular pago a terapeutas (suma de todos los pagos)
+    let montoTerapeuta = 0;
+    let terapeutaNombre = '';
+    
+    if (contrato.terapeutas && contrato.terapeutas.length > 0) {
+      // Si tienen tarifas individuales
+      if (contrato.terapeutas[0].pagoMonto) {
+        contrato.terapeutas.forEach(t => {
+          if (t.pagoTipo === 'mensual') {
+            montoTerapeuta += t.pagoMonto || 0;
+          } else {
+            // Por hora: estimar con horas del contrato
+            const horasPorTerapeuta = (contrato.horasEstimadas || 0) / contrato.terapeutas.length;
+            montoTerapeuta += (t.pagoMonto || 0) * horasPorTerapeuta;
+          }
+        });
+        terapeutaNombre = contrato.terapeutas.map(t => t.nombre).join(', ');
+      } else {
+        // Estructura anterior (pago global)
+        if (contrato.pagoTerapeuta?.tipo === 'mensual') {
+          montoTerapeuta = contrato.pagoTerapeuta.montoMensual || 0;
+        } else if (contrato.pagoTerapeuta?.montoPorHora) {
+          montoTerapeuta = (contrato.pagoTerapeuta.montoPorHora || 0) * (contrato.horasEstimadas || 0);
+        }
+        terapeutaNombre = contrato.terapeutas.map(t => t.nombre || t).join(', ');
+      }
+    }
+    
+    const utilidad = montoCliente - montoTerapeuta;
+    
+    const cargoData = {
+      clienteId: clienteSeleccionado.clienteId,
+      clienteNombre: clienteSeleccionado.nombre,
+      terapeutaId: contrato.terapeutas?.[0]?.id || null,
+      terapeutaNombre: terapeutaNombre || 'Por definir',
+      mes: mesSeleccionado,
+      descripcion,
+      montoCliente,
+      montoTerapeuta,
+      utilidad,
+      // Vincular con el contrato para evitar duplicados
+      contratoId: contrato.id,
+      tipoContrato: contrato.tipoContrato,
+      servicio: contrato.servicio
+    };
+    
+    try {
+      await onAgregarCargoSombra(cargoData);
+    } catch (error) {
+      console.error('Error al agregar cargo desde contrato:', error);
+      alert('Error al agregar el cargo: ' + error.message);
+    }
+  };
 
   /**
    * Actualiza clienteSeleccionado cuando cambian las citas
@@ -987,6 +1098,64 @@ const RecibosGemini = ({
                   </p>
                 </div>
               </div>
+
+              {/* Banner de Contratos Mensuales sin Cargo */}
+              {contratosSinCargo.length > 0 && (
+                <div className="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-blue-100 p-1.5 rounded-lg">
+                        <FileText size={18} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-blue-900">
+                          Contrato Mensual Activo
+                        </h3>
+                        <p className="text-xs text-blue-600">
+                          {contratosSinCargo.length === 1 
+                            ? 'Este cliente tiene un contrato pendiente de aplicar'
+                            : `${contratosSinCargo.length} contratos pendientes de aplicar`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {contratosSinCargo.map(contrato => (
+                      <div 
+                        key={contrato.id}
+                        className="flex items-center justify-between bg-white rounded-lg p-3 border border-blue-100"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900">{contrato.servicio}</p>
+                          <p className="text-sm text-gray-500">
+                            {contrato.tipoContrato === 'mensual_fijo' && 'Mensual Fijo'}
+                            {contrato.tipoContrato === 'hibrido' && 'Híbrido'}
+                            {contrato.tipoContrato === 'paquete' && 'Paquete'}
+                            {contrato.tipoContrato === 'desglosado' && 'Desglosado'}
+                            {' • '}
+                            {contrato.terapeutas?.map(t => t.nombre || t).join(', ')}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="font-semibold text-blue-700">
+                              ${contrato.cobroCliente?.montoMensual?.toLocaleString('es-MX') || '0'}
+                            </p>
+                            <p className="text-xs text-gray-500">cobro mensual</p>
+                          </div>
+                          <button
+                            onClick={() => agregarCargoDesdeContrato(contrato)}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                          >
+                            <Plus size={16} />
+                            Aplicar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Cargos de Sombra del Cliente */}
               {cargosSombraCliente.length > 0 && (
