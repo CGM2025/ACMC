@@ -86,6 +86,13 @@ import {
   eliminarContrato as eliminarContratoAPI
 } from '../api/contratosMensuales';
 
+import {
+  obtenerHorariosRecurrentes,
+  crearHorarioRecurrente,
+  actualizarHorarioRecurrente,
+  eliminarHorarioRecurrente
+} from '../api/horariosRecurrentes';
+
 /**
  * Custom Hook para manejar la carga, guardado y eliminación de datos
  * 
@@ -94,6 +101,59 @@ import {
  * @returns {Object} Estados y funciones para gestionar datos
  */
 export const useData = (currentUser, isLoggedIn) => {
+
+  // Estado para horarios recurrentes
+  const [horariosRecurrentes, setHorariosRecurrentes] = useState([]);
+
+  // Función para cargar horarios
+  const cargarHorariosRecurrentes = async () => {
+    try {
+      const datos = await obtenerHorariosRecurrentes(organizationId);
+      setHorariosRecurrentes(datos);
+    } catch (error) {
+      console.error('Error al cargar horarios recurrentes:', error);
+    }
+  };
+
+  // Función para guardar horario
+  const guardarHorarioRecurrente = async (datos, editingId = null) => {
+    try {
+      if (editingId) {
+        await actualizarHorarioRecurrente(editingId, datos);
+      } else {
+        await crearHorarioRecurrente(datos, organizationId);
+      }
+      await cargarHorariosRecurrentes();
+    } catch (error) {
+      console.error('Error al guardar horario:', error);
+      throw error;
+    }
+  };
+
+  // Función para eliminar horario
+  const eliminarHorarioRecurrenteFn = async (horarioId) => {
+    try {
+      await eliminarHorarioRecurrente(horarioId);
+      await cargarHorariosRecurrentes();
+    } catch (error) {
+      console.error('Error al eliminar horario:', error);
+      throw error;
+    }
+  };
+
+  // Función para generar citas masivamente
+  const generarCitasDesdeHorarios = async (citas) => {
+    try {
+      for (const cita of citas) {
+        await guardarCita(cita);
+      }
+      await cargarCitas();
+      return { success: true, count: citas.length };
+    } catch (error) {
+      console.error('Error al generar citas:', error);
+      throw error;
+    }
+  };
 
   // Obtener organizationId del usuario actual
   const organizationId = currentUser?.organizationId || null;
@@ -948,5 +1008,11 @@ export const useData = (currentUser, isLoggedIn) => {
     cargarContratos,
     guardarContrato,
     eliminarContrato: eliminarContratoFn,
+    // Horarios recurrentes
+    horariosRecurrentes,
+    cargarHorariosRecurrentes,
+    guardarHorarioRecurrente,
+    eliminarHorarioRecurrenteFn,
+    generarCitasDesdeHorarios,
   };
 };

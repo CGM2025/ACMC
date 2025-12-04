@@ -70,6 +70,17 @@ import { ConfiguracionProvider } from './contexts/ConfiguracionContext';
 import AsignacionesServicio from './components/configuracion/AsignacionesServicio';
 import ContratosMensuales from './components/configuracion/ContratosMensuales';
 
+// En los imports de componentes
+import HorariosRecurrentes from './components/configuracion/HorariosRecurrentes';
+
+// En los imports de API
+import {
+  obtenerHorariosRecurrentes,
+  crearHorarioRecurrente,
+  actualizarHorarioRecurrente,
+  eliminarHorarioRecurrente
+} from './api/horariosRecurrentes';
+
 // Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -155,6 +166,11 @@ const SistemaGestion = () => {
     guardarContrato,
     eliminarContrato,
     contratosMensuales,
+    // Horarios recurrentes - AGREGAR ESTAS LÍNEAS
+    horariosRecurrentes,
+    guardarHorarioRecurrente,
+    eliminarHorarioRecurrenteFn,
+    generarCitasDesdeHorarios,
   } = useData(currentUser, isLoggedIn);
 
   const [configTab, setConfigTab] = useState('empresa');
@@ -1442,6 +1458,16 @@ const SistemaGestion = () => {
                               >
                                 Contratos
                               </button>
+                              <button
+                                onClick={() => setConfigTab('horarios')}
+                                className={`px-4 py-2 rounded-lg ${
+                                  configTab === 'horarios'
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-gray-200 hover:bg-gray-300'
+                                }`}
+                              >
+                                Horarios Recurrentes
+                              </button>
                             </div>
 
                             {/* Contenido según sub-tab */}
@@ -1492,6 +1518,27 @@ const SistemaGestion = () => {
                                   await eliminarContrato(id);
                                 }}
                                 onCrearAsignacion={guardarAsignacion}
+                              />
+                            )}
+
+                            {configTab === 'horarios' && (
+                              <HorariosRecurrentes
+                                horarios={horariosRecurrentes}
+                                clientes={clientes}
+                                terapeutas={terapeutas}
+                                asignaciones={asignaciones}
+                                onCrear={async (datos) => {
+                                  await guardarHorarioRecurrente(datos);
+                                }}
+                                onActualizar={async (id, datos) => {
+                                  await guardarHorarioRecurrente(datos, id);
+                                }}
+                                onEliminar={async (id) => {
+                                  await eliminarHorarioRecurrenteFn(id);
+                                }}
+                                onGenerarCitas={async (citas) => {
+                                  await generarCitasDesdeHorarios(citas);
+                                }}
                               />
                             )}
                           </div>
