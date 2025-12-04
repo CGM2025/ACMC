@@ -1,43 +1,35 @@
 // src/components/PortalTerapeuta.jsx
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useConfiguracion } from '../contexts/ConfiguracionContext';
-import { Calendar, Clock, DollarSign, CheckCircle, Upload, LogOut, ChevronLeft, ChevronRight, Star, Plus, X } from 'lucide-react';
+import { Calendar, Clock, DollarSign, Upload, LogOut, Star, Plus, X, ArrowRightLeft, CalendarClock, Send, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'moment/locale/es';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { crearSolicitudCambio, obtenerSolicitudesTerapeuta } from '../api/solicitudesCambio';
 
 moment.locale('es');
 const localizer = momentLocalizer(moment);
 
 /**
  * Portal simplificado para terapeutas
- * 
- * @param {Object} props
- * @param {Object} props.currentUser - Usuario actual (debe tener terapeutaId)
- * @param {Object} props.terapeuta - Datos del terapeuta vinculado
- * @param {Array} props.citas - Todas las citas del sistema
- * @param {Array} props.clientes - Lista de clientes
- * @param {Function} props.onActualizarCita - Función para actualizar una cita
- * @param {Function} props.onImportarWord - Función para importar desde Word
- * @param {Function} props.onLogout - Función para cerrar sesión
- * @param {boolean} props.importandoWord - Estado de importación
  */
 const PortalTerapeuta = ({
   currentUser,
   terapeuta,
+  terapeutas = [], // Lista de todos los terapeutas para transferencias
   citas,
   clientes,
   onActualizarCita,
-  onCrearCita,           // ← NUEVO
+  onCrearCita,
   onImportarWord,
   onLogout,
   importandoWord = false
 }) => {
-  const [vistaActiva, setVistaActiva] = useState('citas'); // 'citas' o 'registrar'
+  const [vistaActiva, setVistaActiva] = useState('citas');
   const [mesCalendario, setMesCalendario] = useState(new Date());
+  const [vistaCalendario, setVistaCalendario] = useState('month');
   const [mostrarFormularioCita, setMostrarFormularioCita] = useState(false);
-  // Configuración de empresa
   const { configuracion } = useConfiguracion();
   const [citaSeleccionada, setCitaSeleccionada] = useState(null);
   const [nuevaCita, setNuevaCita] = useState({
@@ -48,6 +40,43 @@ const PortalTerapeuta = ({
     tipoTerapia: 'Sesión de ABA estándar',
     notas: ''
   });
+
+  // Estados para solicitudes
+  const [mostrarFormularioSolicitud, setMostrarFormularioSolicitud] = useState(false);
+  const [tipoSolicitud, setTipoSolicitud] = useState(''); // 'cambio_horario' o 'transferencia'
+  const [solicitudData, setSolicitudData] = useState({
+    nuevaFecha: '',
+    nuevaHoraInicio: '',
+    nuevaHoraFin: '',
+    terapeutaDestinoId: '',
+    motivo: ''
+  });
+  const [enviandoSolicitud, setEnviandoSolicitud] = useState(false);
+  const [misSolicitudes, setMisSolicitudes] = useState([]);
+  const [cargandoSolicitudes, setCargandoSolicitudes] = useState(false);
+
+  // Cargar solicitudes del terapeuta
+  useEffect(() => {
+    const cargarMisSolicitudes = async () => {
+      if (!terapeuta?.id) return;
+      setCargandoSolicitudes(true);
+      try {
+        const solicitudes = await obtenerSolicitudesTerapeuta(terapeuta.id);
+        setMisSolicitudes(solicitudes);
+      } catch (error) {
+        console.error('Error cargando solicitudes:', error);
+      } finally {
+        setCargandoSolicitudes(false);
+      }
+    };
+    cargarMisSolicitudes();
+  }, [terapeuta?.id]);
+
+  // Filtrar otros terapeutas para transferencias
+  const otrosTerapeutas = useMemo(() => {
+    if (!terapeuta?.id || !terapeutas?.length) return [];
+    return terapeutas.filter(t => t.id !== terapeuta.id && t.activo !== false);
+  }, [terapeutas, terapeuta]);
 
   // ========================================
   // FILTRAR CITAS DE ESTA TERAPEUTA
@@ -80,7 +109,6 @@ const PortalTerapeuta = ({
       return parseInt(citaYear) === year && parseInt(citaMonth) === month;
     });
 
-    // Calcular horas totales
     let totalHoras = 0;
     let totalGanado = 0;
     
@@ -142,36 +170,9 @@ const PortalTerapeuta = ({
   }, [misCitas]);
 
   // ========================================
-  // MARCAR CITA COMO COMPLETADA
-  // ========================================
-  const marcarCompletada = useCallback(async (cita) => {
-    if (cita.estado === 'completada') {
-      alert('Esta cita ya está marcada como completada');
-      return;
-    }
-    
-    const confirmar = window.confirm(
-      `¿Marcar como completada la cita con ${cita.cliente}?\n\n` +
-      `📅 ${formatearFecha(cita.fecha)}\n` +
-      `🕐 ${cita.horaInicio} - ${cita.horaFin}`
-    );
-    
-    if (confirmar) {
-      try {
-        await onActualizarCita(cita.id, { ...cita, estado: 'completada' });
-        alert('✅ Cita marcada como completada');
-      } catch (error) {
-        console.error('Error:', error);
-        alert('❌ Error al actualizar la cita');
-      }
-    }
-  }, [onActualizarCita]);
-
-  // ========================================
   // CREAR NUEVA CITA
   // ========================================
   const handleCrearCita = useCallback(async () => {
-    // Validaciones
     if (!nuevaCita.fecha || !nuevaCita.clienteId) {
       alert('Por favor completa la fecha y selecciona un cliente');
       return;
@@ -183,7 +184,6 @@ const PortalTerapeuta = ({
       return;
     }
 
-    // Calcular duración y costos
     const [h1, m1] = nuevaCita.horaInicio.split(':').map(Number);
     const [h2, m2] = nuevaCita.horaFin.split(':').map(Number);
     const duracionHoras = ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60;
@@ -193,36 +193,32 @@ const PortalTerapeuta = ({
       return;
     }
 
-    // Obtener precio del cliente o usar precio base
     const precioCliente = clienteSeleccionado.preciosPersonalizados?.[nuevaCita.tipoTerapia];
     const costoPorHora = precioCliente || 450;
     const costoTotal = costoPorHora * duracionHoras;
 
-    // Obtener costo del terapeuta
-    const costoTerapeuta = terapeuta.costosPorCliente?.[nuevaCita.clienteId] || 
-                          terapeuta.costosPorServicio?.[nuevaCita.tipoTerapia] || 
-                          200;
-    const costoTerapeutaTotal = costoTerapeuta * duracionHoras;
+    const tarifaTerapeuta = terapeuta.tarifaPorHora || 200;
+    const costoTerapeutaTotal = tarifaTerapeuta * duracionHoras;
 
     const citaData = {
       fecha: nuevaCita.fecha,
       horaInicio: nuevaCita.horaInicio,
       horaFin: nuevaCita.horaFin,
       terapeuta: terapeuta.nombre,
+      terapeutaId: terapeuta.id,
       cliente: clienteSeleccionado.nombre,
-      clienteId: nuevaCita.clienteId,
+      clienteId: clienteSeleccionado.id,
       tipoTerapia: nuevaCita.tipoTerapia,
       estado: 'pendiente',
-      costoPorHora,
-      costoTotal,
-      costoTerapeuta,
-      costoTerapeutaTotal,
-      notas: nuevaCita.notas || ''
+      notas: nuevaCita.notas,
+      costoTotal: costoTotal,
+      costoTerapeutaTotal: costoTerapeutaTotal,
+      duracionHoras: duracionHoras
     };
 
     try {
       await onCrearCita(citaData);
-      alert('✅ Cita creada correctamente');
+      alert('✅ Cita creada exitosamente');
       setMostrarFormularioCita(false);
       setNuevaCita({
         fecha: '',
@@ -233,8 +229,8 @@ const PortalTerapeuta = ({
         notas: ''
       });
     } catch (error) {
-      console.error('Error:', error);
-      alert('❌ Error al crear la cita');
+      console.error('Error al crear cita:', error);
+      alert('❌ Error al crear la cita: ' + error.message);
     }
   }, [nuevaCita, clientes, terapeuta, onCrearCita]);
 
@@ -245,56 +241,144 @@ const PortalTerapeuta = ({
     if (!citaSeleccionada) return;
     
     try {
-      await onActualizarCita(citaSeleccionada.id, { 
-        ...citaSeleccionada, 
-        estado: nuevoEstado 
-      });
-      alert(`✅ Cita marcada como "${nuevoEstado}"`);
-      setCitaSeleccionada(null);
+      await onActualizarCita(citaSeleccionada.id, { estado: nuevoEstado });
+      setCitaSeleccionada({ ...citaSeleccionada, estado: nuevoEstado });
+      alert(`✅ Estado cambiado a: ${nuevoEstado}`);
     } catch (error) {
       console.error('Error:', error);
-      alert('❌ Error al actualizar la cita');
+      alert('❌ Error al cambiar el estado');
     }
   }, [citaSeleccionada, onActualizarCita]);
 
   // ========================================
-  // FORMATEAR FECHA
+  // ABRIR FORMULARIO DE SOLICITUD
   // ========================================
-  const formatearFecha = (fechaStr) => {
-    const [year, month, day] = fechaStr.split('-').map(Number);
-    const fecha = new Date(year, month - 1, day);
-    return fecha.toLocaleDateString('es-MX', { 
-      weekday: 'long', 
-      day: 'numeric', 
-      month: 'long' 
+  const abrirFormularioSolicitud = (tipo) => {
+    setTipoSolicitud(tipo);
+    setSolicitudData({
+      nuevaFecha: citaSeleccionada?.fecha || '',
+      nuevaHoraInicio: citaSeleccionada?.horaInicio || '',
+      nuevaHoraFin: citaSeleccionada?.horaFin || '',
+      terapeutaDestinoId: '',
+      motivo: ''
     });
+    setMostrarFormularioSolicitud(true);
   };
 
   // ========================================
-  // ESTILOS DEL CALENDARIO
+  // ENVIAR SOLICITUD DE CAMBIO
   // ========================================
+  const handleEnviarSolicitud = async () => {
+    if (!solicitudData.motivo.trim()) {
+      alert('Por favor indica el motivo de la solicitud');
+      return;
+    }
+
+    if (tipoSolicitud === 'transferencia' && !solicitudData.terapeutaDestinoId) {
+      alert('Por favor selecciona el terapeuta de destino');
+      return;
+    }
+
+    if (tipoSolicitud === 'cambio_horario') {
+      if (!solicitudData.nuevaFecha || !solicitudData.nuevaHoraInicio || !solicitudData.nuevaHoraFin) {
+        alert('Por favor completa la nueva fecha y horario');
+        return;
+      }
+    }
+
+    setEnviandoSolicitud(true);
+
+    try {
+      const terapeutaDestino = tipoSolicitud === 'transferencia' 
+        ? terapeutas.find(t => t.id === solicitudData.terapeutaDestinoId)
+        : null;
+
+      const solicitud = {
+        citaId: citaSeleccionada.id,
+        tipo: tipoSolicitud,
+        terapeutaId: terapeuta.id,
+        terapeutaNombre: terapeuta.nombre,
+        clienteNombre: citaSeleccionada.cliente,
+        citaActual: {
+          fecha: citaSeleccionada.fecha,
+          horaInicio: citaSeleccionada.horaInicio,
+          horaFin: citaSeleccionada.horaFin,
+          terapeuta: citaSeleccionada.terapeuta,
+          tipoTerapia: citaSeleccionada.tipoTerapia
+        },
+        datosPropuestos: tipoSolicitud === 'cambio_horario' 
+          ? {
+              fecha: solicitudData.nuevaFecha,
+              horaInicio: solicitudData.nuevaHoraInicio,
+              horaFin: solicitudData.nuevaHoraFin
+            }
+          : {
+              terapeutaId: solicitudData.terapeutaDestinoId,
+              terapeutaNombre: terapeutaDestino?.nombre || ''
+            },
+        motivo: solicitudData.motivo,
+        organizationId: currentUser?.organizationId || 'org_acmc_001'
+      };
+
+      await crearSolicitudCambio(solicitud);
+      
+      // Recargar solicitudes
+      const nuevasSolicitudes = await obtenerSolicitudesTerapeuta(terapeuta.id);
+      setMisSolicitudes(nuevasSolicitudes);
+
+      alert('✅ Solicitud enviada correctamente. El administrador la revisará pronto.');
+      setMostrarFormularioSolicitud(false);
+      setCitaSeleccionada(null);
+    } catch (error) {
+      console.error('Error al enviar solicitud:', error);
+      alert('❌ Error al enviar la solicitud: ' + error.message);
+    } finally {
+      setEnviandoSolicitud(false);
+    }
+  };
+
+  // ========================================
+  // HELPERS
+  // ========================================
+  const formatearFecha = (fechaStr) => {
+    const [year, month, day] = fechaStr.split('-');
+    const fecha = new Date(year, month - 1, day);
+    return fecha.toLocaleDateString('es-MX', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
+  const formatearFechaCorta = (fecha) => {
+    if (!fecha) return '';
+    const d = fecha instanceof Date ? fecha : new Date(fecha);
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  };
+
   const eventStyleGetter = useCallback((event) => {
     const cita = event.resource;
     const backgroundColor = 
       cita.estado === 'completada' ? '#10b981' :
       cita.estado === 'confirmada' ? '#3b82f6' :
-      cita.estado === 'cancelada' ? '#ef4444' : '#f59e0b';
-    
+      cita.estado === 'cancelada' ? '#ef4444' :
+      '#f59e0b';
+
     return {
       style: {
         backgroundColor,
         borderRadius: '4px',
-        opacity: cita.estado === 'cancelada' ? 0.6 : 1,
+        opacity: 0.9,
         color: 'white',
-        border: 'none',
-        fontSize: '12px'
+        border: '0px',
+        display: 'block',
+        fontSize: '0.75em',
+        padding: '2px 4px'
       }
     };
   }, []);
 
-  // ========================================
-  // MENSAJES DEL CALENDARIO EN ESPAÑOL
-  // ========================================
   const mensajesCalendario = {
     allDay: 'Todo el día',
     previous: 'Anterior',
@@ -311,25 +395,24 @@ const PortalTerapeuta = ({
     showMore: (total) => `+ Ver más (${total})`
   };
 
-  // ========================================
-  // SI NO HAY TERAPEUTA VINCULADO
-  // ========================================
+  // Contar solicitudes pendientes
+  const solicitudesPendientes = misSolicitudes.filter(s => s.estado === 'pendiente').length;
+
+  // Si no hay terapeuta vinculado
   if (!terapeuta) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md text-center">
-          <div className="text-6xl mb-4">🔗</div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Cuenta no vinculada</h2>
-          <p className="text-gray-600 mb-4">
-            Tu cuenta de usuario aún no está vinculada a un perfil de terapeuta. 
-            Por favor contacta al administrador para completar la configuración.
-          </p>
-          <p className="text-sm text-gray-500 mb-4">
-            Usuario: {currentUser?.email}
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
+          <div className="text-6xl mb-4">😕</div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            Sin terapeuta vinculado
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Tu cuenta no está vinculada a ningún terapeuta. Contacta al administrador.
           </p>
           <button
             onClick={onLogout}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
           >
             Cerrar Sesión
           </button>
@@ -338,41 +421,28 @@ const PortalTerapeuta = ({
     );
   }
 
-  // ========================================
-  // RENDER PRINCIPAL
-  // ========================================
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      {/* <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🏥</span>
-            <span className="font-bold text-xl text-gray-800">ACMC</span>
-          </div> */}
-      <header className="bg-white shadow-sm border-b px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {configuracion?.logoUrl ? (
-              <img 
-                src={configuracion.logoUrl} 
-                alt={configuracion.nombreEmpresa}
-                className="w-10 h-10 object-contain rounded"
-              />
-            ) : (
-              <span className="text-2xl">🏥</span>
-            )}
-            <span className="font-bold text-xl text-gray-800">
-              {configuracion?.nombreEmpresa || 'ACMC'}
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-600">
-              Hola, <strong>{terapeuta.nombre.split(' ')[0]}</strong> 👋
-            </span>
+      <header className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {configuracion?.logo && (
+                <img 
+                  src={configuracion.logo} 
+                  alt="Logo" 
+                  className="h-10 w-auto object-contain"
+                />
+              )}
+              <div>
+                <h1 className="text-xl font-bold text-gray-800">Mi Calendario</h1>
+                <p className="text-sm text-gray-500">Hola, {terapeuta.nombre}</p>
+              </div>
+            </div>
             <button
               onClick={onLogout}
-              className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
               <LogOut size={18} />
               <span className="hidden sm:inline">Salir</span>
@@ -381,8 +451,9 @@ const PortalTerapeuta = ({
         </div>
       </header>
 
+      {/* Contenido Principal */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Tarjetas de Resumen */}
+        {/* Estadísticas Rápidas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {/* Citas de Hoy */}
           <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
@@ -390,7 +461,9 @@ const PortalTerapeuta = ({
               <div>
                 <p className="text-sm text-gray-500 uppercase tracking-wide">Hoy</p>
                 <p className="text-3xl font-bold text-gray-800">{citasHoy.length}</p>
-                <p className="text-sm text-gray-500">citas</p>
+                <p className="text-sm text-gray-500">
+                  {citasHoy.filter(c => c.estado === 'completada').length} completadas
+                </p>
               </div>
               <div className="bg-blue-100 p-3 rounded-full">
                 <Calendar className="text-blue-600" size={24} />
@@ -398,7 +471,7 @@ const PortalTerapeuta = ({
             </div>
           </div>
 
-          {/* Horas del Mes Seleccionado */}
+          {/* Horas del Mes */}
           <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
             <div className="flex items-center justify-between">
               <div>
@@ -414,7 +487,7 @@ const PortalTerapeuta = ({
             </div>
           </div>
 
-          {/* Ganado o Sesiones (según tipo de pago) */}
+          {/* Ganado o Sesiones */}
           {terapeuta.tipoPago === 'fijo' ? (
             <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-amber-500">
               <div className="flex items-center justify-between">
@@ -449,7 +522,7 @@ const PortalTerapeuta = ({
         </div>
 
         {/* Navegación de Pestañas */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 flex-wrap">
           <button
             onClick={() => setMostrarFormularioCita(true)}
             className="px-4 py-2 rounded-lg font-medium bg-green-600 text-white hover:bg-green-700 flex items-center gap-2"
@@ -468,6 +541,21 @@ const PortalTerapeuta = ({
             Mis Citas
           </button>
           <button
+            onClick={() => setVistaActiva('solicitudes')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+              vistaActiva === 'solicitudes'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Mis Solicitudes
+            {solicitudesPendientes > 0 && (
+              <span className="bg-yellow-500 text-white text-xs px-2 py-0.5 rounded-full">
+                {solicitudesPendientes}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setVistaActiva('registrar')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               vistaActiva === 'registrar'
@@ -479,10 +567,10 @@ const PortalTerapeuta = ({
           </button>
         </div>
 
-        {/* Contenido según pestaña activa */}
+        {/* Vista de Citas */}
         {vistaActiva === 'citas' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Columna Izquierda: Citas del día y próximas */}
+            {/* Columna Izquierda */}
             <div className="lg:col-span-1 space-y-6">
               {/* Citas de Hoy */}
               <div className="bg-white rounded-xl shadow-sm p-6">
@@ -516,25 +604,7 @@ const PortalTerapeuta = ({
                             <p className="text-sm text-gray-500">
                               {cita.horaInicio} - {cita.horaFin}
                             </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {cita.tipoTerapia || 'Sesión de ABA'}
-                            </p>
                           </div>
-                          {/* {cita.estado !== 'completada' && cita.estado !== 'cancelada' && (
-                            <button
-                              onClick={() => marcarCompletada(cita)}
-                              className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
-                            >
-                              <CheckCircle size={16} />
-                              Completar
-                            </button>
-                          )}
-                          {cita.estado === 'completada' && (
-                            <span className="flex items-center gap-1 text-green-600 text-sm">
-                              <CheckCircle size={16} />
-                              Completada
-                            </span>
-                          )} */}
                           <span className={`text-xs px-2 py-1 rounded-full ${
                             cita.estado === 'completada' ? 'bg-green-100 text-green-700' :
                             cita.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' :
@@ -552,34 +622,38 @@ const PortalTerapeuta = ({
 
               {/* Próximas Citas */}
               <div className="bg-white rounded-xl shadow-sm p-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">
-                  📅 Próximos 7 días
+                <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <Clock size={20} className="text-purple-600" />
+                  Próximos 7 días
                 </h2>
                 
                 {citasProximas.length === 0 ? (
-                  <p className="text-gray-500 text-center py-4">
-                    No hay citas programadas
-                  </p>
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No hay citas programadas</p>
+                  </div>
                 ) : (
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {citasProximas.slice(0, 10).map(cita => (
                       <div
                         key={cita.id}
-                        className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
+                        onClick={() => setCitaSeleccionada(cita)}
+                        className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
                       >
-                        <div>
-                          <p className="font-medium text-gray-800 text-sm">{cita.cliente}</p>
-                          <p className="text-xs text-gray-500">
-                            {formatearFecha(cita.fecha)} • {cita.horaInicio}
-                          </p>
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="font-medium text-gray-800 text-sm">{cita.cliente}</p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(cita.fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })} • {cita.horaInicio}
+                            </p>
+                          </div>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            cita.estado === 'completada' ? 'bg-green-100 text-green-700' :
+                            cita.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' :
+                            'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {cita.estado}
+                          </span>
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          cita.estado === 'completada' ? 'bg-green-100 text-green-700' :
-                          cita.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' :
-                          'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {cita.estado}
-                        </span>
                       </div>
                     ))}
                   </div>
@@ -589,13 +663,8 @@ const PortalTerapeuta = ({
 
             {/* Columna Derecha: Calendario */}
             <div className="lg:col-span-2">
-              <div className="bg-white rounded-xl shadow-sm p-6" style={{ height: '600px' }}>
-                <h2 className="text-lg font-bold text-gray-800 mb-4">
-                  Mi Calendario
-                </h2>
-                
-                {/* Leyenda */}
-                <div className="flex gap-4 mb-4 text-sm">
+              <div className="bg-white rounded-xl shadow-sm p-6 h-[600px]">
+                <div className="flex gap-4 mb-4 text-xs flex-wrap">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 bg-yellow-500 rounded"></div>
                     <span>Pendiente</span>
@@ -615,26 +684,110 @@ const PortalTerapeuta = ({
                   events={eventosCalendario}
                   startAccessor="start"
                   endAccessor="end"
-                  style={{ height: 'calc(100% - 80px)' }}
+                  style={{ height: 'calc(100% - 50px)' }}
                   date={mesCalendario}
                   onNavigate={setMesCalendario}
-                  view="month"
+                  view={vistaCalendario}
+                  onView={setVistaCalendario}
                   views={['month', 'week', 'day']}
-                  // onSelectEvent={(event) => {
-                  //   const cita = event.resource;
-                  //   if (cita.estado !== 'completada' && cita.estado !== 'cancelada') {
-                  //     marcarCompletada(cita);
-                  //   }
-                  // }}
-                  onSelectEvent={(event) => {
-                    setCitaSeleccionada(event.resource);
-                  }}
+                  onSelectEvent={(event) => setCitaSeleccionada(event.resource)}
                   messages={mensajesCalendario}
                   eventPropGetter={eventStyleGetter}
                   popup
                   culture="es"
+                  min={new Date(2000, 0, 1, 7, 0, 0)}
+                  max={new Date(2000, 0, 1, 21, 0, 0)}
                 />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Vista de Solicitudes */}
+        {vistaActiva === 'solicitudes' && (
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                <Send size={24} className="text-blue-600" />
+                Mis Solicitudes de Cambio
+              </h2>
+
+              {cargandoSolicitudes ? (
+                <div className="text-center py-8 text-gray-500">Cargando...</div>
+              ) : misSolicitudes.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <AlertCircle size={48} className="mx-auto mb-4 text-gray-300" />
+                  <p>No tienes solicitudes de cambio</p>
+                  <p className="text-sm mt-2">Puedes solicitar cambios desde el detalle de cualquier cita</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {misSolicitudes.map(solicitud => (
+                    <div 
+                      key={solicitud.id}
+                      className={`p-4 rounded-lg border-l-4 ${
+                        solicitud.estado === 'pendiente' ? 'bg-yellow-50 border-yellow-500' :
+                        solicitud.estado === 'aprobada' ? 'bg-green-50 border-green-500' :
+                        'bg-red-50 border-red-500'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2">
+                          {solicitud.tipo === 'cambio_horario' ? (
+                            <CalendarClock size={18} className="text-blue-600" />
+                          ) : (
+                            <ArrowRightLeft size={18} className="text-purple-600" />
+                          )}
+                          <span className="font-medium text-gray-800">
+                            {solicitud.tipo === 'cambio_horario' ? 'Cambio de Horario' : 'Transferencia'}
+                          </span>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
+                          solicitud.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' :
+                          solicitud.estado === 'aprobada' ? 'bg-green-100 text-green-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {solicitud.estado === 'pendiente' && <AlertCircle size={12} />}
+                          {solicitud.estado === 'aprobada' && <CheckCircle2 size={12} />}
+                          {solicitud.estado === 'rechazada' && <XCircle size={12} />}
+                          {solicitud.estado}
+                        </span>
+                      </div>
+
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong>Cliente:</strong> {solicitud.clienteNombre}
+                      </p>
+                      
+                      <div className="text-sm text-gray-600 mb-2">
+                        <strong>Actual:</strong> {solicitud.citaActual?.fecha} | {solicitud.citaActual?.horaInicio} - {solicitud.citaActual?.horaFin}
+                      </div>
+
+                      {solicitud.tipo === 'cambio_horario' ? (
+                        <div className="text-sm text-blue-600 mb-2">
+                          <strong>Propuesto:</strong> {solicitud.datosPropuestos?.fecha} | {solicitud.datosPropuestos?.horaInicio} - {solicitud.datosPropuestos?.horaFin}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-purple-600 mb-2">
+                          <strong>Transferir a:</strong> {solicitud.datosPropuestos?.terapeutaNombre}
+                        </div>
+                      )}
+
+                      <p className="text-sm text-gray-500 italic">"{solicitud.motivo}"</p>
+                      
+                      <p className="text-xs text-gray-400 mt-2">
+                        Enviada: {formatearFechaCorta(solicitud.fechaSolicitud)}
+                      </p>
+
+                      {solicitud.respuestaAdmin && (
+                        <div className="mt-2 p-2 bg-white rounded border">
+                          <p className="text-xs text-gray-500">Respuesta del admin:</p>
+                          <p className="text-sm text-gray-700">{solicitud.respuestaAdmin}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -647,7 +800,6 @@ const PortalTerapeuta = ({
                 📝 Registrar Horas Trabajadas
               </h2>
 
-              {/* Opción 1: Importar desde Word */}
               <div className="mb-8">
                 <h3 className="text-lg font-semibold text-gray-700 mb-3">
                   Opción 1: Importar desde Word
@@ -670,20 +822,14 @@ const PortalTerapeuta = ({
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files[0];
-                      if (file) {
-                        onImportarWord(file);
-                      }
+                      if (file) onImportarWord(file);
                       e.target.value = '';
                     }}
                     disabled={importandoWord}
                   />
                 </label>
-                <p className="text-xs text-gray-400 mt-2">
-                  El nombre del archivo debe comenzar con tu nombre (ej: {terapeuta.nombre.split(' ')[0]}_Horas_noviembre.docx)
-                </p>
               </div>
 
-              {/* Separador */}
               <div className="relative my-8">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200"></div>
@@ -693,14 +839,12 @@ const PortalTerapeuta = ({
                 </div>
               </div>
 
-              {/* Opción 2: Información sobre marcar citas */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-700 mb-3">
                   Opción 2: Marcar citas como completadas
                 </h3>
                 <p className="text-gray-500 text-sm mb-4">
-                  También puedes marcar tus citas como "Completada" directamente desde el calendario o la lista de citas del día. 
-                  Esto registrará automáticamente las horas trabajadas.
+                  Marca tus citas como "Completada" desde el calendario.
                 </p>
                 <button
                   onClick={() => setVistaActiva('citas')}
@@ -711,18 +855,15 @@ const PortalTerapeuta = ({
               </div>
             </div>
 
-            {/* Resumen de horas del mes */}
             <div className="bg-white rounded-xl shadow-sm p-6 mt-6">
-              <h3 className="text-lg font-semibold text-gray-700 mb-4">
-                📊 Resumen del Mes Actual
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-700 mb-4">📊 Resumen del Mes</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 rounded-lg p-4 text-center">
-                  <p className="text-3xl font-bold text-gray-800">{estadisticasMes.totalCitas}</p>
+                  <p className="text-2xl font-bold text-gray-800">{estadisticasMes.totalCitas}</p>
                   <p className="text-sm text-gray-500">Sesiones completadas</p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-4 text-center">
-                  <p className="text-3xl font-bold text-gray-800">{estadisticasMes.totalHoras}</p>
+                  <p className="text-2xl font-bold text-gray-800">{estadisticasMes.totalHoras}</p>
                   <p className="text-sm text-gray-500">Horas trabajadas</p>
                 </div>
               </div>
@@ -732,11 +873,10 @@ const PortalTerapeuta = ({
       </main>
 
       {/* Modal de Detalle de Cita */}
-      {citaSeleccionada && (
+      {citaSeleccionada && !mostrarFormularioSolicitud && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white">
               <h2 className="text-xl font-bold text-gray-800">Detalle de Cita</h2>
               <button
                 onClick={() => setCitaSeleccionada(null)}
@@ -746,37 +886,31 @@ const PortalTerapeuta = ({
               </button>
             </div>
 
-            {/* Contenido */}
             <div className="p-6 space-y-4">
-              {/* Cliente */}
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <div className="bg-blue-100 p-2 rounded-full">
-                  <Calendar size={20} className="text-blue-600" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-800">{citaSeleccionada.cliente}</p>
-                  <p className="text-sm text-gray-500">{citaSeleccionada.tipoTerapia || 'Sesión de ABA'}</p>
-                </div>
+              <div>
+                <p className="text-sm text-gray-500">Cliente</p>
+                <p className="font-semibold text-gray-800">{citaSeleccionada.cliente}</p>
               </div>
-
-              {/* Fecha y Hora */}
+              
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-gray-500 uppercase">Fecha</p>
+                <div>
+                  <p className="text-sm text-gray-500">Fecha</p>
                   <p className="font-medium text-gray-800">{formatearFecha(citaSeleccionada.fecha)}</p>
                 </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-gray-500 uppercase">Horario</p>
-                  <p className="font-medium text-gray-800">
-                    {citaSeleccionada.horaInicio} - {citaSeleccionada.horaFin}
-                  </p>
+                <div>
+                  <p className="text-sm text-gray-500">Horario</p>
+                  <p className="font-medium text-gray-800">{citaSeleccionada.horaInicio} - {citaSeleccionada.horaFin}</p>
                 </div>
               </div>
 
-              {/* Estado Actual */}
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-500 uppercase mb-2">Estado Actual</p>
-                <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+              <div>
+                <p className="text-sm text-gray-500">Tipo de terapia</p>
+                <p className="font-medium text-gray-800">{citaSeleccionada.tipoTerapia || 'Sesión de ABA'}</p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500">Estado actual</p>
+                <span className={`inline-block mt-1 px-3 py-1 rounded-full text-sm font-medium ${
                   citaSeleccionada.estado === 'completada' ? 'bg-green-100 text-green-700' :
                   citaSeleccionada.estado === 'confirmada' ? 'bg-blue-100 text-blue-700' :
                   citaSeleccionada.estado === 'cancelada' ? 'bg-red-100 text-red-700' :
@@ -836,9 +970,34 @@ const PortalTerapeuta = ({
                   </button>
                 </div>
               </div>
+
+              {/* Solicitar Cambios - Solo para citas pendientes o confirmadas */}
+              {(citaSeleccionada.estado === 'pendiente' || citaSeleccionada.estado === 'confirmada') && (
+                <div className="pt-4 border-t">
+                  <p className="text-sm font-medium text-gray-700 mb-3">Solicitar cambio:</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => abrirFormularioSolicitud('cambio_horario')}
+                      className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <CalendarClock size={18} />
+                      <span className="text-sm font-medium">Cambiar Horario</span>
+                    </button>
+                    <button
+                      onClick={() => abrirFormularioSolicitud('transferencia')}
+                      className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors"
+                    >
+                      <ArrowRightLeft size={18} />
+                      <span className="text-sm font-medium">Transferir</span>
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 text-center">
+                    Las solicitudes requieren aprobación del administrador
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* Footer */}
             <div className="p-6 border-t bg-gray-50 rounded-b-xl">
               <button
                 onClick={() => setCitaSeleccionada(null)}
@@ -851,11 +1010,151 @@ const PortalTerapeuta = ({
         </div>
       )}
 
+      {/* Modal de Formulario de Solicitud */}
+      {mostrarFormularioSolicitud && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                {tipoSolicitud === 'cambio_horario' ? (
+                  <>
+                    <CalendarClock size={24} className="text-blue-600" />
+                    Solicitar Cambio de Horario
+                  </>
+                ) : (
+                  <>
+                    <ArrowRightLeft size={24} className="text-purple-600" />
+                    Solicitar Transferencia
+                  </>
+                )}
+              </h2>
+              <button
+                onClick={() => setMostrarFormularioSolicitud(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Info de la cita actual */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-sm text-gray-500 mb-1">Cita actual:</p>
+                <p className="font-medium text-gray-800">{citaSeleccionada?.cliente}</p>
+                <p className="text-sm text-gray-600">
+                  {citaSeleccionada?.fecha} | {citaSeleccionada?.horaInicio} - {citaSeleccionada?.horaFin}
+                </p>
+              </div>
+
+              {/* Campos para cambio de horario */}
+              {tipoSolicitud === 'cambio_horario' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nueva Fecha
+                    </label>
+                    <input
+                      type="date"
+                      value={solicitudData.nuevaFecha}
+                      onChange={(e) => setSolicitudData({ ...solicitudData, nuevaFecha: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nueva Hora Inicio
+                      </label>
+                      <input
+                        type="time"
+                        value={solicitudData.nuevaHoraInicio}
+                        onChange={(e) => setSolicitudData({ ...solicitudData, nuevaHoraInicio: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nueva Hora Fin
+                      </label>
+                      <input
+                        type="time"
+                        value={solicitudData.nuevaHoraFin}
+                        onChange={(e) => setSolicitudData({ ...solicitudData, nuevaHoraFin: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Campo para transferencia */}
+              {tipoSolicitud === 'transferencia' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transferir a
+                  </label>
+                  <select
+                    value={solicitudData.terapeutaDestinoId}
+                    onChange={(e) => setSolicitudData({ ...solicitudData, terapeutaDestinoId: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">Seleccionar terapeuta...</option>
+                    {otrosTerapeutas.map(t => (
+                      <option key={t.id} value={t.id}>{t.nombre}</option>
+                    ))}
+                  </select>
+                  {otrosTerapeutas.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      No hay otros terapeutas disponibles
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Motivo */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Motivo de la solicitud *
+                </label>
+                <textarea
+                  value={solicitudData.motivo}
+                  onChange={(e) => setSolicitudData({ ...solicitudData, motivo: e.target.value })}
+                  placeholder="Explica brevemente el motivo del cambio..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-6 border-t bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => setMostrarFormularioSolicitud(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                disabled={enviandoSolicitud}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEnviarSolicitud}
+                disabled={enviandoSolicitud}
+                className={`flex-1 px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                  tipoSolicitud === 'cambio_horario'
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                } ${enviandoSolicitud ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <Send size={18} />
+                {enviandoSolicitud ? 'Enviando...' : 'Enviar Solicitud'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal para Nueva Cita */}
       {mostrarFormularioCita && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            {/* Header */}
             <div className="flex items-center justify-between p-6 border-b">
               <h2 className="text-xl font-bold text-gray-800">Nueva Cita</h2>
               <button
@@ -866,27 +1165,20 @@ const PortalTerapeuta = ({
               </button>
             </div>
 
-            {/* Formulario */}
             <div className="p-6 space-y-4">
-              {/* Fecha */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
                 <input
                   type="date"
                   value={nuevaCita.fecha}
                   onChange={(e) => setNuevaCita({ ...nuevaCita, fecha: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              {/* Horario */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Hora Inicio
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hora Inicio</label>
                   <input
                     type="time"
                     value={nuevaCita.horaInicio}
@@ -895,9 +1187,7 @@ const PortalTerapeuta = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Hora Fin
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hora Fin</label>
                   <input
                     type="time"
                     value={nuevaCita.horaFin}
@@ -907,11 +1197,8 @@ const PortalTerapeuta = ({
                 </div>
               </div>
 
-              {/* Cliente */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cliente
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
                 <select
                   value={nuevaCita.clienteId}
                   onChange={(e) => setNuevaCita({ ...nuevaCita, clienteId: e.target.value })}
@@ -919,18 +1206,13 @@ const PortalTerapeuta = ({
                 >
                   <option value="">Seleccionar cliente...</option>
                   {clientes.map(cliente => (
-                    <option key={cliente.id} value={cliente.id}>
-                      {cliente.nombre}
-                    </option>
+                    <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Tipo de Terapia */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo de Terapia
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Terapia</label>
                 <select
                   value={nuevaCita.tipoTerapia}
                   onChange={(e) => setNuevaCita({ ...nuevaCita, tipoTerapia: e.target.value })}
@@ -945,11 +1227,8 @@ const PortalTerapeuta = ({
                 </select>
               </div>
 
-              {/* Notas (opcional) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notas (opcional)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notas (opcional)</label>
                 <textarea
                   value={nuevaCita.notas}
                   onChange={(e) => setNuevaCita({ ...nuevaCita, notas: e.target.value })}
@@ -960,17 +1239,16 @@ const PortalTerapeuta = ({
               </div>
             </div>
 
-            {/* Botones */}
             <div className="flex gap-3 p-6 border-t bg-gray-50 rounded-b-xl">
               <button
                 onClick={() => setMostrarFormularioCita(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleCrearCita}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Crear Cita
               </button>

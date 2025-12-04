@@ -1047,28 +1047,26 @@ const SistemaGestion = () => {
   // Si es terapeuta, mostrar el portal simplificado
   if (isLoggedIn && currentUser?.rol === 'terapeuta') {
     return (
-      <PortalTerapeuta
-        currentUser={currentUser}
-        terapeuta={terapeutaVinculado}
-        citas={citas}
-        clientes={clientes}
-        // onActualizarCita={async (citaId, datos) => {
-        //   await actualizarCitaDirecta(citaId, datos);
-        //   await cargarCitas();
-        // }}
-        onActualizarCita={async (citaId, datos) => {
-          // Solo enviar el campo estado para cumplir con reglas de seguridad
-          await actualizarCitaDirecta(citaId, { estado: datos.estado });
-          await cargarCitas();
-        }}
-        onCrearCita={async (citaData) => {
-          await crearCita(citaData);
-          await cargarCitas();
-        }}
-        onImportarWord={importarDesdeWord}
-        onLogout={handleLogout}
-        importandoWord={importandoWord}
-      />
+      <ConfiguracionProvider currentUser={currentUser} isLoggedIn={isLoggedIn}>
+        <PortalTerapeuta
+          currentUser={currentUser}
+          terapeuta={terapeutaVinculado}
+          terapeutas={terapeutas}
+          citas={citas}
+          clientes={clientes}
+          onActualizarCita={async (citaId, datos) => {
+            await actualizarCitaDirecta(citaId, { estado: datos.estado });
+            await cargarCitas();
+          }}
+          onCrearCita={async (citaData) => {
+            await crearCita(citaData);
+            await cargarCitas();
+          }}
+          onImportarWord={importarDesdeWord}
+          onLogout={handleLogout}
+          importandoWord={importandoWord}
+        />
+      </ConfiguracionProvider>
     );
   }
 
