@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { DollarSign, Users, Clock, Upload } from 'lucide-react';
-import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { importarUtilidadHistorica } from '../../api';
 
 /**
@@ -321,31 +321,29 @@ const Dashboard = ({
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Gráfica de Pie */}
-            <div className="flex items-center justify-center" style={{ width: '100%', minHeight: 400 }}>
-              <ResponsiveContainer width="100%" height={400} minWidth={300}>
-                <PieChart>
-                  <Pie
-                    data={contribuciones}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={true}
-                    label={({ porcentaje }) => `${porcentaje.toFixed(1)}%`}
-                    outerRadius={120}
-                    fill="#8884d8"
-                    dataKey="ganancia"
-                  >
-                    {contribuciones.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value, name, props) => [
-                      `$${Math.round(value).toLocaleString()}`,
-                      props.payload.nombre
-                    ]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="flex items-center justify-center">
+              <PieChart width={400} height={400}>
+                <Pie
+                  data={contribuciones}
+                  cx={200}
+                  cy={200}
+                  labelLine={true}
+                  label={({ porcentaje }) => `${porcentaje.toFixed(1)}%`}
+                  outerRadius={120}
+                  fill="#8884d8"
+                  dataKey="ganancia"
+                >
+                  {contribuciones.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  formatter={(value, name, props) => [
+                    `$${Math.round(value).toLocaleString()}`,
+                    props.payload.nombre
+                  ]}
+                />
+              </PieChart>
             </div>
 
             {/* Tabla de detalles */}
@@ -528,40 +526,36 @@ const Dashboard = ({
           </div>
         ) : (
           <div className="space-y-4">
-            <div style={{ width: '100%', minHeight: 400 }}>
-              <ResponsiveContainer width="100%" height={400} minWidth={300}>
-                <LineChart data={datosFiltrados}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="mes"
-                    tick={{ fontSize: 12 }}
-                  />
-                  <YAxis
-                    tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
-                  />
-                  <Tooltip
-                    formatter={(value) => [`$${Math.round(value).toLocaleString()}`, 'Ganancia']}
-                    labelFormatter={(label, payload) => {
-                      if (payload && payload[0]) {
-                        return `${payload[0].payload.mes} ${payload[0].payload.año}`;
-                      }
-                      return label;
-                    }}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="ganancia"
-                    stroke="#10b981"
-                    strokeWidth={3}
-                    name="Ganancia Mensual"
-                    dot={{ r: 5 }}
-                    activeDot={{ r: 8 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
+            <LineChart width={1000} height={400} data={datosFiltrados}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="mes" 
+                tick={{ fontSize: 12 }}
+              />
+              <YAxis 
+                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
+              />
+              <Tooltip 
+                formatter={(value) => [`$${Math.round(value).toLocaleString()}`, 'Ganancia']}
+                labelFormatter={(label, payload) => {
+                  if (payload && payload[0]) {
+                    return `${payload[0].payload.mes} ${payload[0].payload.año}`;
+                  }
+                  return label;
+                }}
+              />
+              <Legend />
+              <Line 
+                type="monotone" 
+                dataKey="ganancia" 
+                stroke="#10b981" 
+                strokeWidth={3}
+                name="Ganancia Mensual"
+                dot={{ r: 5 }}
+                activeDot={{ r: 8 }}
+              />
+            </LineChart>
+            
             {/* Estadísticas del período actual */}
             <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t">
               <div className="text-center">
