@@ -1,14 +1,17 @@
 import { db } from '../firebase';
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
+import {
+  collection,
+  addDoc,
+  getDocs,
   updateDoc,
-  deleteDoc, 
+  deleteDoc,
   doc,
   query,
-  where
+  where,
+  orderBy,
+  writeBatch
 } from 'firebase/firestore';
+import { obtenerPagos } from './pagos';
 
 /**
  * API para gestión de recibos en Firebase
@@ -19,33 +22,48 @@ const COLLECTION_NAME = 'recibos';
 
 /**
  * Obtiene todos los recibos de una organización ordenados por fecha
+ * Usa orderBy nativo de Firestore para mejor rendimiento
+ * NOTA: Requiere índice compuesto (organizationId + fechaGeneracion) en Firestore
  * @param {string} organizationId - ID de la organización
  * @returns {Promise<Array>} - Array de recibos
  */
 export const obtenerRecibos = async (organizationId) => {
   try {
     let q;
-    
+
     if (organizationId) {
+      // Consulta optimizada con índice compuesto
       q = query(
         collection(db, COLLECTION_NAME),
-        where('organizationId', '==', organizationId)
+        where('organizationId', '==', organizationId),
+        orderBy('fechaGeneracion', 'desc')
       );
     } else {
-      // Fallback para compatibilidad (sin filtro)
-      q = collection(db, COLLECTION_NAME);
+      // Fallback sin filtro de organización
+      q = query(
+        collection(db, COLLECTION_NAME),
+        orderBy('fechaGeneracion', 'desc')
+      );
     }
-    
+
     const snapshot = await getDocs(q);
-    
-    // Ordenar manualmente en JavaScript
-    const recibos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return recibos.sort((a, b) => {
-      const dateA = new Date(a.fechaGeneracion || 0);
-      const dateB = new Date(b.fechaGeneracion || 0);
-      return dateB - dateA; // Descendente (más reciente primero)
-    });
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
+    // Si falla por falta de índice, hacer fallback a ordenamiento manual
+    if (error.code === 'failed-precondition') {
+      console.warn('Índice no encontrado, usando ordenamiento manual. Crea el índice para mejor rendimiento.');
+      const fallbackQuery = organizationId
+        ? query(collection(db, COLLECTION_NAME), where('organizationId', '==', organizationId))
+        : collection(db, COLLECTION_NAME);
+
+      const snapshot = await getDocs(fallbackQuery);
+      const recibos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return recibos.sort((a, b) => {
+        const dateA = new Date(a.fechaGeneracion || 0);
+        const dateB = new Date(b.fechaGeneracion || 0);
+        return dateB - dateA;
+      });
+    }
     console.error('Error al obtener recibos:', error);
     throw error;
   }
@@ -234,4 +252,80 @@ export const eliminarRecibo = async (reciboId) => {
 export const generarReciboId = (mes, clienteCodigo) => {
   const [year, month] = mes.split('-');
   return `REC-${year}-${month}-${clienteCodigo}`;
+};
+
+/**
+ * Recalcula y corrige los saldos de todos los recibos basándose en los pagos reales.
+ * Útil para corregir inconsistencias de datos históricos.
+ * ADVERTENCIA: Solo ejecutar como administrador o en mantenimiento.
+ * @param {string} organizationId - ID de la organización
+ * @returns {Promise<Object>} - Resultado con cantidad de recibos corregidos
+ */
+export const recalcularSaldosRecibos = async (organizationId) => {
+  try {
+    // Obtener todos los recibos y pagos
+    const recibos = await obtenerRecibos(organizationId);
+    const pagos = await obtenerPagos(); // pagos.js no filtra por org aún
+
+    const batch = writeBatch(db);
+    let corregidos = 0;
+    const detalles = [];
+
+    for (const recibo of recibos) {
+      // Sumar pagos vinculados a este recibo
+      const pagosDelRecibo = pagos.filter(p => p.reciboFirebaseId === recibo.id);
+      const totalPagadoReal = pagosDelRecibo.reduce((sum, p) => sum + Number(p.monto || 0), 0);
+
+      // Determinar estado correcto
+      let estadoReal = 'pendiente';
+      const totalGeneral = Number(recibo.totalGeneral || 0);
+      if (totalPagadoReal >= totalGeneral - 0.01) {
+        estadoReal = 'pagado';
+      } else if (totalPagadoReal > 0.01) {
+        estadoReal = 'parcial';
+      }
+
+      // Verificar si hay discrepancia
+      const montoPagadoActual = Number(recibo.montoPagado || 0);
+      const hayDiscrepanciaMonto = Math.abs(totalPagadoReal - montoPagadoActual) > 0.01;
+      const hayDiscrepanciaEstado = recibo.estadoPago !== estadoReal;
+
+      if (hayDiscrepanciaMonto || hayDiscrepanciaEstado) {
+        const docRef = doc(db, COLLECTION_NAME, recibo.id);
+        batch.update(docRef, {
+          montoPagado: totalPagadoReal,
+          estadoPago: estadoReal,
+          fechaUltimaActualizacion: new Date().toISOString()
+        });
+
+        detalles.push({
+          reciboId: recibo.reciboId,
+          antes: { montoPagado: montoPagadoActual, estadoPago: recibo.estadoPago },
+          despues: { montoPagado: totalPagadoReal, estadoPago: estadoReal }
+        });
+
+        corregidos++;
+      }
+    }
+
+    if (corregidos > 0) {
+      await batch.commit();
+      console.log(`Se corrigieron ${corregidos} recibos desincronizados.`);
+    } else {
+      console.log('Todos los recibos están correctos.');
+    }
+
+    return {
+      exito: true,
+      totalRevisados: recibos.length,
+      corregidos,
+      detalles
+    };
+  } catch (error) {
+    console.error('Error al recalcular saldos:', error);
+    return {
+      exito: false,
+      error: error.message
+    };
+  }
 };

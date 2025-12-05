@@ -42,6 +42,19 @@ const ModalPago = ({
     return recibos.find(r => r.id === pagoForm.reciboFirebaseId);
   }, [pagoForm.reciboFirebaseId, recibos]);
 
+  // Calcular deuda pendiente del recibo seleccionado
+  const deudaPendiente = useMemo(() => {
+    if (!reciboSeleccionado) return null;
+    return reciboSeleccionado.totalGeneral - reciboSeleccionado.montoPagado;
+  }, [reciboSeleccionado]);
+
+  // Validar si el monto excede la deuda
+  const montoExcedeDeuda = useMemo(() => {
+    if (deudaPendiente === null) return false;
+    const monto = parseFloat(pagoForm.monto) || 0;
+    return monto > deudaPendiente + 0.01; // Tolerancia para decimales
+  }, [pagoForm.monto, deudaPendiente]);
+
   // Cuando se selecciona un cliente, mostrar/ocultar sección de recibos
   useEffect(() => {
     if (pagoForm.clienteId && recibosFiltrados.length > 0) {
@@ -159,15 +172,22 @@ const ModalPago = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Monto ($) *
             </label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               step="0.01"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
-              value={pagoForm.monto} 
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                montoExcedeDeuda ? 'border-red-500 bg-red-50' : 'border-gray-300'
+              }`}
+              value={pagoForm.monto}
               onChange={(e) => setPagoForm({...pagoForm, monto: e.target.value})}
               placeholder="0.00"
               required
             />
+            {montoExcedeDeuda && (
+              <p className="text-red-600 text-xs mt-1">
+                El monto excede la deuda pendiente (${deudaPendiente.toFixed(2)})
+              </p>
+            )}
           </div>
 
           {/* Concepto */}
@@ -218,15 +238,20 @@ const ModalPago = ({
 
         {/* Botones de Acción */}
         <div className="flex justify-end space-x-2 mt-6">
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
             Cancelar
           </button>
-          <button 
-            onClick={onSave} 
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          <button
+            onClick={onSave}
+            disabled={montoExcedeDeuda}
+            className={`px-4 py-2 text-white rounded-lg transition-colors ${
+              montoExcedeDeuda
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-green-600 hover:bg-green-700'
+            }`}
           >
             {editingId ? 'Actualizar' : 'Guardar'}
           </button>
