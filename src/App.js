@@ -81,6 +81,7 @@ import {
   eliminarHorarioRecurrente
 } from './api/horariosRecurrentes';
 
+import InstallPWA from './components/InstallPWA';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -2486,6 +2487,7 @@ const SistemaGestion = () => {
             } 
           />
         </Routes>
+        <InstallPWA />
       </Router>
     </ConfiguracionProvider>
   )
