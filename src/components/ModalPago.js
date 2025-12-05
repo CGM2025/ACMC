@@ -14,17 +14,18 @@ import { X } from 'lucide-react';
  * @param {Array} props.recibos - Lista de recibos disponibles
  * @param {string|null} props.editingId - ID del pago en edición (null si es nuevo)
  */
-const ModalPago = ({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  pagoForm, 
-  setPagoForm, 
-  clientes, 
+const ModalPago = ({
+  isOpen,
+  onClose,
+  onSave,
+  pagoForm,
+  setPagoForm,
+  clientes,
   recibos,
-  editingId 
+  editingId
 }) => {
   const [mostrarRecibos, setMostrarRecibos] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filtrar recibos del cliente seleccionado
   const recibosFiltrados = useMemo(() => {
@@ -63,6 +64,24 @@ const ModalPago = ({
       setMostrarRecibos(false);
     }
   }, [pagoForm.clienteId, recibosFiltrados.length]);
+
+  // Resetear estado de guardado cuando se cierra el modal
+  useEffect(() => {
+    if (!isOpen) {
+      setIsSaving(false);
+    }
+  }, [isOpen]);
+
+  // Manejar guardado con protección contra doble clic
+  const handleSave = async () => {
+    if (isSaving || montoExcedeDeuda) return;
+    setIsSaving(true);
+    try {
+      await onSave();
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -240,20 +259,21 @@ const ModalPago = ({
         <div className="flex justify-end space-x-2 mt-6">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            disabled={isSaving}
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
-            onClick={onSave}
-            disabled={montoExcedeDeuda}
+            onClick={handleSave}
+            disabled={montoExcedeDeuda || isSaving}
             className={`px-4 py-2 text-white rounded-lg transition-colors ${
-              montoExcedeDeuda
+              montoExcedeDeuda || isSaving
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-green-600 hover:bg-green-700'
             }`}
           >
-            {editingId ? 'Actualizar' : 'Guardar'}
+            {isSaving ? 'Guardando...' : (editingId ? 'Actualizar' : 'Guardar')}
           </button>
         </div>
       </div>
