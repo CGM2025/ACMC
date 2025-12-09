@@ -1297,10 +1297,10 @@ const SistemaGestion = () => {
                                             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 min-w-[200px]"
                                           >
                                             <option value="">-- Sin vincular --</option>
-                                            {terapeutas.map(t => (
-                                              <option key={t.id} value={t.id}>
-                                                {t.nombre}
-                                              </option>
+                                            {terapeutas
+                                            .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                                            .map(t => (
+                                              <option key={t.id} value={t.id}>{t.nombre}</option>
                                             ))}
                                           </select>
                                           
@@ -1684,7 +1684,11 @@ const SistemaGestion = () => {
                                   onChange={(e) => setCitaForm({ ...citaForm, terapeuta: e.target.value })}
                                 >
                                   <option value="">Seleccionar terapeuta</option>
-                                  {terapeutas.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
+                                  {terapeutas
+                                  .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                                  .map(t => (
+                                    <option key={t.id} value={t.id}>{t.nombre}</option>
+                                  ))}
                                 </select>
                               </div>
 
@@ -1696,7 +1700,9 @@ const SistemaGestion = () => {
                                   onChange={(e) => setCitaForm({ ...citaForm, cliente: e.target.value })}
                                 >
                                   <option value="">Seleccionar cliente</option>
-                                  {clientes.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+                                  {clientes
+                                  .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                                  .map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
                                 </select>
                               </div>
 
@@ -1748,7 +1754,8 @@ const SistemaGestion = () => {
                                   <option value="Otro">Otro</option> */}
                                   {servicios
                                     .filter(s => s.activo !== false)
-                                    .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                                    // .sort((a, b) => (a.orden || 99) - (b.orden || 99))
                                     .map(servicio => (
                                       <option key={servicio.id} value={servicio.nombre}>
                                         {servicio.nombre}
@@ -2104,7 +2111,8 @@ const SistemaGestion = () => {
                                         <option value="Otro">Otro</option> */}
                                         {servicios
                                           .filter(s => s.activo !== false)
-                                          .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                          // .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                          .sort((a, b) => a.nombre.localeCompare(b.nombre))
                                           .map(servicio => (
                                             <option key={servicio.id} value={servicio.nombre}>
                                               {servicio.nombre}
@@ -2195,7 +2203,9 @@ const SistemaGestion = () => {
                                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                         >
                                           <option value="">Seleccionar cliente...</option>
-                                          {clientes.map(cliente => (
+                                          {clientes
+                                          .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                                          .map(cliente => (
                                             <option key={cliente.id} value={cliente.id}>
                                               {cliente.nombre}
                                             </option>
@@ -2403,7 +2413,8 @@ const SistemaGestion = () => {
                                         <option value="Otro">Otro</option> */}
                                           {servicios
                                             .filter(s => s.activo !== false)
-                                            .sort((a, b) => (a.orden || 99) - (b.orden || 99))
+                                            .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                                            // .sort((a, b) => (a.orden || 99) - (b.orden || 99))
                                             .map(servicio => (
                                               <option key={servicio.id} value={servicio.nombre}>
                                                 {servicio.nombre}

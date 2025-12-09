@@ -26,6 +26,21 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+// Sub-opciones por servicio
+const SUBOPCIONES_SERVICIO = {
+  'Servicios de Apoyo y Entrenamiento': [
+    'Entrenamiento de papás',
+    'Juntas de equipo',
+    'Programación',
+    'Supervisión',
+    'Visita Escolar'
+  ],
+  'Servicios Administrativos y Reportes': [
+    'Reporte de Progreso',
+    'Reporte Escolar'
+  ]
+};
+
 const AsignacionesServicio = ({ 
   asignaciones = [],
   clientes = [],
@@ -64,10 +79,14 @@ const AsignacionesServicio = ({
     clienteNombre: '',
     terapeutaId: '',
     terapeutaNombre: '',
+    terapeutaSecundarioId: '',
+    terapeutaSecundarioNombre: '',
+    pagoTerapeutaSecundario: '',
     servicioId: '',
     servicioNombre: '',
     precioCliente: '',
     pagoTerapeuta: '',
+    descripcionRecibo: '',
     condicionTipo: 'siempre',
     horaInicio: '',
     horaFin: '',
@@ -131,6 +150,10 @@ const AsignacionesServicio = ({
       clienteNombre: '',
       terapeutaId: '',
       terapeutaNombre: '',
+      terapeutaSecundarioId: '',
+      terapeutaSecundarioNombre: '',
+      pagoTerapeutaSecundario: '',
+      descripcionRecibo: '',
       servicioId: '',
       servicioNombre: '',
       precioCliente: '',
@@ -152,10 +175,14 @@ const AsignacionesServicio = ({
       clienteNombre: asig.clienteNombre || '',
       terapeutaId: asig.terapeutaId || '',
       terapeutaNombre: asig.terapeutaNombre || '',
+      terapeutaSecundarioId: asig.terapeutaSecundarioId || '',
+      terapeutaSecundarioNombre: asig.terapeutaSecundarioNombre || '',
+      pagoTerapeutaSecundario: asig.pagoTerapeutaSecundario?.toString() || '',
       servicioId: asig.servicioId || '',
       servicioNombre: asig.servicioNombre || '',
       precioCliente: asig.precioCliente?.toString() || '',
       pagoTerapeuta: asig.pagoTerapeuta?.toString() || '',
+      descripcionRecibo: asig.descripcionRecibo || '',
       condicionTipo: asig.condicion?.tipo || 'siempre',
       horaInicio: asig.condicion?.horaInicio || '',
       horaFin: asig.condicion?.horaFin || '',
@@ -185,6 +212,17 @@ const AsignacionesServicio = ({
       ...prev,
       terapeutaId,
       terapeutaNombre: terapeuta?.nombre || ''
+    }));
+  };
+
+  // NUEVO: Manejar cambio de terapeuta secundario
+  const handleTerapeutaSecundarioChange = (e) => {
+    const terapeutaSecundarioId = e.target.value;
+    const terapeuta = terapeutas.find(t => t.id === terapeutaSecundarioId);
+    setFormulario(prev => ({
+      ...prev,
+      terapeutaSecundarioId,
+      terapeutaSecundarioNombre: terapeuta?.nombre || ''
     }));
   };
 
@@ -224,10 +262,14 @@ const AsignacionesServicio = ({
         clienteNombre: formulario.clienteNombre,
         terapeutaId: formulario.terapeutaId,
         terapeutaNombre: formulario.terapeutaNombre,
+        terapeutaSecundarioId: formulario.terapeutaSecundarioId || null,
+        terapeutaSecundarioNombre: formulario.terapeutaSecundarioNombre || null,
+        pagoTerapeutaSecundario: parseFloat(formulario.pagoTerapeutaSecundario) || 0,
         servicioId: formulario.servicioId,
         servicioNombre: formulario.servicioNombre,
         precioCliente: parseFloat(formulario.precioCliente) || 0,
         pagoTerapeuta: parseFloat(formulario.pagoTerapeuta) || 0,
+        descripcionRecibo: formulario.descripcionRecibo || null,
         condicion: {
           tipo: formulario.condicionTipo,
           horaInicio: formulario.horaInicio || null,
@@ -587,8 +629,8 @@ const AsignacionesServicio = ({
   }, [citasParaActualizar]);
 
   // Calcular ganancia
-  const calcularGanancia = (precioCliente, pagoTerapeuta) => {
-    const ganancia = (precioCliente || 0) - (pagoTerapeuta || 0);
+  const calcularGanancia = (precioCliente, pagoTerapeuta, pagoTerapeutaSecundario) => {
+    const ganancia = (precioCliente || 0) - (pagoTerapeuta || 0) - (pagoTerapeutaSecundario || 0);
     return ganancia;
   };
 
@@ -695,7 +737,9 @@ const AsignacionesServicio = ({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Todos los clientes</option>
-              {clientesUnicos.map(cliente => (
+              {clientesUnicos
+              .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+              .map(cliente => (
                 <option key={cliente} value={cliente}>{cliente}</option>
               ))}
             </select>
@@ -709,7 +753,9 @@ const AsignacionesServicio = ({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Todas las terapeutas</option>
-              {terapeutasUnicos.map(terapeuta => (
+              {terapeutasUnicos
+              .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+              .map(terapeuta => (
                 <option key={terapeuta} value={terapeuta}>{terapeuta}</option>
               ))}
             </select>
@@ -768,7 +814,7 @@ const AsignacionesServicio = ({
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {asigs.map(asig => {
-                      const ganancia = calcularGanancia(asig.precioCliente, asig.pagoTerapeuta);
+                      const ganancia = calcularGanancia(asig.precioCliente, asig.pagoTerapeuta, asig.pagoTerapeutaSecundario);
                       return (
                         <tr key={asig.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
@@ -865,7 +911,9 @@ const AsignacionesServicio = ({
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Seleccionar cliente...</option>
-                    {clientes.map(c => (
+                    {clientes
+                    .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+                    .map(c => (
                       <option key={c.id} value={c.id}>{c.nombre}</option>
                     ))}
                   </select>
@@ -881,7 +929,9 @@ const AsignacionesServicio = ({
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Seleccionar terapeuta...</option>
-                    {terapeutas.map(t => (
+                    {terapeutas
+                    .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+                    .map(t => (
                       <option key={t.id} value={t.id}>{t.nombre}</option>
                     ))}
                   </select>
@@ -899,7 +949,9 @@ const AsignacionesServicio = ({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Seleccionar servicio...</option>
-                  {servicios.filter(s => s.activo !== false).map(s => (
+                  {servicios.filter(s => s.activo !== false)
+                  .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+                  .map(s => (
                     <option key={s.id} value={s.id}>
                       {s.nombre} {s.precioBase ? `($${s.precioBase})` : ''}
                     </option>
@@ -941,22 +993,100 @@ const AsignacionesServicio = ({
                   </div>
                 </div>
               </div>
+              {/* NUEVO: Terapeuta Secundario */}
+              <div className="border-t pt-4 mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Terapeuta Secundario (opcional)
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Para supervisiones o entrenamientos con dos terapeutas
+                </p>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <select
+                      value={formulario.terapeutaSecundarioId}
+                      onChange={handleTerapeutaSecundarioChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Sin terapeuta secundario</option>
+                      {terapeutas
+                        .filter(t => t.id !== formulario.terapeutaId)
+                        .map(t => (
+                          <option key={t.id} value={t.id}>{t.nombre}</option>
+                        ))
+                      }
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                      <input
+                        type="number"
+                        value={formulario.pagoTerapeutaSecundario}
+                        onChange={(e) => setFormulario(prev => ({ ...prev, pagoTerapeutaSecundario: e.target.value }))}
+                        placeholder="Pago $/hr"
+                        disabled={!formulario.terapeutaSecundarioId}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* NUEVO: Descripción para Recibo */}
+              {/* Descripción para Recibo - con sub-opciones si aplica */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descripción para Recibo (opcional)
+                </label>
+                
+                {/* Si el servicio tiene sub-opciones, mostrar select */}
+                {SUBOPCIONES_SERVICIO[formulario.servicioNombre] ? (
+                  <select
+                    value={formulario.descripcionRecibo}
+                    onChange={(e) => setFormulario(prev => ({ ...prev, descripcionRecibo: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Usar nombre del servicio</option>
+                    {SUBOPCIONES_SERVICIO[formulario.servicioNombre]
+                    .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+                    .map(opcion => (
+                      <option key={opcion} value={opcion}>{opcion}</option>
+                    ))}
+                  </select>
+                ) : (
+                  /* Si no tiene sub-opciones, mostrar input de texto */
+                  <input
+                    type="text"
+                    value={formulario.descripcionRecibo}
+                    onChange={(e) => setFormulario(prev => ({ ...prev, descripcionRecibo: e.target.value }))}
+                    placeholder="Ej: Supervisión de terapia..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                )}
+                
+                <p className="text-xs text-gray-500 mt-1">
+                  Este texto aparecerá en el recibo en lugar del nombre del servicio
+                </p>
+              </div> 
               
               {/* Preview de ganancia */}
               {(formulario.precioCliente || formulario.pagoTerapeuta) && (
                 <div className={`p-3 rounded-lg ${
-                  calcularGanancia(parseFloat(formulario.precioCliente), parseFloat(formulario.pagoTerapeuta)) >= 0
+                  calcularGanancia(parseFloat(formulario.precioCliente), parseFloat(formulario.pagoTerapeuta), parseFloat(formulario.pagoTerapeutaSecundario)) >= 0
                     ? 'bg-green-50 border border-green-200'
                     : 'bg-red-50 border border-red-200'
                 }`}>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-600">Ganancia por hora:</span>
                     <span className={`font-bold ${
-                      calcularGanancia(parseFloat(formulario.precioCliente), parseFloat(formulario.pagoTerapeuta)) >= 0
+                      calcularGanancia(parseFloat(formulario.precioCliente), parseFloat(formulario.pagoTerapeuta), parseFloat(formulario.pagoTerapeutaSecundario)) >= 0
                         ? 'text-green-600'
                         : 'text-red-600'
                     }`}>
-                      ${calcularGanancia(parseFloat(formulario.precioCliente) || 0, parseFloat(formulario.pagoTerapeuta) || 0).toLocaleString()}
+                      ${calcularGanancia(parseFloat(formulario.precioCliente) || 0, parseFloat(formulario.pagoTerapeuta) || 0, parseFloat(formulario.pagoTerapeutaSecundario) || 0).toLocaleString()}
                     </span>
                   </div>
                 </div>
