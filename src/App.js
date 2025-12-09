@@ -1,9 +1,7 @@
 import MigracionOrganization from './components/MigracionOrganization';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DollarSign, Users, Plus, Clock, LogOut, Lock, Edit, Calendar, Trash2, Search, Filter, X, ChevronLeft, ChevronRight, CheckCircle, FileText, Download, Upload, Link2, Settings } from 'lucide-react';
-import { PieChart, Pie, Cell, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
+import { Plus, Lock, Trash2, ChevronRight, CheckCircle, Link2, Settings } from 'lucide-react';
 import { importarUtilidadHistorica } from './api';
-import mammoth from 'mammoth';
 import moment from 'moment';
 
 // Firebase imports
@@ -69,6 +67,7 @@ import ConfiguracionEmpresa from './components/ConfiguracionEmpresa';
 import { ConfiguracionProvider } from './contexts/ConfiguracionContext';
 import AsignacionesServicio from './components/configuracion/AsignacionesServicio';
 import ContratosMensuales from './components/configuracion/ContratosMensuales';
+import Expedientes from './components/Expedientes';
 
 // En los imports de componentes
 import HorariosRecurrentes from './components/configuracion/HorariosRecurrentes';
@@ -1163,6 +1162,37 @@ const SistemaGestion = () => {
                             />
                         )}
 
+                        {/* Pestaña de Expedientes */}
+                        {activeTab === 'expedientes' && hasPermission('clientes') && (
+                          <Expedientes
+                            clientes={clientes}
+                            terapeutas={terapeutas}
+                            servicios={servicios}
+                            asignaciones={asignaciones}
+                            contratos={contratos}
+                            recibos={recibos}
+                            onEditarAsignacion={(asig) => {
+                              setActiveTab('configuracion');
+                              setConfigTab('asignaciones');
+                            }}
+                            onCrearAsignacion={(cliente) => {
+                              setActiveTab('configuracion');
+                              setConfigTab('asignaciones');
+                            }}
+                            onEditarContrato={(contrato) => {
+                              setActiveTab('configuracion');
+                              setConfigTab('contratos');
+                            }}
+                            onCrearContrato={(cliente) => {
+                              setActiveTab('configuracion');
+                              setConfigTab('contratos');
+                            }}
+                            onVerRecibos={(cliente) => {
+                              setActiveTab('recibos-gemini');
+                            }}
+                          />
+                        )}
+
                         {activeTab === 'servicios' && hasPermission('servicios') && (
                           <GestionServicios
                             servicios={servicios}
@@ -1597,6 +1627,28 @@ const SistemaGestion = () => {
                             onEliminarPago={async (pagoId) => {
                               await eliminarPagoTerapeuta(pagoId);
                               await cargarPagosTerapeutas();
+                            }}
+                          />
+                        )}
+
+                        {/* Horarios Recurrentes - Tab independiente desde menú Operación */}
+                        {activeTab === 'horarios-recurrentes' && hasPermission('admin') && (
+                          <HorariosRecurrentes
+                            horarios={horariosRecurrentes}
+                            clientes={clientes}
+                            terapeutas={terapeutas}
+                            asignaciones={asignaciones}
+                            onCrear={async (datos) => {
+                              await guardarHorarioRecurrente(datos);
+                            }}
+                            onActualizar={async (id, datos) => {
+                              await guardarHorarioRecurrente(datos, id);
+                            }}
+                            onEliminar={async (id) => {
+                              await eliminarHorarioRecurrenteFn(id);
+                            }}
+                            onGenerarCitas={async (citas) => {
+                              await generarCitasDesdeHorarios(citas);
                             }}
                           />
                         )}
