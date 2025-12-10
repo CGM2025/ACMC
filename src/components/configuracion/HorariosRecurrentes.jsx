@@ -83,6 +83,7 @@ const HorariosRecurrentes = ({
   });
   const [semanasSeleccionadas, setSemanasSeleccionadas] = useState([1, 2, 3, 4, 5]);
   const [generando, setGenerando] = useState(false);
+  const [clienteGenerarId, setClienteGenerarId] = useState('todos'); // 'todos' o el ID del cliente
   
   // Estados para importación de Excel
   const [mostrarModalImportar, setMostrarModalImportar] = useState(false);
@@ -444,6 +445,17 @@ const HorariosRecurrentes = ({
     );
   }, [clientesConHorarios, busqueda]);
 
+  // Clientes que tienen horarios activos (para el selector del modal de generación)
+  const clientesConHorariosActivos = useMemo(() => {
+    const clientesIds = new Set();
+    horarios.forEach(h => {
+      if (h.activo !== false) {
+        clientesIds.add(h.clienteId);
+      }
+    });
+    return clientesConHorarios.filter(c => clientesIds.has(c.id));
+  }, [horarios, clientesConHorarios]);
+
   // Sesiones del cliente seleccionado organizadas por día
   const sesionesPorDia = useMemo(() => {
     if (!clienteSeleccionado) return {};
@@ -641,16 +653,18 @@ const HorariosRecurrentes = ({
   // Calcular preview de citas a generar
   const previewCitas = useMemo(() => {
     if (!mostrarModalGenerar) return { total: 0, clientes: 0 };
-    
+
     let total = 0;
     const clientesSet = new Set();
-    
+
     horarios.forEach(horario => {
       if (horario.activo === false) return;
-      
+      // Filtrar por cliente si se seleccionó uno específico
+      if (clienteGenerarId !== 'todos' && horario.clienteId !== clienteGenerarId) return;
+
       semanasDelMes.forEach(semana => {
         if (!semanasSeleccionadas.includes(semana.numero)) return;
-        
+
         // Verificar si el día cae en esta semana
         let fecha = new Date(semana.inicio);
         while (fecha <= semana.fin) {
@@ -662,9 +676,9 @@ const HorariosRecurrentes = ({
         }
       });
     });
-    
+
     return { total, clientes: clientesSet.size };
-  }, [horarios, semanasDelMes, semanasSeleccionadas, mostrarModalGenerar]);
+  }, [horarios, semanasDelMes, semanasSeleccionadas, mostrarModalGenerar, clienteGenerarId]);
 
   // Generar citas
   const handleGenerarCitas = async () => {
@@ -679,7 +693,9 @@ const HorariosRecurrentes = ({
       
       horarios.forEach(horario => {
         if (horario.activo === false) return;
-        
+        // Filtrar por cliente si se seleccionó uno específico
+        if (clienteGenerarId !== 'todos' && horario.clienteId !== clienteGenerarId) return;
+
         // Buscar asignación para obtener precios
         const asignacion = asignaciones.find(a => 
           a.clienteId === horario.clienteId && 
@@ -1150,6 +1166,25 @@ const HorariosRecurrentes = ({
 
             {/* Contenido */}
             <div className="p-6 space-y-4">
+              {/* Selector de Cliente */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cliente
+                </label>
+                <select
+                  value={clienteGenerarId}
+                  onChange={(e) => setClienteGenerarId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                >
+                  <option value="todos">Todos los clientes ({clientesConHorariosActivos.length})</option>
+                  {clientesConHorariosActivos.map(cliente => (
+                    <option key={cliente.id} value={cliente.id}>
+                      {cliente.nombre} ({cliente.sesiones.filter(s => s.activo !== false).length} sesiones)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Selector de Mes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
