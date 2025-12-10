@@ -63,7 +63,9 @@ export const useModals = () => {
 
   const [citaForm, setCitaForm] = useState({
     terapeuta: '',
+    terapeutaId: '',
     cliente: '',
+    clienteId: '',
     fecha: '',
     horaInicio: '',
     horaFin: '',
@@ -151,7 +153,9 @@ export const useModals = () => {
         case 'cita':
           setCitaForm({
             terapeuta: item.terapeuta || '',
+            terapeutaId: item.terapeutaId || '',
             cliente: item.cliente || '',
+            clienteId: item.clienteId || '',
             fecha: item.fecha || '',
             horaInicio: item.horaInicio || '',
             horaFin: item.horaFin || '',

@@ -697,14 +697,18 @@ const HorariosRecurrentes = ({
         if (clienteGenerarId !== 'todos' && horario.clienteId !== clienteGenerarId) return;
 
         // Buscar asignación para obtener precios
-        const asignacion = asignaciones.find(a => 
-          a.clienteId === horario.clienteId && 
+        const asignacion = asignaciones.find(a =>
+          a.clienteId === horario.clienteId &&
           a.terapeutaId === horario.terapeutaId
         );
-        
+
+        // Buscar nombres actualizados desde las listas maestras
+        const terapeutaActual = terapeutas.find(t => t.id === horario.terapeutaId);
+        const clienteActual = clientes.find(c => c.id === horario.clienteId);
+
         semanasDelMes.forEach(semana => {
           if (!semanasSeleccionadas.includes(semana.numero)) return;
-          
+
           let fecha = new Date(semana.inicio);
           while (fecha <= semana.fin) {
             if (fecha.getDay() === horario.diaSemana) {
@@ -712,9 +716,9 @@ const HorariosRecurrentes = ({
                 fecha: fecha.toISOString().split('T')[0],
                 horaInicio: horario.horaInicio,
                 horaFin: horario.horaFin,
-                cliente: horario.clienteNombre,
+                cliente: clienteActual?.nombre || horario.clienteNombre,
                 clienteId: horario.clienteId,
-                terapeuta: horario.terapeutaNombre,
+                terapeuta: terapeutaActual?.nombre || horario.terapeutaNombre,
                 terapeutaId: horario.terapeutaId,
                 tipoTerapia: asignacion?.servicioNombre || 'Sesión de ABA estándar',
                 costoPorHora: asignacion?.precioCliente || 450,

@@ -1733,8 +1733,15 @@ const SistemaGestion = () => {
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Terapeuta</label>
                                 <select
                                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                  value={citaForm.terapeuta}
-                                  onChange={(e) => setCitaForm({ ...citaForm, terapeuta: e.target.value })}
+                                  value={citaForm.terapeutaId}
+                                  onChange={(e) => {
+                                    const terapeutaSeleccionado = terapeutas.find(t => t.id === e.target.value);
+                                    setCitaForm({
+                                      ...citaForm,
+                                      terapeutaId: e.target.value,
+                                      terapeuta: terapeutaSeleccionado?.nombre || ''
+                                    });
+                                  }}
                                 >
                                   <option value="">Seleccionar terapeuta</option>
                                   {terapeutas
