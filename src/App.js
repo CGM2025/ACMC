@@ -1171,19 +1171,20 @@ const SistemaGestion = () => {
                             asignaciones={asignaciones}
                             contratos={contratos}
                             recibos={recibos}
-                            onEditarAsignacion={(asig) => {
+                            citas={citas}
+                            onCrearAsignacion={() => {
                               setActiveTab('configuracion');
                               setConfigTab('asignaciones');
                             }}
-                            onCrearAsignacion={(cliente) => {
+                            onEditarAsignacion={() => {
                               setActiveTab('configuracion');
                               setConfigTab('asignaciones');
                             }}
-                            onEditarContrato={(contrato) => {
+                            onCrearContrato={() => {
                               setActiveTab('configuracion');
                               setConfigTab('contratos');
                             }}
-                            onCrearContrato={(cliente) => {
+                            onEditarContrato={() => {
                               setActiveTab('configuracion');
                               setConfigTab('contratos');
                             }}

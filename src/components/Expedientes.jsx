@@ -36,6 +36,7 @@ const Expedientes = ({
   asignaciones = [],
   contratos = [],
   recibos = [],
+  citas = [],
   onEditarAsignacion,
   onCrearAsignacion,
   onEditarContrato,
@@ -52,6 +53,7 @@ const Expedientes = ({
     equipo: true,
     asignaciones: true,
     contratos: true,
+    citas: false,
     financiero: true
   });
 
@@ -115,6 +117,19 @@ const Expedientes = ({
     if (!clienteSeleccionado) return [];
     return recibos.filter(r => r.clienteId === clienteSeleccionado.id);
   }, [recibos, clienteSeleccionado]);
+
+  // Citas del cliente (historial) - ordenadas por fecha más reciente
+  const citasCliente = useMemo(() => {
+    if (!clienteSeleccionado) return [];
+    return citas
+      .filter(c => c.clienteId === clienteSeleccionado.id || c.cliente === clienteSeleccionado.nombre)
+      .sort((a, b) => {
+        const fechaA = a.fecha ? new Date(a.fecha) : new Date(0);
+        const fechaB = b.fecha ? new Date(b.fecha) : new Date(0);
+        return fechaB - fechaA;
+      })
+      .slice(0, 50); // Limitar a últimas 50 citas
+  }, [citas, clienteSeleccionado]);
 
   // Resumen financiero
   const resumenFinanciero = useMemo(() => {
@@ -357,15 +372,17 @@ const Expedientes = ({
                               ${ganancia.toFixed(2)}
                             </td>
                             <td className="px-3 py-2 text-center">
-                              {onEditarAsignacion && (
-                                <button
-                                  onClick={() => onEditarAsignacion(asig)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                  title="Editar"
-                                >
-                                  <Edit2 size={16} />
-                                </button>
-                              )}
+                              <div className="flex items-center justify-center gap-1">
+                                {onEditarAsignacion && (
+                                  <button
+                                    onClick={() => onEditarAsignacion(asig)}
+                                    className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                                    title="Editar"
+                                  >
+                                    <Edit2 size={16} />
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -461,7 +478,7 @@ const Expedientes = ({
                         {onEditarContrato && (
                           <button
                             onClick={() => onEditarContrato(contrato)}
-                            className="text-purple-600 hover:text-purple-800"
+                            className="p-1 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded"
                             title="Editar contrato"
                           >
                             <Edit2 size={18} />
@@ -470,6 +487,88 @@ const Expedientes = ({
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          </SeccionHeader>
+
+          {/* Sección: Historial de Citas */}
+          <SeccionHeader
+            id="citas"
+            titulo="Historial de Citas"
+            icono={Calendar}
+            badge={citasCliente.length}
+          >
+            <div className="pt-4">
+              {citasCliente.length === 0 ? (
+                <p className="text-gray-500 text-sm">No hay citas registradas para este cliente</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Fecha</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Horario</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Terapeuta</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Servicio</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">Horas</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">Precio</th>
+                        <th className="px-3 py-2 text-center font-medium text-gray-600">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {citasCliente.map(cita => {
+                        const fecha = cita.fecha ? new Date(cita.fecha) : null;
+                        const horas = parseFloat(cita.horas) || 0;
+                        const precio = parseFloat(cita.precio) || parseFloat(cita.precioHora) || 0;
+
+                        return (
+                          <tr key={cita.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2">
+                              {fecha ? fecha.toLocaleDateString('es-MX', {
+                                weekday: 'short',
+                                day: 'numeric',
+                                month: 'short'
+                              }) : 'N/A'}
+                            </td>
+                            <td className="px-3 py-2 text-gray-600">
+                              {cita.horaInicio || ''} - {cita.horaFin || ''}
+                            </td>
+                            <td className="px-3 py-2">{cita.terapeuta || cita.terapeutaNombre || 'N/A'}</td>
+                            <td className="px-3 py-2">{cita.servicio || cita.tipoServicio || 'N/A'}</td>
+                            <td className="px-3 py-2 text-right">{horas.toFixed(1)}</td>
+                            <td className="px-3 py-2 text-right font-medium">
+                              ${precio.toFixed(2)}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                cita.completada || cita.estado === 'completada'
+                                  ? 'bg-green-100 text-green-700'
+                                  : cita.cancelada || cita.estado === 'cancelada'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-yellow-100 text-yellow-700'
+                              }`}>
+                                {cita.completada || cita.estado === 'completada' ? 'Completada' :
+                                 cita.cancelada || cita.estado === 'cancelada' ? 'Cancelada' : 'Pendiente'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-gray-100 font-medium">
+                      <tr>
+                        <td colSpan="4" className="px-3 py-2">Total ({citasCliente.length} citas)</td>
+                        <td className="px-3 py-2 text-right">
+                          {citasCliente.reduce((s, c) => s + (parseFloat(c.horas) || 0), 0).toFixed(1)} hrs
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          ${citasCliente.reduce((s, c) => s + (parseFloat(c.precio) || parseFloat(c.precioHora) || 0), 0).toFixed(2)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
               )}
             </div>

@@ -25,7 +25,13 @@ serviceWorkerRegistration.register({
   onSuccess: () => {
     console.log('✅ PWA: App lista para uso offline');
   },
-  onUpdate: () => {
-    console.log('🔄 PWA: Nueva versión disponible');
+  onUpdate: (registration) => {
+    console.log('🔄 PWA: Nueva versión disponible, actualizando...');
+    // Activar el nuevo service worker inmediatamente
+    if (registration && registration.waiting) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+    // Recargar la página para obtener la nueva versión
+    window.location.reload();
   }
 });

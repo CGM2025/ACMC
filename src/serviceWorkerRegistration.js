@@ -50,13 +50,13 @@ function registerValidSW(swUrl, config) {
             if (navigator.serviceWorker.controller) {
               // Nuevo contenido disponible
               console.log('🔄 PWA: Nueva versión disponible');
-              
+
               if (config && config.onUpdate) {
                 config.onUpdate(registration);
+              } else {
+                // Si no hay callback de onUpdate, mostrar notificación manual
+                showUpdateNotification();
               }
-              
-              // Mostrar notificación de actualización
-              showUpdateNotification();
             } else {
               // Contenido cacheado para uso offline
               console.log('📦 PWA: Contenido cacheado para uso offline');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useConfiguracion } from '../contexts/ConfiguracionContext';
 import {
   LayoutDashboard,
@@ -60,8 +60,8 @@ const Sidebar = ({
     return children.some(child => activeTab === child.id);
   };
 
-  // Estructura del menú jerárquico
-  const menuStructure = [
+  // Estructura del menú jerárquico - definida antes del useEffect
+  const menuStructure = useMemo(() => [
     // 1. Dashboard (sin cambios)
     {
       id: 'dashboard',
@@ -137,7 +137,22 @@ const Sidebar = ({
         { id: 'usuarios', label: 'Usuarios Portal', icon: Users, permission: 'usuarios' }
       ]
     }
-  ];
+  ], []);
+
+  // Auto-expandir submenú cuando activeTab cambia a un hijo
+  useEffect(() => {
+    menuStructure.forEach(item => {
+      if (item.type === 'group' && item.children) {
+        const hasActiveChild = item.children.some(child => child.id === activeTab);
+        if (hasActiveChild) {
+          setExpandedMenus(prev => ({
+            ...prev,
+            [item.id]: true
+          }));
+        }
+      }
+    });
+  }, [activeTab, menuStructure]);
 
   // Renderizar un item individual del menú
   const renderMenuItem = (item, isChild = false) => {
