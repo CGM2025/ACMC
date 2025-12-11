@@ -111,6 +111,87 @@ const HorariosRecurrentes = ({
     setTimeout(() => setMensaje(null), 3000);
   };
 
+  // Normalizar string para comparación
+  const normalizar = (str) => (str || '').toLowerCase().trim();
+
+  // Comparar nombres de forma flexible (uno contiene al otro)
+  const nombresCoinciden = (nombre1, nombre2) => {
+    const n1 = normalizar(nombre1);
+    const n2 = normalizar(nombre2);
+    if (!n1 || !n2) return false;
+
+    // Comparación exacta
+    if (n1 === n2) return true;
+
+    // Uno contiene al otro
+    if (n1.includes(n2) || n2.includes(n1)) return true;
+
+    // Comparar solo primer nombre
+    const primerNombre1 = n1.split(' ')[0];
+    const primerNombre2 = n2.split(' ')[0];
+    if (primerNombre1 === primerNombre2 && primerNombre1.length > 2) return true;
+
+    return false;
+  };
+
+  // Buscar asignación para un horario usando búsqueda flexible por nombres
+  const buscarAsignacionParaHorario = (horario) => {
+    const clienteActual = clientes.find(c => c.id === horario.clienteId);
+    const terapeutaActual = terapeutas.find(t => t.id === horario.terapeutaId);
+
+    const clienteNombre = clienteActual?.nombre || horario.clienteNombre;
+    const terapeutaNombre = terapeutaActual?.nombre || horario.terapeutaNombre;
+
+    // Primero intentar búsqueda exacta por IDs
+    let asignacion = asignaciones.find(a =>
+      a.clienteId === horario.clienteId &&
+      a.terapeutaId === horario.terapeutaId &&
+      a.activo !== false
+    );
+
+    if (asignacion) {
+      console.log(`[HorariosRecurrentes] Asignación encontrada por ID exacto para ${clienteNombre} + ${terapeutaNombre}:`, asignacion);
+      return asignacion;
+    }
+
+    // Si no hay match por ID, buscar por nombres de forma flexible
+    const asignacionesCoincidentes = asignaciones.filter(a => {
+      if (a.activo === false) return false;
+      const matchCliente = nombresCoinciden(a.clienteNombre, clienteNombre);
+      const matchTerapeuta = nombresCoinciden(a.terapeutaNombre, terapeutaNombre);
+      return matchCliente && matchTerapeuta;
+    });
+
+    if (asignacionesCoincidentes.length > 0) {
+      // Si hay múltiples, intentar filtrar por horario
+      if (asignacionesCoincidentes.length > 1 && horario.horaInicio) {
+        const horaNum = parseInt(horario.horaInicio.split(':')[0]);
+
+        for (const asig of asignacionesCoincidentes) {
+          if (asig.condicion?.tipo === 'horario' && asig.condicion.horaInicio && asig.condicion.horaFin) {
+            const inicioNum = parseInt(asig.condicion.horaInicio.split(':')[0]);
+            const finNum = parseInt(asig.condicion.horaFin.split(':')[0]);
+
+            if (horaNum >= inicioNum && horaNum < finNum) {
+              console.log(`[HorariosRecurrentes] Asignación encontrada por nombre+horario para ${clienteNombre} + ${terapeutaNombre}:`, asig);
+              return asig;
+            }
+          }
+        }
+      }
+
+      // Retornar la primera que tenga condición "siempre" o la primera disponible
+      asignacion = asignacionesCoincidentes.find(a => !a.condicion?.tipo || a.condicion.tipo === 'siempre')
+        || asignacionesCoincidentes[0];
+
+      console.log(`[HorariosRecurrentes] Asignación encontrada por nombre para ${clienteNombre} + ${terapeutaNombre}:`, asignacion);
+      return asignacion;
+    }
+
+    console.log(`[HorariosRecurrentes] NO se encontró asignación para ${clienteNombre} + ${terapeutaNombre}. Usando valores por defecto.`);
+    return null;
+  };
+
   // Buscar cliente por nombre (flexible)
   const buscarCliente = (nombreBuscado) => {
     if (!nombreBuscado) return null;
@@ -696,15 +777,12 @@ const HorariosRecurrentes = ({
         // Filtrar por cliente si se seleccionó uno específico
         if (clienteGenerarId !== 'todos' && horario.clienteId !== clienteGenerarId) return;
 
-        // Buscar asignación para obtener precios
-        const asignacion = asignaciones.find(a =>
-          a.clienteId === horario.clienteId &&
-          a.terapeutaId === horario.terapeutaId
-        );
-
         // Buscar nombres actualizados desde las listas maestras
         const terapeutaActual = terapeutas.find(t => t.id === horario.terapeutaId);
         const clienteActual = clientes.find(c => c.id === horario.clienteId);
+
+        // Buscar asignación para obtener precios usando búsqueda flexible
+        const asignacion = buscarAsignacionParaHorario(horario);
 
         semanasDelMes.forEach(semana => {
           if (!semanasSeleccionadas.includes(semana.numero)) return;

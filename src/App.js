@@ -501,69 +501,160 @@ const SistemaGestion = () => {
   }, [isLoggedIn, currentUser]);
 
     // Función para obtener precio de un cliente para un tipo de terapia
-  const obtenerPrecioCliente = useCallback((nombreCliente, tipoTerapia) => {
+  // PRIORIDAD: 1) Asignación de Servicio, 2) Precio personalizado del cliente, 3) Precio base
+  const obtenerPrecioCliente = useCallback((nombreCliente, tipoTerapia, nombreTerapeuta = '') => {
     const cliente = clientes.find(c => c.nombre === nombreCliente);
-    
+
+    // Función auxiliar para comparar nombres de forma flexible
+    const nombresCoinciden = (nombre1, nombre2) => {
+      const n1 = (nombre1 || '').toLowerCase().trim();
+      const n2 = (nombre2 || '').toLowerCase().trim();
+      if (!n1 || !n2) return false;
+      if (n1 === n2) return true;
+      if (n1.includes(n2) || n2.includes(n1)) return true;
+      const primerNombre1 = n1.split(' ')[0];
+      const primerNombre2 = n2.split(' ')[0];
+      if (primerNombre1 === primerNombre2 && primerNombre1.length > 2) return true;
+      return false;
+    };
+
+    // PRIORIDAD 1: Buscar en Asignaciones de Servicio (cliente + terapeuta específico)
+    if (nombreTerapeuta && asignaciones && asignaciones.length > 0) {
+      console.log(`[obtenerPrecioCliente] Buscando asignación para: cliente="${nombreCliente}", terapeuta="${nombreTerapeuta}"`);
+      console.log(`[obtenerPrecioCliente] Total asignaciones disponibles: ${asignaciones.length}`);
+
+      // Debug: mostrar asignaciones que coinciden parcialmente
+      const asignacionesDelCliente = asignaciones.filter(a =>
+        a.activo !== false && nombresCoinciden(a.clienteNombre, nombreCliente)
+      );
+      if (asignacionesDelCliente.length > 0) {
+        console.log(`[obtenerPrecioCliente] Asignaciones del cliente "${nombreCliente}":`,
+          asignacionesDelCliente.map(a => `${a.terapeutaNombre} -> $${a.precioCliente}`));
+      }
+
+      const asignacion = asignaciones.find(a =>
+        a.activo !== false &&
+        nombresCoinciden(a.clienteNombre, nombreCliente) &&
+        nombresCoinciden(a.terapeutaNombre, nombreTerapeuta)
+      );
+
+      if (asignacion && asignacion.precioCliente) {
+        console.log(`[obtenerPrecioCliente] ✅ Usando Asignación de Servicio para ${nombreCliente} + ${nombreTerapeuta}: $${asignacion.precioCliente}`);
+        return {
+          precio: asignacion.precioCliente,
+          esPersonalizado: true,
+          fuente: 'asignacion',
+          asignacion: asignacion
+        };
+      } else {
+        console.log(`[obtenerPrecioCliente] ❌ No se encontró asignación para ${nombreCliente} + ${nombreTerapeuta}`);
+      }
+    }
+
+    // PRIORIDAD 2: Precio personalizado del cliente por tipo de terapia
     if (cliente && cliente.preciosPersonalizados && cliente.preciosPersonalizados[tipoTerapia]) {
+      console.log(`[obtenerPrecioCliente] Usando precio personalizado del cliente ${nombreCliente}: $${cliente.preciosPersonalizados[tipoTerapia]}`);
       return {
         precio: cliente.preciosPersonalizados[tipoTerapia],
-        esPersonalizado: true
+        esPersonalizado: true,
+        fuente: 'cliente'
       };
     }
-    
-    // Si no tiene precio personalizado, usar precio base
+
+    // PRIORIDAD 3: Precio base por tipo de terapia
+    console.log(`[obtenerPrecioCliente] Usando precio base para ${tipoTerapia}: $${preciosBasePorTerapia[tipoTerapia] || 450}`);
     return {
       precio: preciosBasePorTerapia[tipoTerapia] || 450,
-      esPersonalizado: false
+      esPersonalizado: false,
+      fuente: 'base'
     };
-  }, [clientes, preciosBasePorTerapia]);
+  }, [clientes, preciosBasePorTerapia, asignaciones]);
 
   // Función para obtener costo de una terapeuta para un tipo de terapia
+  // PRIORIDAD: 1) Asignación de Servicio, 2) Costo por cliente, 3) Costo por servicio, 4) Sin costo
   const obtenerCostoTerapeuta = useCallback((nombreTerapeuta, tipoTerapia, nombreCliente = '') => {
     const terapeuta = terapeutas.find(t => t.nombre === nombreTerapeuta);
-    
-    if (!terapeuta) {
-      return { costo: 0, esPersonalizado: false };
-    }
-    
-    // PRIORIDAD 1: Costo por cliente específico (más específico)
-    if (nombreCliente && terapeuta.costosPorCliente) {
-      const cliente = clientes.find(c => c.nombre === nombreCliente);
-      if (cliente && terapeuta.costosPorCliente[cliente.id]) {
+
+    // Función auxiliar para comparar nombres de forma flexible
+    const nombresCoinciden = (nombre1, nombre2) => {
+      const n1 = (nombre1 || '').toLowerCase().trim();
+      const n2 = (nombre2 || '').toLowerCase().trim();
+      if (!n1 || !n2) return false;
+      if (n1 === n2) return true;
+      if (n1.includes(n2) || n2.includes(n1)) return true;
+      const primerNombre1 = n1.split(' ')[0];
+      const primerNombre2 = n2.split(' ')[0];
+      if (primerNombre1 === primerNombre2 && primerNombre1.length > 2) return true;
+      return false;
+    };
+
+    // PRIORIDAD 1: Buscar en Asignaciones de Servicio (cliente + terapeuta específico)
+    if (nombreCliente && asignaciones && asignaciones.length > 0) {
+      const asignacion = asignaciones.find(a =>
+        a.activo !== false &&
+        nombresCoinciden(a.clienteNombre, nombreCliente) &&
+        nombresCoinciden(a.terapeutaNombre, nombreTerapeuta)
+      );
+
+      if (asignacion && asignacion.pagoTerapeuta !== undefined) {
+        console.log(`[obtenerCostoTerapeuta] Usando Asignación de Servicio para ${nombreTerapeuta} + ${nombreCliente}: $${asignacion.pagoTerapeuta}`);
         return {
-          costo: terapeuta.costosPorCliente[cliente.id],
+          costo: asignacion.pagoTerapeuta,
           esPersonalizado: true,
-          tipo: 'cliente'
+          fuente: 'asignacion',
+          asignacion: asignacion
         };
       }
     }
-    
-    // PRIORIDAD 2: Costo por servicio
+
+    if (!terapeuta) {
+      return { costo: 0, esPersonalizado: false, fuente: 'ninguno' };
+    }
+
+    // PRIORIDAD 2: Costo por cliente específico
+    if (nombreCliente && terapeuta.costosPorCliente) {
+      const cliente = clientes.find(c => c.nombre === nombreCliente);
+      if (cliente && terapeuta.costosPorCliente[cliente.id]) {
+        console.log(`[obtenerCostoTerapeuta] Usando costo por cliente para ${nombreTerapeuta}: $${terapeuta.costosPorCliente[cliente.id]}`);
+        return {
+          costo: terapeuta.costosPorCliente[cliente.id],
+          esPersonalizado: true,
+          fuente: 'cliente'
+        };
+      }
+    }
+
+    // PRIORIDAD 3: Costo por servicio
     if (terapeuta.costosPorServicio && terapeuta.costosPorServicio[tipoTerapia]) {
+      console.log(`[obtenerCostoTerapeuta] Usando costo por servicio para ${nombreTerapeuta}: $${terapeuta.costosPorServicio[tipoTerapia]}`);
       return {
         costo: terapeuta.costosPorServicio[tipoTerapia],
         esPersonalizado: true,
-        tipo: 'servicio'
+        fuente: 'servicio'
       };
     }
-    
+
     // Si no tiene costo personalizado, retornar 0 (debe ingresarse manualmente)
     return {
       costo: 0,
-      esPersonalizado: false
+      esPersonalizado: false,
+      fuente: 'ninguno'
     };
-  }, [terapeutas, clientes]);
+  }, [terapeutas, clientes, asignaciones]);
 
-  // useEffect para autocompletar precio cuando cambia el cliente o tipo de terapia
+  // useEffect para autocompletar precio cuando cambia el cliente, terapeuta o tipo de terapia
+  // IMPORTANTE: Solo se activa para citas NUEVAS (editingId es null)
+  // Para citas existentes, se respeta el precio que ya tiene guardado
   useEffect(() => {
-    if (citaForm.cliente && citaForm.tipoTerapia) {
-      const precioInfo = obtenerPrecioCliente(citaForm.cliente, citaForm.tipoTerapia);
+    // Solo autocompletar si NO estamos editando una cita existente
+    if (!editingId && citaForm.cliente && citaForm.tipoTerapia) {
+      const precioInfo = obtenerPrecioCliente(citaForm.cliente, citaForm.tipoTerapia, citaForm.terapeuta);
       setCitaForm(prev => ({
         ...prev,
         costoPorHora: precioInfo.precio
       }));
     }
-  }, [citaForm.cliente, citaForm.tipoTerapia, clientes, obtenerPrecioCliente]);
+  }, [citaForm.cliente, citaForm.tipoTerapia, citaForm.terapeuta, clientes, asignaciones, obtenerPrecioCliente, editingId]);
 
   // useEffect para recalcular costo total (precio al cliente) cuando cambian horas o precio por hora
   useEffect(() => {
@@ -588,8 +679,11 @@ const SistemaGestion = () => {
   }, [citaForm.horaInicio, citaForm.horaFin, citaForm.costoTerapeuta]);
 
   // useEffect para autocompletar costo de terapeuta cuando cambia la terapeuta, tipo de terapia o cliente
+  // IMPORTANTE: Solo se activa para citas NUEVAS (editingId es null)
+  // Para citas existentes, se respeta el costo que ya tiene guardado
   useEffect(() => {
-    if (citaForm.terapeuta && citaForm.tipoTerapia) {
+    // Solo autocompletar si NO estamos editando una cita existente
+    if (!editingId && citaForm.terapeuta && citaForm.tipoTerapia) {
       const costoInfo = obtenerCostoTerapeuta(citaForm.terapeuta, citaForm.tipoTerapia, citaForm.cliente);
       if (costoInfo.esPersonalizado) {
         setCitaForm(prev => ({
@@ -598,7 +692,7 @@ const SistemaGestion = () => {
         }));
       }
     }
-  }, [citaForm.terapeuta, citaForm.tipoTerapia, citaForm.cliente, terapeutas, clientes, obtenerCostoTerapeuta]);
+  }, [citaForm.terapeuta, citaForm.tipoTerapia, citaForm.cliente, terapeutas, clientes, asignaciones, obtenerCostoTerapeuta, editingId]);
 
   //useEffect para Generar automaticamente reportes cuando cambia el mes
   useEffect(() => {
@@ -1842,10 +1936,12 @@ const SistemaGestion = () => {
                                     })} />
                                   {/* Indicador de precio personalizado */}
                                   {citaForm.cliente && citaForm.tipoTerapia && (() => {
-                                    const precioInfo = obtenerPrecioCliente(citaForm.cliente, citaForm.tipoTerapia);
+                                    const precioInfo = obtenerPrecioCliente(citaForm.cliente, citaForm.tipoTerapia, citaForm.terapeuta);
                                     return (
                                       <p className={`text-xs mt-1 ${precioInfo.esPersonalizado ? 'text-green-600' : 'text-gray-500'}`}>
-                                        {precioInfo.esPersonalizado ? (
+                                        {precioInfo.fuente === 'asignacion' ? (
+                                          <>✅ Precio de Asignación de Servicio</>
+                                        ) : precioInfo.fuente === 'cliente' ? (
                                           <>✅ Precio personalizado del cliente</>
                                         ) : (
                                           <>💡 Usando precio base</>
@@ -1895,10 +1991,12 @@ const SistemaGestion = () => {
                                       placeholder="200" />
                                     {/* Indicador de costo de terapeuta */}
                                     {citaForm.terapeuta && citaForm.tipoTerapia && (() => {
-                                      const costoInfo = obtenerCostoTerapeuta(citaForm.terapeuta, citaForm.tipoTerapia);
+                                      const costoInfo = obtenerCostoTerapeuta(citaForm.terapeuta, citaForm.tipoTerapia, citaForm.cliente);
                                       return (
                                         <p className={`text-xs mt-1 ${costoInfo.esPersonalizado ? 'text-green-600' : 'text-gray-500'}`}>
-                                          {costoInfo.esPersonalizado ? (
+                                          {costoInfo.fuente === 'asignacion' ? (
+                                            <>✅ Costo de Asignación de Servicio</>
+                                          ) : costoInfo.esPersonalizado ? (
                                             <>✅ Costo configurado para esta terapeuta</>
                                           ) : (
                                             <>💡 Sin costo configurado - ingresar manualmente</>
