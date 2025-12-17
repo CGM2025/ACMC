@@ -6,7 +6,7 @@ import moment from 'moment';
 
 // Firebase imports
 import { initializeApp } from 'firebase/app';
-import { getFirestore, updateDoc, doc } from 'firebase/firestore';
+import { getFirestore, updateDoc, doc, getDoc } from 'firebase/firestore';
 
 // Hooks
 import { useAuth } from './hooks/useAuth';  
@@ -181,6 +181,36 @@ const SistemaGestion = () => {
 
   // ← AQUÍ DEBE IR el useState de usuariosPortal
   const [usuariosPortal, setUsuariosPortal] = useState([]);
+
+  // Estado para cliente del portal (cuando el usuario tiene rol 'cliente')
+  const [clientePortal, setClientePortal] = useState(null);
+  const [cargandoClientePortal, setCargandoClientePortal] = useState(false);
+
+  // Efecto para cargar datos del cliente cuando es usuario tipo cliente
+  useEffect(() => {
+    const cargarClientePortal = async () => {
+      if (isLoggedIn && currentUser?.rol === 'cliente' && currentUser?.clienteId) {
+        setCargandoClientePortal(true);
+        try {
+          const clienteDoc = await getDoc(doc(db, 'clientes', currentUser.clienteId));
+          if (clienteDoc.exists()) {
+            setClientePortal({ id: clienteDoc.id, ...clienteDoc.data() });
+            console.log('✅ Cliente del portal cargado:', clienteDoc.id);
+          } else {
+            console.error('❌ Cliente no encontrado:', currentUser.clienteId);
+            setClientePortal(null);
+          }
+        } catch (error) {
+          console.error('Error cargando cliente del portal:', error);
+          setClientePortal(null);
+        } finally {
+          setCargandoClientePortal(false);
+        }
+      }
+    };
+
+    cargarClientePortal();
+  }, [isLoggedIn, currentUser?.rol, currentUser?.clienteId]);
 
   //Funcion para cargar clientes
   // 
@@ -1169,8 +1199,8 @@ const SistemaGestion = () => {
 
   // Si es cliente, mostrar el portal de clientes
   if (isLoggedIn && currentUser?.rol === 'cliente') {
-    // Esperar a que se carguen los clientes
-    if (clientes.length === 0) {
+    // Mostrar spinner mientras carga el cliente
+    if (cargandoClientePortal) {
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
@@ -1181,10 +1211,8 @@ const SistemaGestion = () => {
       );
     }
 
-    // Buscar los datos del cliente vinculado
-    const clienteVinculado = clientes.find(c => c.id === currentUser.clienteId);
-
-    if (!clienteVinculado) {
+    // Si no hay clienteId o no se encontró el cliente
+    if (!clientePortal) {
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
@@ -1195,7 +1223,7 @@ const SistemaGestion = () => {
               Tu cuenta no está vinculada a un cliente. Contacta con ACMC para resolver este problema.
             </p>
             <p className="text-gray-400 text-sm mb-4">
-              ID de usuario: {currentUser.clienteId || 'No asignado'}
+              ID de cliente: {currentUser.clienteId || 'No asignado'}
             </p>
             <button
               onClick={handleLogout}
@@ -1210,7 +1238,7 @@ const SistemaGestion = () => {
 
     return (
       <PortalCliente
-        clienteData={clienteVinculado}
+        clienteData={clientePortal}
         recibos={recibos}
         pagos={pagos}
         citas={citas}
