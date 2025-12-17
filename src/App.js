@@ -1169,6 +1169,18 @@ const SistemaGestion = () => {
 
   // Si es cliente, mostrar el portal de clientes
   if (isLoggedIn && currentUser?.rol === 'cliente') {
+    // Esperar a que se carguen los clientes
+    if (clientes.length === 0) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-gray-600">Cargando datos...</p>
+          </div>
+        </div>
+      );
+    }
+
     // Buscar los datos del cliente vinculado
     const clienteVinculado = clientes.find(c => c.id === currentUser.clienteId);
 
@@ -1181,6 +1193,9 @@ const SistemaGestion = () => {
             </p>
             <p className="text-gray-600 mb-4">
               Tu cuenta no está vinculada a un cliente. Contacta con ACMC para resolver este problema.
+            </p>
+            <p className="text-gray-400 text-sm mb-4">
+              ID de usuario: {currentUser.clienteId || 'No asignado'}
             </p>
             <button
               onClick={handleLogout}
