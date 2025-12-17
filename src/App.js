@@ -39,6 +39,7 @@ import EstadoCuentaClientes from './components/pages/EstadoCuentaClientes';
 
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Portal from './components/Portal';
+import PortalCliente from './components/PortalCliente';
 import Login from './components/Login';
 
 import GestionUsuarios from './components/pages/GestionUsuarios';
@@ -1163,6 +1164,43 @@ const SistemaGestion = () => {
           importandoWord={importandoWord}
         />
       </ConfiguracionProvider>
+    );
+  }
+
+  // Si es cliente, mostrar el portal de clientes
+  if (isLoggedIn && currentUser?.rol === 'cliente') {
+    // Buscar los datos del cliente vinculado
+    const clienteVinculado = clientes.find(c => c.id === currentUser.clienteId);
+
+    if (!clienteVinculado) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
+            <p className="text-red-600 font-semibold mb-4">
+              Error: No se encontraron los datos del cliente vinculado
+            </p>
+            <p className="text-gray-600 mb-4">
+              Tu cuenta no está vinculada a un cliente. Contacta con ACMC para resolver este problema.
+            </p>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <PortalCliente
+        clienteData={clienteVinculado}
+        recibos={recibos}
+        pagos={pagos}
+        citas={citas}
+        onLogout={handleLogout}
+      />
     );
   }
 
