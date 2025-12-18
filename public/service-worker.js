@@ -1,17 +1,15 @@
 /* eslint-disable no-restricted-globals */
 
 // Nombre del cache - incrementar versión para forzar actualización
-const CACHE_NAME = 'acmc-portal-v1';
+const CACHE_NAME = 'acmc-portal-v2';
 
 // Archivos a cachear para funcionamiento offline
 const urlsToCache = [
   '/',
   '/index.html',
-  '/static/js/main.js',
-  '/static/css/main.css',
   '/manifest.json',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png'
+  '/icons/web-app-manifest-192x192.png',
+  '/icons/web-app-manifest-512x512.png'
 ];
 
 // Instalación del Service Worker
@@ -120,8 +118,8 @@ self.addEventListener('push', (event) => {
     
     const options = {
       body: data.body || 'Nueva notificación',
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-72x72.png',
+      icon: '/icons/web-app-manifest-192x192.png',
+      badge: '/icons/favicon-96x96.png',
       vibrate: [100, 50, 100],
       data: {
         dateOfArrival: Date.now(),
