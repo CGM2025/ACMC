@@ -40,6 +40,7 @@ import EstadoCuentaClientes from './components/pages/EstadoCuentaClientes';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Portal from './components/Portal';
 import PortalCliente from './components/PortalCliente';
+import InstallBanner from './components/InstallBanner';
 import Login from './components/Login';
 
 import GestionUsuarios from './components/pages/GestionUsuarios';
@@ -1281,6 +1282,8 @@ const SistemaGestion = () => {
 
   return (
     <ConfiguracionProvider currentUser={currentUser} isLoggedIn={isLoggedIn}>
+      {/* Banner de instalación PWA para móviles */}
+      <InstallBanner />
       <Router>
         <Routes>
           {/* Ruta del Portal de Clientes */}
