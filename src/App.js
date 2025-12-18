@@ -1186,7 +1186,9 @@ const SistemaGestion = () => {
             await cargarCitas();
           }}
           onCrearCita={async (citaData) => {
-            await crearCita(citaData, currentUser?.organizationId);
+            // Usar organizationId del terapeuta vinculado o del usuario
+            const orgId = terapeutaVinculado?.organizationId || currentUser?.organizationId;
+            await crearCita(citaData, orgId);
             await cargarCitas();
           }}
           onImportarWord={importarDesdeWord}
