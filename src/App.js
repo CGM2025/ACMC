@@ -1186,7 +1186,7 @@ const SistemaGestion = () => {
             await cargarCitas();
           }}
           onCrearCita={async (citaData) => {
-            await crearCita(citaData);
+            await crearCita(citaData, currentUser?.organizationId);
             await cargarCitas();
           }}
           onImportarWord={importarDesdeWord}
