@@ -140,3 +140,130 @@ exports.enviarResetPassword = functions.https.onCall((data) => {
         return {success: true, link: link};
       });
 });
+
+/**
+ * Crear usuario del sistema (admin, asistente, terapeuta)
+ * Solo administradores pueden crear estos usuarios
+ */
+exports.crearUsuarioSistema = functions.https.onCall((data, context) => {
+  console.log("=== CREAR USUARIO SISTEMA ===");
+
+  const realData = data?.data || data;
+  const email = realData?.email;
+  const password = realData?.password;
+  const nombre = realData?.nombre;
+  const rol = realData?.rol;
+  const terapeutaId = realData?.terapeutaId;
+  const idToken = realData?.idToken;
+
+  console.log("Email:", email);
+  console.log("Nombre:", nombre);
+  console.log("Rol:", rol);
+
+  // Validar token
+  if (!idToken) {
+    throw new functions.https.HttpsError("unauthenticated", "No se recibió token");
+  }
+
+  // Validar rol permitido
+  const rolesPermitidos = ["admin", "asistente", "terapeuta"];
+  if (!rolesPermitidos.includes(rol)) {
+    throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Rol no válido. Debe ser: admin, asistente o terapeuta",
+    );
+  }
+
+  let adminOrgId = null;
+
+  return admin.auth().verifyIdToken(idToken)
+      .then((decodedToken) => {
+        console.log("Token válido, UID:", decodedToken.uid);
+        return admin.firestore().collection("usuarios").doc(decodedToken.uid).get();
+      })
+      .then((adminDoc) => {
+        if (!adminDoc.exists) {
+          throw new functions.https.HttpsError("permission-denied", "Usuario no encontrado");
+        }
+
+        const adminData = adminDoc.data();
+        if (adminData.rol !== "admin") {
+          throw new functions.https.HttpsError(
+              "permission-denied",
+              "Solo administradores pueden crear usuarios del sistema",
+          );
+        }
+
+        // Guardar organizationId del admin
+        adminOrgId = adminData.organizationId || "org_acmc_001";
+
+        // Validar datos requeridos
+        if (!email || !password || !nombre) {
+          throw new functions.https.HttpsError("invalid-argument", "Faltan datos requeridos");
+        }
+
+        if (password.length < 8) {
+          throw new functions.https.HttpsError(
+              "invalid-argument",
+              "La contraseña debe tener al menos 8 caracteres",
+          );
+        }
+
+        // Crear usuario en Firebase Auth
+        return admin.auth().createUser({
+          email: email,
+          password: password,
+          displayName: nombre,
+          disabled: false,
+        });
+      })
+      .then((userRecord) => {
+        console.log("Usuario creado en Auth:", userRecord.uid);
+
+        // Crear documento en Firestore
+        const userData = {
+          email: email,
+          nombre: nombre,
+          rol: rol,
+          activo: true,
+          organizationId: adminOrgId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          passwordCambiada: false,
+        };
+
+        // Si es terapeuta, vincular con terapeutaId
+        if (rol === "terapeuta" && terapeutaId) {
+          userData.terapeutaId = terapeutaId;
+        }
+
+        return admin.firestore().collection("usuarios").doc(userRecord.uid).set(userData)
+            .then(() => userRecord);
+      })
+      .then((userRecord) => {
+        console.log("=== USUARIO SISTEMA CREADO ===");
+        return {
+          success: true,
+          uid: userRecord.uid,
+          email: email,
+          nombre: nombre,
+          rol: rol,
+          message: "Usuario del sistema creado exitosamente",
+        };
+      })
+      .catch((error) => {
+        console.error("Error:", error.code, error.message);
+        if (error instanceof functions.https.HttpsError) {
+          throw error;
+        }
+        if (error.code === "auth/email-already-exists") {
+          throw new functions.https.HttpsError("already-exists", "Ya existe un usuario con este email");
+        }
+        if (error.code === "auth/invalid-email") {
+          throw new functions.https.HttpsError("invalid-argument", "Email inválido");
+        }
+        if (error.code === "auth/weak-password") {
+          throw new functions.https.HttpsError("invalid-argument", "Contraseña muy débil");
+        }
+        throw new functions.https.HttpsError("internal", error.message);
+      });
+});

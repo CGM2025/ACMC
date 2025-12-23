@@ -89,8 +89,8 @@ const Sidebar = ({
       type: 'group',
       children: [
         { id: 'citas', label: 'Calendario/Citas', icon: Calendar, permission: 'citas' },
-        { id: 'solicitudes', label: 'Solicitudes de Cambio', icon: Send, permission: 'admin' },
-        { id: 'horarios-recurrentes', label: 'Horarios Recurrentes', icon: CalendarClock, permission: 'admin' }
+        { id: 'solicitudes', label: 'Solicitudes de Cambio', icon: Send, permission: 'solicitudes' },
+        { id: 'horarios-recurrentes', label: 'Horarios Recurrentes', icon: CalendarClock, permission: 'horariosRecurrentes' }
       ]
     },
 
@@ -127,13 +127,13 @@ const Sidebar = ({
       id: 'configuracion-menu',
       label: 'Configuración',
       icon: Settings,
-      permission: 'admin',
+      permission: 'configuracion',
       type: 'group',
       children: [
         { id: 'clientes', label: 'Catálogo Clientes', icon: Users, permission: 'clientes' },
         { id: 'terapeutas', label: 'Catálogo Terapeutas', icon: UserCog, permission: 'terapeutas' },
         { id: 'servicios', label: 'Catálogo Servicios', icon: Package, permission: 'servicios' },
-        { id: 'configuracion', label: 'Empresa', icon: Building2, permission: 'admin' },
+        { id: 'configuracion', label: 'Empresa', icon: Building2, permission: 'configuracion' },
         { id: 'usuarios', label: 'Usuarios Portal', icon: Users, permission: 'usuarios' }
       ]
     }

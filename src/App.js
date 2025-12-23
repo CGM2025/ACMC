@@ -527,7 +527,14 @@ const SistemaGestion = () => {
   // Efecto para establecer la pestaña activa según el rol del usuario
   useEffect(() => {
     if (isLoggedIn && currentUser) {
-      setActiveTab(currentUser.rol === 'terapeuta' ? 'horas' : 'dashboard');
+      // Determinar pestaña inicial según rol
+      if (currentUser.rol === 'terapeuta') {
+        setActiveTab('horas');
+      } else if (currentUser.rol === 'asistente') {
+        setActiveTab('citas'); // Asistentes no tienen acceso al Dashboard
+      } else {
+        setActiveTab('dashboard'); // Admin
+      }
     }
     cargarComprobantes();
   }, [isLoggedIn, currentUser]);
@@ -1594,7 +1601,7 @@ const SistemaGestion = () => {
                         )}
 
                         {/* Pestaña de Configuración */}
-                        {activeTab === 'configuracion' && currentUser?.rol === 'admin' && (
+                        {activeTab === 'configuracion' && hasPermission('configuracion') && (
                           <div className="space-y-6">
                             {/* Sub-tabs de configuración */}
                             <div className="flex gap-4 border-b">
@@ -1813,7 +1820,7 @@ const SistemaGestion = () => {
                         )}
 
                         {/* Horarios Recurrentes - Tab independiente desde menú Operación */}
-                        {activeTab === 'horarios-recurrentes' && hasPermission('admin') && (
+                        {activeTab === 'horarios-recurrentes' && hasPermission('horariosRecurrentes') && (
                           <HorariosRecurrentes
                             horarios={horariosRecurrentes}
                             clientes={clientes}
@@ -1854,6 +1861,7 @@ const SistemaGestion = () => {
                           <GestionUsuarios
                             clientes={clientes}
                             usuarios={usuariosPortal}
+                            usuariosSistema={usuarios.filter(u => ['admin', 'asistente', 'terapeuta'].includes(u.rol))}
                             onCrearUsuario={async (datos) => {
                               const resultado = await crearUsuarioPortalCloud(datos);
                               if (resultado.success) {
@@ -1869,6 +1877,7 @@ const SistemaGestion = () => {
                               return resultado;
                             }}
                             onResetPassword={enviarResetPasswordCloud}
+                            onRecargarUsuarios={cargarUsuariosPortal}
                           />
                         )}
 
@@ -1894,7 +1903,7 @@ const SistemaGestion = () => {
                             onRecargar={cargarComprobantes}
                           />
                         )}
-                        {activeTab === 'solicitudes' && hasPermission('admin') && (
+                        {activeTab === 'solicitudes' && hasPermission('solicitudes') && (
                           <SolicitudesCambio
                             currentUser={currentUser}
                             terapeutas={terapeutas}

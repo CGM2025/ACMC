@@ -10,8 +10,10 @@ import {
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const PERMISOS = {
-  admin: ['dashboard', 'horas', 'reportes', 'terapeutas', 'bloques', 'citas', 'clientes', 'pagos', 'usuarios', 'comprobantes', 'utilidad', 'servicios'],
-  // ... otros roles
+  admin: ['dashboard', 'horas', 'reportes', 'terapeutas', 'bloques', 'citas', 'clientes', 'pagos', 'usuarios', 'comprobantes', 'utilidad', 'servicios', 'configuracion', 'expedientes', 'solicitudes', 'horariosRecurrentes'],
+  asistente: ['horas', 'reportes', 'terapeutas', 'bloques', 'citas', 'clientes', 'pagos', 'usuarios', 'comprobantes', 'servicios', 'configuracion', 'expedientes', 'solicitudes', 'horariosRecurrentes'],
+  terapeuta: ['horas', 'citas', 'bloques', 'reportes'],
+  cliente: []
 };
 
 /**
@@ -168,15 +170,14 @@ export const useAuth = () => {
    */
   const hasPermission = (permission) => {
     if (!currentUser) return false;
-    
-    // Admin tiene todos los permisos
-    if (currentUser.rol === 'admin') return true;
-    
-    // Terapeuta tiene permisos limitados
-    if (currentUser.rol === 'terapeuta') {
-      return ['horas', 'citas', 'bloques', 'reportes'].includes(permission);
+
+    const rol = currentUser.rol;
+
+    // Verificar si el rol existe en la matriz de permisos
+    if (PERMISOS[rol]) {
+      return PERMISOS[rol].includes(permission);
     }
-    
+
     return false;
   };
 
