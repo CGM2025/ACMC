@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 
 // Nombre del cache - incrementar versión para forzar actualización
-const CACHE_NAME = 'acmc-portal-v2';
+const CACHE_NAME = 'acmc-portal-v3';
 
 // Archivos a cachear para funcionamiento offline
 const urlsToCache = [

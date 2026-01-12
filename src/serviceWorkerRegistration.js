@@ -48,15 +48,20 @@ function registerValidSW(swUrl, config) {
         installingWorker.onstatechange = () => {
           if (installingWorker.state === 'installed') {
             if (navigator.serviceWorker.controller) {
-              // Nuevo contenido disponible
-              console.log('🔄 PWA: Nueva versión disponible');
+              // Nuevo contenido disponible - FORZAR ACTUALIZACIÓN AUTOMÁTICA
+              console.log('🔄 PWA: Nueva versión disponible - actualizando automáticamente...');
 
               if (config && config.onUpdate) {
                 config.onUpdate(registration);
-              } else {
-                // Si no hay callback de onUpdate, mostrar notificación manual
-                showUpdateNotification();
               }
+
+              // Forzar que el nuevo service worker tome control inmediatamente
+              if (registration.waiting) {
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+              }
+
+              // Mostrar notificación breve y recargar
+              showUpdateNotification(true); // true = auto-reload
             } else {
               // Contenido cacheado para uso offline
               console.log('📦 PWA: Contenido cacheado para uso offline');
@@ -114,53 +119,84 @@ export function unregister() {
 }
 
 // Mostrar notificación de actualización disponible
-function showUpdateNotification() {
+function showUpdateNotification(autoReload = false) {
   // Crear elemento de notificación
   const notification = document.createElement('div');
   notification.id = 'pwa-update-notification';
-  notification.innerHTML = `
-    <div style="
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #2563eb;
-      color: white;
-      padding: 16px 24px;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      z-index: 10000;
-      font-family: system-ui, -apple-system, sans-serif;
-    ">
-      <span>🔄 Nueva versión disponible</span>
-      <button onclick="window.location.reload()" style="
-        background: white;
-        color: #2563eb;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-weight: 600;
-      ">
-        Actualizar
-      </button>
-      <button onclick="this.parentElement.parentElement.remove()" style="
-        background: transparent;
+
+  if (autoReload) {
+    // Mostrar mensaje breve y recargar automáticamente
+    notification.innerHTML = `
+      <div style="
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #2563eb;
         color: white;
-        border: none;
-        padding: 4px;
-        cursor: pointer;
-        font-size: 18px;
+        padding: 24px 32px;
+        border-radius: 16px;
+        box-shadow: 0 4px 30px rgba(0,0,0,0.4);
+        z-index: 10000;
+        font-family: system-ui, -apple-system, sans-serif;
+        text-align: center;
       ">
-        ✕
-      </button>
-    </div>
-  `;
-  
-  document.body.appendChild(notification);
+        <div style="font-size: 32px; margin-bottom: 12px;">🔄</div>
+        <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Actualizando...</div>
+        <div style="font-size: 14px; opacity: 0.9;">Nueva versión disponible</div>
+      </div>
+    `;
+    document.body.appendChild(notification);
+
+    // Recargar después de un breve momento para que se vea el mensaje
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+  } else {
+    // Mostrar notificación con botón manual
+    notification.innerHTML = `
+      <div style="
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #2563eb;
+        color: white;
+        padding: 16px 24px;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        z-index: 10000;
+        font-family: system-ui, -apple-system, sans-serif;
+      ">
+        <span>🔄 Nueva versión disponible</span>
+        <button onclick="window.location.reload()" style="
+          background: white;
+          color: #2563eb;
+          border: none;
+          padding: 8px 16px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-weight: 600;
+        ">
+          Actualizar
+        </button>
+        <button onclick="this.parentElement.parentElement.remove()" style="
+          background: transparent;
+          color: white;
+          border: none;
+          padding: 4px;
+          cursor: pointer;
+          font-size: 18px;
+        ">
+          ✕
+        </button>
+      </div>
+    `;
+    document.body.appendChild(notification);
+  }
 }
 
 // Verificar si la app está instalada como PWA
