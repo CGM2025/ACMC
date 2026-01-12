@@ -20,7 +20,8 @@
       "Bash(netlify deploy:*)",
       "Bash(firebase firestore:rules:get:*)",
       "Bash(firebase firestore:rules:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
