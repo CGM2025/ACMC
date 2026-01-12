@@ -11,7 +11,16 @@
       "Bash(taskkill:*)",
       "Bash(cmd //c \"taskkill /PID 24232 /F\")",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(npx netlify deploy:*)",
+      "Bash(ls -la \"C:\\\\Users\\\\godar\\\\React\\\\sistema-gestion-acmc\\\\src\\\\components\"\" | grep -E \"Expedientes)",
+      "Bash(Comprobante)",
+      "Bash(Recibo \")",
+      "Bash(netlify deploy:*)",
+      "Bash(firebase firestore:rules:get:*)",
+      "Bash(firebase firestore:rules:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

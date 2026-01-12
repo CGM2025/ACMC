@@ -79,9 +79,7 @@ const AsignacionesServicio = ({
     clienteNombre: '',
     terapeutaId: '',
     terapeutaNombre: '',
-    terapeutaSecundarioId: '',
-    terapeutaSecundarioNombre: '',
-    pagoTerapeutaSecundario: '',
+    terapeutasAdicionales: [], // Array de { terapeutaId, terapeutaNombre, pago }
     servicioId: '',
     servicioNombre: '',
     precioCliente: '',
@@ -150,9 +148,7 @@ const AsignacionesServicio = ({
       clienteNombre: '',
       terapeutaId: '',
       terapeutaNombre: '',
-      terapeutaSecundarioId: '',
-      terapeutaSecundarioNombre: '',
-      pagoTerapeutaSecundario: '',
+      terapeutasAdicionales: [],
       descripcionRecibo: '',
       servicioId: '',
       servicioNombre: '',
@@ -170,14 +166,22 @@ const AsignacionesServicio = ({
 
   // Abrir modal para editar
   const editarAsignacion = (asig) => {
+    // Compatibilidad: migrar formato antiguo (terapeutaSecundario) al nuevo (terapeutasAdicionales)
+    let terapeutasAdicionales = asig.terapeutasAdicionales || [];
+    if (!terapeutasAdicionales.length && asig.terapeutaSecundarioId) {
+      terapeutasAdicionales = [{
+        terapeutaId: asig.terapeutaSecundarioId,
+        terapeutaNombre: asig.terapeutaSecundarioNombre || '',
+        pago: asig.pagoTerapeutaSecundario || 0
+      }];
+    }
+
     setFormulario({
       clienteId: asig.clienteId || '',
       clienteNombre: asig.clienteNombre || '',
       terapeutaId: asig.terapeutaId || '',
       terapeutaNombre: asig.terapeutaNombre || '',
-      terapeutaSecundarioId: asig.terapeutaSecundarioId || '',
-      terapeutaSecundarioNombre: asig.terapeutaSecundarioNombre || '',
-      pagoTerapeutaSecundario: asig.pagoTerapeutaSecundario?.toString() || '',
+      terapeutasAdicionales: terapeutasAdicionales,
       servicioId: asig.servicioId || '',
       servicioNombre: asig.servicioNombre || '',
       precioCliente: asig.precioCliente?.toString() || '',
@@ -196,12 +200,20 @@ const AsignacionesServicio = ({
   // Manejar cambio de cliente en formulario
   const handleClienteChange = (e) => {
     const clienteId = e.target.value;
-    const cliente = clientes.find(c => c.id === clienteId);
-    setFormulario(prev => ({
-      ...prev,
-      clienteId,
-      clienteNombre: cliente?.nombre || ''
-    }));
+    if (clienteId === 'todos') {
+      setFormulario(prev => ({
+        ...prev,
+        clienteId: 'todos',
+        clienteNombre: 'Todos los clientes'
+      }));
+    } else {
+      const cliente = clientes.find(c => c.id === clienteId);
+      setFormulario(prev => ({
+        ...prev,
+        clienteId,
+        clienteNombre: cliente?.nombre || ''
+      }));
+    }
   };
 
   // Manejar cambio de terapeuta en formulario
@@ -215,15 +227,44 @@ const AsignacionesServicio = ({
     }));
   };
 
-  // NUEVO: Manejar cambio de terapeuta secundario
-  const handleTerapeutaSecundarioChange = (e) => {
-    const terapeutaSecundarioId = e.target.value;
-    const terapeuta = terapeutas.find(t => t.id === terapeutaSecundarioId);
+  // Agregar terapeuta adicional
+  const agregarTerapeutaAdicional = () => {
     setFormulario(prev => ({
       ...prev,
-      terapeutaSecundarioId,
-      terapeutaSecundarioNombre: terapeuta?.nombre || ''
+      terapeutasAdicionales: [
+        ...prev.terapeutasAdicionales,
+        { terapeutaId: '', terapeutaNombre: '', pago: '' }
+      ]
     }));
+  };
+
+  // Eliminar terapeuta adicional
+  const eliminarTerapeutaAdicional = (index) => {
+    setFormulario(prev => ({
+      ...prev,
+      terapeutasAdicionales: prev.terapeutasAdicionales.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Actualizar terapeuta adicional
+  const actualizarTerapeutaAdicional = (index, campo, valor) => {
+    setFormulario(prev => {
+      const nuevosAdicionales = [...prev.terapeutasAdicionales];
+      if (campo === 'terapeutaId') {
+        const terapeuta = terapeutas.find(t => t.id === valor);
+        nuevosAdicionales[index] = {
+          ...nuevosAdicionales[index],
+          terapeutaId: valor,
+          terapeutaNombre: terapeuta?.nombre || ''
+        };
+      } else {
+        nuevosAdicionales[index] = {
+          ...nuevosAdicionales[index],
+          [campo]: valor
+        };
+      }
+      return { ...prev, terapeutasAdicionales: nuevosAdicionales };
+    });
   };
 
   // Manejar cambio de servicio en formulario
@@ -257,14 +298,21 @@ const AsignacionesServicio = ({
 
     setGuardando(true);
     try {
+      // Filtrar terapeutas adicionales válidos (con ID seleccionado)
+      const terapeutasAdicionalesValidos = formulario.terapeutasAdicionales
+        .filter(ta => ta.terapeutaId)
+        .map(ta => ({
+          terapeutaId: ta.terapeutaId,
+          terapeutaNombre: ta.terapeutaNombre,
+          pago: parseFloat(ta.pago) || 0
+        }));
+
       const datos = {
         clienteId: formulario.clienteId,
         clienteNombre: formulario.clienteNombre,
         terapeutaId: formulario.terapeutaId,
         terapeutaNombre: formulario.terapeutaNombre,
-        terapeutaSecundarioId: formulario.terapeutaSecundarioId || null,
-        terapeutaSecundarioNombre: formulario.terapeutaSecundarioNombre || null,
-        pagoTerapeutaSecundario: parseFloat(formulario.pagoTerapeutaSecundario) || 0,
+        terapeutasAdicionales: terapeutasAdicionalesValidos,
         servicioId: formulario.servicioId,
         servicioNombre: formulario.servicioNombre,
         precioCliente: parseFloat(formulario.precioCliente) || 0,
@@ -444,46 +492,80 @@ const AsignacionesServicio = ({
   const buscarAsignacionParaCita = (cita) => {
     // Normalizar nombres para comparación
     const normalizar = (str) => (str || '').toLowerCase().trim();
-    
+
     // Comparar nombres de forma flexible (uno contiene al otro)
     const nombresCoinciden = (nombre1, nombre2) => {
       const n1 = normalizar(nombre1);
       const n2 = normalizar(nombre2);
       if (!n1 || !n2) return false;
-      
+
       // Comparación exacta
       if (n1 === n2) return true;
-      
+
       // Uno contiene al otro
       if (n1.includes(n2) || n2.includes(n1)) return true;
-      
+
       // Comparar solo primer nombre
       const primerNombre1 = n1.split(' ')[0];
       const primerNombre2 = n2.split(' ')[0];
       if (primerNombre1 === primerNombre2 && primerNombre1.length > 2) return true;
-      
+
       return false;
     };
-    
-    const asignacionesCoincidentes = asignacionesActivas.filter(asig => {
+
+    // Buscar asignaciones específicas (cliente + terapeuta)
+    const asignacionesEspecificas = asignacionesActivas.filter(asig => {
+      if (asig.clienteId === 'todos') return false; // Ignorar las globales primero
       const matchCliente = nombresCoinciden(asig.clienteNombre, cita.cliente);
       const matchTerapeuta = nombresCoinciden(asig.terapeutaNombre, cita.terapeuta);
       return matchCliente && matchTerapeuta;
     });
 
-    if (asignacionesCoincidentes.length === 0) return null;
-    if (asignacionesCoincidentes.length === 1) return asignacionesCoincidentes[0];
+    // Si encontramos asignaciones específicas, usarlas
+    if (asignacionesEspecificas.length > 0) {
+      if (asignacionesEspecificas.length === 1) return asignacionesEspecificas[0];
 
-    // Si hay múltiples, intentar filtrar por horario
+      // Si hay múltiples específicas, intentar filtrar por horario
+      const horaInicioCita = cita.horaInicio || cita.hora;
+      if (horaInicioCita) {
+        const horaNum = parseInt(horaInicioCita.split(':')[0]);
+
+        for (const asig of asignacionesEspecificas) {
+          if (asig.condicion?.tipo === 'horario' && asig.condicion.horaInicio && asig.condicion.horaFin) {
+            const inicioNum = parseInt(asig.condicion.horaInicio.split(':')[0]);
+            const finNum = parseInt(asig.condicion.horaFin.split(':')[0]);
+
+            if (horaNum >= inicioNum && horaNum < finNum) {
+              return asig;
+            }
+          }
+        }
+      }
+
+      return asignacionesEspecificas.find(a => !a.condicion?.tipo || a.condicion.tipo === 'siempre')
+        || asignacionesEspecificas[0];
+    }
+
+    // Si no hay asignaciones específicas, buscar en las globales (Todos los clientes)
+    const asignacionesGlobales = asignacionesActivas.filter(asig => {
+      if (asig.clienteId !== 'todos') return false;
+      const matchTerapeuta = nombresCoinciden(asig.terapeutaNombre, cita.terapeuta);
+      return matchTerapeuta;
+    });
+
+    if (asignacionesGlobales.length === 0) return null;
+    if (asignacionesGlobales.length === 1) return asignacionesGlobales[0];
+
+    // Si hay múltiples globales, intentar filtrar por horario o servicio
     const horaInicioCita = cita.horaInicio || cita.hora;
     if (horaInicioCita) {
       const horaNum = parseInt(horaInicioCita.split(':')[0]);
-      
-      for (const asig of asignacionesCoincidentes) {
+
+      for (const asig of asignacionesGlobales) {
         if (asig.condicion?.tipo === 'horario' && asig.condicion.horaInicio && asig.condicion.horaFin) {
           const inicioNum = parseInt(asig.condicion.horaInicio.split(':')[0]);
           const finNum = parseInt(asig.condicion.horaFin.split(':')[0]);
-          
+
           if (horaNum >= inicioNum && horaNum < finNum) {
             return asig;
           }
@@ -492,8 +574,8 @@ const AsignacionesServicio = ({
     }
 
     // Retornar la primera que tenga condición "siempre" o la primera disponible
-    return asignacionesCoincidentes.find(a => !a.condicion?.tipo || a.condicion.tipo === 'siempre') 
-      || asignacionesCoincidentes[0];
+    return asignacionesGlobales.find(a => !a.condicion?.tipo || a.condicion.tipo === 'siempre')
+      || asignacionesGlobales[0];
   };
 
   // Buscar citas del período seleccionado y compararlas con asignaciones
@@ -628,10 +710,22 @@ const AsignacionesServicio = ({
     return grupos;
   }, [citasParaActualizar]);
 
-  // Calcular ganancia
-  const calcularGanancia = (precioCliente, pagoTerapeuta, pagoTerapeutaSecundario) => {
-    const ganancia = (precioCliente || 0) - (pagoTerapeuta || 0) - (pagoTerapeutaSecundario || 0);
+  // Calcular ganancia (considerando múltiples terapeutas adicionales)
+  const calcularGanancia = (precioCliente, pagoTerapeuta, terapeutasAdicionales = []) => {
+    const totalPagosAdicionales = terapeutasAdicionales.reduce((sum, ta) => sum + (parseFloat(ta.pago) || 0), 0);
+    const ganancia = (precioCliente || 0) - (pagoTerapeuta || 0) - totalPagosAdicionales;
     return ganancia;
+  };
+
+  // Calcular ganancia para compatibilidad con formato antiguo
+  const calcularGananciaAsignacion = (asig) => {
+    // Si tiene el nuevo formato (terapeutasAdicionales)
+    if (asig.terapeutasAdicionales && asig.terapeutasAdicionales.length > 0) {
+      return calcularGanancia(asig.precioCliente, asig.pagoTerapeuta, asig.terapeutasAdicionales);
+    }
+    // Formato antiguo (terapeutaSecundario)
+    const pagoSecundario = asig.pagoTerapeutaSecundario || 0;
+    return (asig.precioCliente || 0) - (asig.pagoTerapeuta || 0) - pagoSecundario;
   };
 
   return (
@@ -783,17 +877,29 @@ const AsignacionesServicio = ({
             </button>
           </div>
         ) : (
-          Object.entries(asignacionesPorCliente).sort().map(([cliente, asigs]) => (
-            <div key={cliente} className="bg-white rounded-xl shadow-sm overflow-hidden">
+          Object.entries(asignacionesPorCliente)
+            .sort((a, b) => {
+              // "Todos los clientes" siempre primero
+              if (a[0] === 'Todos los clientes') return -1;
+              if (b[0] === 'Todos los clientes') return 1;
+              return a[0].localeCompare(b[0]);
+            })
+            .map(([cliente, asigs]) => {
+              const esTodosClientes = cliente === 'Todos los clientes';
+              return (
+            <div key={cliente} className={`bg-white rounded-xl shadow-sm overflow-hidden ${esTodosClientes ? 'ring-2 ring-blue-300' : ''}`}>
               {/* Header del cliente */}
-              <div className="bg-gray-50 px-4 py-3 border-b flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+              <div className={`px-4 py-3 border-b flex items-center gap-3 ${esTodosClientes ? 'bg-blue-50' : 'bg-gray-50'}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${esTodosClientes ? 'bg-blue-200' : 'bg-blue-100'}`}>
                   <span className="text-blue-600 font-semibold">
-                    {cliente.charAt(0).toUpperCase()}
+                    {esTodosClientes ? '📋' : cliente.charAt(0).toUpperCase()}
                   </span>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-800">{cliente}</h3>
+                  <h3 className={`font-semibold ${esTodosClientes ? 'text-blue-800' : 'text-gray-800'}`}>
+                    {cliente}
+                    {esTodosClientes && <span className="ml-2 text-xs font-normal text-blue-600">(Asignaciones globales)</span>}
+                  </h3>
                   <p className="text-sm text-gray-500">{asigs.length} asignación(es)</p>
                 </div>
               </div>
@@ -814,13 +920,35 @@ const AsignacionesServicio = ({
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {asigs.map(asig => {
-                      const ganancia = calcularGanancia(asig.precioCliente, asig.pagoTerapeuta, asig.pagoTerapeutaSecundario);
+                      const ganancia = calcularGananciaAsignacion(asig);
+                      // Obtener terapeutas adicionales (compatibilidad con formato antiguo)
+                      let terapeutasAdicionales = asig.terapeutasAdicionales || [];
+                      if (!terapeutasAdicionales.length && asig.terapeutaSecundarioId) {
+                        terapeutasAdicionales = [{
+                          terapeutaId: asig.terapeutaSecundarioId,
+                          terapeutaNombre: asig.terapeutaSecundarioNombre,
+                          pago: asig.pagoTerapeutaSecundario
+                        }];
+                      }
                       return (
                         <tr key={asig.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
-                            <span className="font-medium text-gray-800">
-                              {asig.terapeutaNombre}
-                            </span>
+                            <div>
+                              <span className="font-medium text-gray-800">
+                                {asig.terapeutaNombre}
+                              </span>
+                              {terapeutasAdicionales.length > 0 && (
+                                <div className="mt-1 space-y-0.5">
+                                  {terapeutasAdicionales.map((ta, idx) => (
+                                    <div key={idx} className="text-xs text-purple-600 flex items-center gap-1">
+                                      <span>+</span>
+                                      <span>{ta.terapeutaNombre}</span>
+                                      <span className="text-gray-400">(${ta.pago}/hr)</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-gray-600">
                             {asig.servicioNombre}
@@ -876,7 +1004,8 @@ const AsignacionesServicio = ({
                 </table>
               </div>
             </div>
-          ))
+              );
+            })
         )}
       </div>
 
@@ -911,12 +1040,19 @@ const AsignacionesServicio = ({
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Seleccionar cliente...</option>
+                    <option value="todos" className="font-medium text-blue-600">📋 Todos los clientes</option>
+                    <option disabled>──────────────</option>
                     {clientes
                     .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
                     .map(c => (
                       <option key={c.id} value={c.id}>{c.nombre}</option>
                     ))}
                   </select>
+                  {formulario.clienteId === 'todos' && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Esta asignación aplicará para cualquier cliente con esta terapeuta y servicio
+                    </p>
+                  )}
                 </div>
                 
                 <div>
@@ -993,46 +1129,82 @@ const AsignacionesServicio = ({
                   </div>
                 </div>
               </div>
-              {/* NUEVO: Terapeuta Secundario */}
+              {/* Terapeutas Adicionales (múltiples) */}
               <div className="border-t pt-4 mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Terapeuta Secundario (opcional)
-                </label>
-                <p className="text-xs text-gray-500 mb-3">
-                  Para supervisiones o entrenamientos con dos terapeutas
-                </p>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <select
-                      value={formulario.terapeutaSecundarioId}
-                      onChange={handleTerapeutaSecundarioChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Sin terapeuta secundario</option>
-                      {terapeutas
-                        .filter(t => t.id !== formulario.terapeutaId)
-                        .map(t => (
-                          <option key={t.id} value={t.id}>{t.nombre}</option>
-                        ))
-                      }
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                      <input
-                        type="number"
-                        value={formulario.pagoTerapeutaSecundario}
-                        onChange={(e) => setFormulario(prev => ({ ...prev, pagoTerapeutaSecundario: e.target.value }))}
-                        placeholder="Pago $/hr"
-                        disabled={!formulario.terapeutaSecundarioId}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                      />
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Terapeutas Adicionales (opcional)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={agregarTerapeutaAdicional}
+                    className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    <Plus size={16} />
+                    Agregar terapeuta
+                  </button>
                 </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Para supervisiones o entrenamientos con múltiples terapeutas
+                </p>
+
+                {/* Lista de terapeutas adicionales */}
+                {formulario.terapeutasAdicionales.length === 0 ? (
+                  <div className="text-center py-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                    <p className="text-sm text-gray-400">No hay terapeutas adicionales</p>
+                    <button
+                      type="button"
+                      onClick={agregarTerapeutaAdicional}
+                      className="text-sm text-blue-600 hover:text-blue-800 mt-1"
+                    >
+                      + Agregar el primero
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {formulario.terapeutasAdicionales.map((ta, index) => (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg border border-purple-100">
+                        <div className="flex-1">
+                          <select
+                            value={ta.terapeutaId}
+                            onChange={(e) => actualizarTerapeutaAdicional(index, 'terapeutaId', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                          >
+                            <option value="">Seleccionar terapeuta...</option>
+                            {terapeutas
+                              .filter(t => t.id !== formulario.terapeutaId)
+                              .filter(t => !formulario.terapeutasAdicionales.some((otro, i) => i !== index && otro.terapeutaId === t.id))
+                              .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+                              .map(t => (
+                                <option key={t.id} value={t.id}>{t.nombre}</option>
+                              ))
+                            }
+                          </select>
+                        </div>
+                        <div className="w-32">
+                          <div className="relative">
+                            <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                            <input
+                              type="number"
+                              value={ta.pago}
+                              onChange={(e) => actualizarTerapeutaAdicional(index, 'pago', e.target.value)}
+                              placeholder="$/hr"
+                              className="w-full pl-7 pr-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => eliminarTerapeutaAdicional(index)}
+                          className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          title="Eliminar"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* NUEVO: Descripción para Recibo */}
@@ -1075,20 +1247,25 @@ const AsignacionesServicio = ({
               {/* Preview de ganancia */}
               {(formulario.precioCliente || formulario.pagoTerapeuta) && (
                 <div className={`p-3 rounded-lg ${
-                  calcularGanancia(parseFloat(formulario.precioCliente), parseFloat(formulario.pagoTerapeuta), parseFloat(formulario.pagoTerapeutaSecundario)) >= 0
+                  calcularGanancia(parseFloat(formulario.precioCliente), parseFloat(formulario.pagoTerapeuta), formulario.terapeutasAdicionales) >= 0
                     ? 'bg-green-50 border border-green-200'
                     : 'bg-red-50 border border-red-200'
                 }`}>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-600">Ganancia por hora:</span>
                     <span className={`font-bold ${
-                      calcularGanancia(parseFloat(formulario.precioCliente), parseFloat(formulario.pagoTerapeuta), parseFloat(formulario.pagoTerapeutaSecundario)) >= 0
+                      calcularGanancia(parseFloat(formulario.precioCliente), parseFloat(formulario.pagoTerapeuta), formulario.terapeutasAdicionales) >= 0
                         ? 'text-green-600'
                         : 'text-red-600'
                     }`}>
-                      ${calcularGanancia(parseFloat(formulario.precioCliente) || 0, parseFloat(formulario.pagoTerapeuta) || 0, parseFloat(formulario.pagoTerapeutaSecundario) || 0).toLocaleString()}
+                      ${calcularGanancia(parseFloat(formulario.precioCliente) || 0, parseFloat(formulario.pagoTerapeuta) || 0, formulario.terapeutasAdicionales).toLocaleString()}
                     </span>
                   </div>
+                  {formulario.terapeutasAdicionales.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Incluye {formulario.terapeutasAdicionales.length} terapeuta{formulario.terapeutasAdicionales.length > 1 ? 's' : ''} adicional{formulario.terapeutasAdicionales.length > 1 ? 'es' : ''}
+                    </div>
+                  )}
                 </div>
               )}
               

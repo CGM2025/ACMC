@@ -31,11 +31,17 @@ export const obtenerTerapeutas = async () => {
 /**
  * Crea un nuevo terapeuta
  * @param {Object} terapeutaData - Datos del terapeuta
+ * @param {string} organizationId - ID de la organización
  * @returns {Promise<string>} - ID del terapeuta creado
  */
-export const crearTerapeuta = async (terapeutaData) => {
+export const crearTerapeuta = async (terapeutaData, organizationId) => {
   try {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), terapeutaData);
+    const dataConOrg = {
+      ...terapeutaData,
+      organizationId,
+      createdAt: new Date().toISOString()
+    };
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), dataConOrg);
     return docRef.id;
   } catch (error) {
     console.error('Error al crear terapeuta:', error);

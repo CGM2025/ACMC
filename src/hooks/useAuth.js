@@ -49,17 +49,26 @@ export const useAuth = () => {
           if (userDoc.exists()) {
             // Usuario ya existe en Firestore
             const userData = userDoc.data();
+            // Si no tiene organizationId, usar el valor por defecto
+            const orgId = userData.organizationId || 'org_acmc_001';
+
+            // Si el usuario no tenía organizationId, actualizarlo en Firestore
+            if (!userData.organizationId) {
+              console.log('⚠️ Usuario sin organizationId, asignando valor por defecto...');
+              await setDoc(userDocRef, { organizationId: orgId }, { merge: true });
+            }
+
             setCurrentUser({
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               nombre: userData.nombre,
               rol: userData.rol,
               terapeutaId: userData.terapeutaId || null,
-              organizationId: userData.organizationId || null,  // ← AGREGADO
+              organizationId: orgId,  // Siempre tendrá un valor válido
               clienteId: userData.clienteId || null  // ← Para usuarios tipo cliente
             });
             setIsLoggedIn(true);
-            console.log('✅ Usuario cargado con organizationId:', userData.organizationId);
+            console.log('✅ Usuario cargado con organizationId:', orgId);
           } else {
             // Usuario nuevo - crear documento en Firestore
             // Por defecto asignar a la organización principal si existe

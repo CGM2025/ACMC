@@ -21,7 +21,9 @@ import {
   Calculator,
   BarChart3,
   UserCog,
-  CalendarClock
+  CalendarClock,
+  Receipt,
+  Image
 } from 'lucide-react';
 
 /**
@@ -41,6 +43,7 @@ const Sidebar = ({
 
   // Estado para controlar qué submenús están expandidos
   const [expandedMenus, setExpandedMenus] = useState({
+    expedientes: false,
     operacion: false,
     finanzas: false,
     reportes: false,
@@ -71,13 +74,18 @@ const Sidebar = ({
       type: 'item'
     },
 
-    // 2. Expedientes (NUEVO)
+    // 2. Expedientes (ahora es un grupo con submenú)
     {
       id: 'expedientes',
       label: 'Expedientes',
       icon: FolderOpen,
       permission: 'clientes',
-      type: 'item'
+      type: 'group',
+      children: [
+        { id: 'expedientes-clientes', label: 'Expedientes Clientes', icon: FolderOpen, permission: 'clientes' },
+        { id: 'expedientes-recibos', label: 'Recibos', icon: Receipt, permission: 'clientes' },
+        { id: 'expedientes-comprobantes', label: 'Comprobantes', icon: Image, permission: 'clientes' }
+      ]
     },
 
     // 3. Operación

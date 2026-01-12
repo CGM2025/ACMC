@@ -1,0 +1,262 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================
+    // FUNCIONES AUXILIARES
+    // ============================================
+
+    // Verifica si el usuario está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Obtiene los datos del usuario desde la colección usuarios
+    function getUserData() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    // Verifica si el usuario es admin
+    function isAdmin() {
+      return isAuthenticated() && getUserData().rol == 'admin';
+    }
+
+    // Verifica si el usuario es asistente
+    function isAsistente() {
+      return isAuthenticated() && getUserData().rol == 'asistente';
+    }
+
+    // Verifica si el usuario es terapeuta
+    function isTerapeuta() {
+      return isAuthenticated() && getUserData().rol == 'terapeuta';
+    }
+
+    // Verifica si el usuario es cliente
+    function isCliente() {
+      return isAuthenticated() && getUserData().rol == 'cliente';
+    }
+
+    // Verifica si es admin o asistente
+    function isAdminOrAsistente() {
+      return isAdmin() || isAsistente();
+    }
+
+    // Obtiene el organizationId del usuario actual
+    function getUserOrgId() {
+      return getUserData().organizationId;
+    }
+
+    // Para documentos individuales: verifica que pertenece a la org del usuario
+    function docBelongsToUserOrg() {
+      return resource.data.organizationId == getUserOrgId();
+    }
+
+    // Para crear: verifica que el nuevo doc tenga la org del usuario
+    function newDocHasUserOrg() {
+      return request.resource.data.organizationId == getUserOrgId();
+    }
+
+    // ============================================
+    // REGLAS POR COLECCIÓN
+    // ============================================
+
+    // ORGANIZATIONS - Solo puede acceder a su propia organización
+    match /organizations/{orgId} {
+      allow read: if isAuthenticated() && getUserOrgId() == orgId;
+      allow write: if isAdminOrAsistente() && getUserOrgId() == orgId;
+
+      // Subcolecciones dentro de organizations
+      match /{collection}/{docId} {
+        allow read: if isAuthenticated() && getUserOrgId() == orgId;
+        allow write: if isAdminOrAsistente() && getUserOrgId() == orgId;
+      }
+
+      // Expedientes con documentos anidados
+      match /expedientes/{expedienteId}/documentos/{docId} {
+        allow read: if isAdminOrAsistente() && getUserOrgId() == orgId;
+        allow write: if isAdminOrAsistente() && getUserOrgId() == orgId;
+      }
+    }
+
+    // USUARIOS
+    match /usuarios/{userId} {
+      // Cualquier usuario puede leer su propio documento
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      // Admin puede leer todos los usuarios (el filtro por org lo hace el código)
+      allow read: if isAdminOrAsistente();
+      // Admin puede crear/actualizar/eliminar
+      allow create, update, delete: if isAdminOrAsistente();
+      // Usuario puede actualizar su propio documento
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // TERAPEUTAS
+    match /terapeutas/{terapeutaId} {
+      // Admin, asistente y terapeuta pueden leer (el filtro por org lo hace el código)
+      allow read: if isAdminOrAsistente() || isTerapeuta();
+      // Solo admin/asistente puede escribir, verificando org en el documento
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // CLIENTES
+    match /clientes/{clienteId} {
+      // Admin, asistente y terapeuta pueden leer
+      allow read: if isAdminOrAsistente() || isTerapeuta();
+      // Cliente puede leer su propio documento
+      allow read: if isCliente() && getUserData().clienteId == clienteId;
+      // Solo admin/asistente puede escribir
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // CITAS
+    match /citas/{citaId} {
+      // Admin, asistente y terapeuta pueden leer
+      allow read: if isAdminOrAsistente() || isTerapeuta();
+      // Admin, asistente y terapeuta pueden crear/actualizar
+      allow create: if (isAdminOrAsistente() || isTerapeuta()) && newDocHasUserOrg();
+      allow update, delete: if (isAdminOrAsistente() || isTerapeuta()) && docBelongsToUserOrg();
+    }
+
+    // PAGOS
+    match /pagos/{pagoId} {
+      // Solo admin/asistente puede acceder
+      allow read: if isAdminOrAsistente();
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // RECIBOS
+    match /recibos/{reciboId} {
+      // Admin/asistente puede leer todos
+      allow read: if isAdminOrAsistente();
+      // Cliente puede leer (el filtro por clienteId lo hace el código)
+      allow read: if isCliente();
+      // Solo admin/asistente puede escribir
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // HORAS TRABAJADAS
+    match /horasTrabajadas/{horasId} {
+      // Admin, asistente y terapeuta pueden leer
+      allow read: if isAdminOrAsistente() || isTerapeuta();
+      // Admin, asistente y terapeuta pueden crear
+      allow create: if (isAdminOrAsistente() || isTerapeuta()) && newDocHasUserOrg();
+      // Admin/asistente puede actualizar/eliminar cualquiera de su org
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+      // Terapeuta puede actualizar/eliminar solo las suyas
+      allow update, delete: if isTerapeuta() && docBelongsToUserOrg()
+                            && resource.data.terapeutaId == getUserData().terapeutaId;
+    }
+
+    // SERVICIOS
+    match /servicios/{servicioId} {
+      // Todos los usuarios autenticados pueden leer
+      allow read: if isAuthenticated();
+      // Solo admin/asistente puede escribir
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // BLOQUES
+    match /bloques/{bloqueId} {
+      // Admin, asistente y terapeuta pueden leer
+      allow read: if isAdminOrAsistente() || isTerapeuta();
+      // Solo admin/asistente puede escribir
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // COMPROBANTES
+    match /comprobantes/{comprobanteId} {
+      // Admin/asistente puede leer todos
+      allow read: if isAdminOrAsistente();
+      // Cliente puede leer (el filtro por clienteId lo hace el código)
+      allow read: if isCliente();
+      // Admin/asistente puede escribir
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+      // Cliente puede crear comprobantes
+      allow create: if isCliente() && newDocHasUserOrg();
+    }
+
+    // UTILIDAD HISTÓRICA
+    match /utilidadHistorica/{utilidadId} {
+      // Solo admin/asistente puede acceder
+      allow read: if isAdminOrAsistente();
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // ============================================
+    // COLECCIÓN LEGACY
+    // ============================================
+    match /configuracion/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // CARGOS DE SOMBRA
+    match /cargosSombra/{cargoId} {
+      // Solo admin/asistente puede acceder
+      allow read: if isAdminOrAsistente();
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // PAGOS A TERAPEUTAS
+    match /pagosTerapeutas/{pagoId} {
+      allow read: if isAdminOrAsistente();
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // ASIGNACIONES DE SERVICIO - Terapeutas pueden LEER para filtrar clientes
+    match /asignacionesServicio/{asignacionId} {
+      allow read: if isAdminOrAsistente() || isTerapeuta();
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // CONTRATOS MENSUALES - Terapeutas pueden LEER para filtrar clientes
+    match /contratosMensuales/{contratoId} {
+      allow read: if isAdminOrAsistente() || isTerapeuta();
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // HORARIOS RECURRENTES
+    match /horariosRecurrentes/{horarioId} {
+      allow read: if isAdminOrAsistente();
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // SOLICITUDES DE CAMBIO (Terapeutas solicitan cambios de citas)
+    match /solicitudesCambio/{solicitudId} {
+      // Admin/asistente puede leer todas las solicitudes de su org
+      allow read: if isAdminOrAsistente();
+      // Terapeuta puede leer sus propias solicitudes
+      allow read: if isTerapeuta() && resource.data.terapeutaId == getUserData().terapeutaId;
+      // Terapeuta puede crear solicitudes
+      allow create: if isTerapeuta() && newDocHasUserOrg();
+      // Solo admin/asistente puede aprobar/rechazar (actualizar) y eliminar
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+    }
+
+    // EXPEDIENTES (colección raíz)
+    match /expedientes/{expedienteId} {
+      allow read: if isAdminOrAsistente();
+      allow create: if isAdminOrAsistente() && newDocHasUserOrg();
+      allow update, delete: if isAdminOrAsistente() && docBelongsToUserOrg();
+
+      match /documentos/{docId} {
+        allow read: if isAdminOrAsistente();
+        allow write: if isAdminOrAsistente();
+      }
+    }
+  }
+}

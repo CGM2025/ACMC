@@ -1,6 +1,6 @@
 import MigracionOrganization from './components/MigracionOrganization';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Lock, Trash2, ChevronRight, CheckCircle, Link2, Settings } from 'lucide-react';
+import { Plus, Lock, Trash2, ChevronRight, CheckCircle, Link2, Settings, X } from 'lucide-react';
 import { importarUtilidadHistorica } from './api';
 import moment from 'moment';
 
@@ -1189,6 +1189,9 @@ const SistemaGestion = () => {
           terapeutas={terapeutas}
           citas={citas}
           clientes={clientes}
+          servicios={servicios}
+          asignaciones={asignaciones}
+          contratos={contratos}
           onActualizarCita={async (citaId, datos) => {
             await actualizarCitaDirecta(citaId, { estado: datos.estado });
             await cargarCitas();
@@ -1349,8 +1352,8 @@ const SistemaGestion = () => {
                             />
                         )}
 
-                        {/* Pestaña de Expedientes */}
-                        {activeTab === 'expedientes' && hasPermission('clientes') && (
+                        {/* Pestaña de Expedientes (ahora es un submenú con varias opciones) */}
+                        {(activeTab === 'expedientes-clientes' || activeTab === 'expedientes-recibos' || activeTab === 'expedientes-comprobantes') && hasPermission('clientes') && (
                           <Expedientes
                             clientes={clientes}
                             terapeutas={terapeutas}
@@ -1359,6 +1362,8 @@ const SistemaGestion = () => {
                             contratos={contratos}
                             recibos={recibos}
                             citas={citas}
+                            organizationId={currentUser?.organizationId}
+                            seccionInicial={activeTab}
                             onCrearAsignacion={() => {
                               setActiveTab('configuracion');
                               setConfigTab('asignaciones');
@@ -1862,6 +1867,7 @@ const SistemaGestion = () => {
                             clientes={clientes}
                             usuarios={usuariosPortal}
                             usuariosSistema={usuarios.filter(u => ['admin', 'asistente', 'terapeuta'].includes(u.rol))}
+                            organizationId={currentUser?.organizationId}
                             onCrearUsuario={async (datos) => {
                               const resultado = await crearUsuarioPortalCloud(datos);
                               if (resultado.success) {
@@ -1992,26 +1998,61 @@ const SistemaGestion = () => {
                                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                   required
                                 >
-                                  {/* <option value="Terapia Ocupacional">Terapia Ocupacional</option>
-                                  <option value="Servicios de Sombra">Servicios de Sombra</option>
-                                  <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
-                                  <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
-                                  <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
-                                  <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
-                                  <option value="Paquete 4hr/semana">Paquete 4hr/semana</option>
-                                  <option value="Sesión en casa">Sesión en casa</option>
-                                  <option value="Otro">Otro</option> */}
-                                  {servicios
-                                    .filter(s => s.activo !== false)
-                                    .sort((a, b) => a.nombre.localeCompare(b.nombre))
-                                    // .sort((a, b) => (a.orden || 99) - (b.orden || 99))
-                                    .map(servicio => (
-                                      <option key={servicio.id} value={servicio.nombre}>
-                                        {servicio.nombre}
-                                      </option>
-                                    ))
-                                  }
+                                  {(() => {
+                                    // Obtener los niveles de la terapeuta seleccionada
+                                    const terapeutaSeleccionada = terapeutas.find(t => t.nombre === citaForm.terapeuta);
+                                    // Compatibilidad: si existe 'nivel' (string antiguo), convertir a array
+                                    let nivelesTerapeuta = terapeutaSeleccionada?.niveles || [];
+                                    if (!nivelesTerapeuta.length && terapeutaSeleccionada?.nivel) {
+                                      nivelesTerapeuta = [terapeutaSeleccionada.nivel];
+                                    }
+
+                                    // Filtrar servicios según los niveles de la terapeuta
+                                    return servicios
+                                      .filter(s => s.activo !== false)
+                                      .filter(s => {
+                                        // Si no hay niveles definidos en el servicio, todos pueden darlo
+                                        if (!s.nivelesPermitidos || s.nivelesPermitidos.length === 0) return true;
+                                        // Si no hay terapeuta seleccionada o sin niveles, mostrar todos
+                                        if (!nivelesTerapeuta.length) return true;
+                                        // Verificar si ALGUNO de los niveles de la terapeuta está en los permitidos
+                                        return nivelesTerapeuta.some(nivel => s.nivelesPermitidos.includes(nivel));
+                                      })
+                                      .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                                      .map(servicio => (
+                                        <option key={servicio.id} value={servicio.nombre}>
+                                          {servicio.nombre}
+                                        </option>
+                                      ));
+                                  })()}
                                 </select>
+                                {/* Indicador si hay filtro activo */}
+                                {(() => {
+                                  const terapeutaSeleccionada = terapeutas.find(t => t.nombre === citaForm.terapeuta);
+                                  // Compatibilidad con campo antiguo 'nivel'
+                                  let nivelesTerapeuta = terapeutaSeleccionada?.niveles || [];
+                                  if (!nivelesTerapeuta.length && terapeutaSeleccionada?.nivel) {
+                                    nivelesTerapeuta = [terapeutaSeleccionada.nivel];
+                                  }
+
+                                  if (nivelesTerapeuta.length > 0) {
+                                    const nivelesLabels = {
+                                      'terapeuta_ocupacional': 'T. Ocupacional',
+                                      'junior': 'Junior',
+                                      'senior': 'Senior',
+                                      'coordinadora': 'Coordinadora',
+                                      'supervisora': 'Supervisora',
+                                      'recursos_humanos': 'RRHH'
+                                    };
+                                    const labelsActivos = nivelesTerapeuta.map(n => nivelesLabels[n] || n).join(', ');
+                                    return (
+                                      <p className="text-xs text-blue-600 mt-1">
+                                        Mostrando servicios para: {labelsActivos}
+                                      </p>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
 
                               {/* Campos de Precio */}
@@ -2199,6 +2240,14 @@ const SistemaGestion = () => {
                               >
                                 Costos por Servicio
                               </button>
+                              <button
+                                onClick={() => setPestanaTerapeuta('clientes')}
+                                className={`px-6 py-3 font-medium transition-colors ${pestanaTerapeuta === 'clientes'
+                                    ? 'border-b-2 border-blue-600 text-blue-600'
+                                    : 'text-gray-500 hover:text-gray-700'}`}
+                              >
+                                Clientes Asignados
+                              </button>
                             </div>
 
                             <h3 className="text-lg font-bold mb-4">
@@ -2255,6 +2304,41 @@ const SistemaGestion = () => {
                                     value={terapeutaForm.email}
                                     onChange={(e) => setTerapeutaForm({ ...terapeutaForm, email: e.target.value })} />
                                 </div>
+
+                                {/* Niveles de Terapeuta (múltiples) */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Niveles <span className="text-gray-400 text-xs">(puede seleccionar varios)</span>
+                                  </label>
+                                  <div className="grid grid-cols-2 gap-2 p-3 border border-gray-300 rounded-lg bg-gray-50">
+                                    {[
+                                      { value: 'terapeuta_ocupacional', label: 'Terapeuta Ocupacional' },
+                                      { value: 'junior', label: 'Terapeuta Junior' },
+                                      { value: 'senior', label: 'Terapeuta Senior' },
+                                      { value: 'coordinadora', label: 'Coordinadora' },
+                                      { value: 'supervisora', label: 'Supervisora' },
+                                      { value: 'recursos_humanos', label: 'Recursos Humanos' }
+                                    ].map(nivel => (
+                                      <label key={nivel.value} className="flex items-center space-x-2 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                          checked={(terapeutaForm.niveles || []).includes(nivel.value)}
+                                          onChange={(e) => {
+                                            const currentNiveles = terapeutaForm.niveles || [];
+                                            if (e.target.checked) {
+                                              setTerapeutaForm({ ...terapeutaForm, niveles: [...currentNiveles, nivel.value] });
+                                            } else {
+                                              setTerapeutaForm({ ...terapeutaForm, niveles: currentNiveles.filter(n => n !== nivel.value) });
+                                            }
+                                          }}
+                                        />
+                                        <span className="text-sm text-gray-700">{nivel.label}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+
                                 {/* Tipo de Pago */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2483,6 +2567,93 @@ const SistemaGestion = () => {
                                       Agregar Costo por Cliente
                                     </button>
                                   </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Pestaña de Clientes Asignados */}
+                            {pestanaTerapeuta === 'clientes' && (
+                              <div className="space-y-4">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                                  Clientes Asignados Directamente
+                                </h3>
+                                <p className="text-sm text-gray-600 mb-4">
+                                  Selecciona los clientes que esta terapeuta puede atender. Esto es adicional a los clientes que ya tiene
+                                  asignados mediante Asignaciones de Servicio o Contratos Mensuales.
+                                </p>
+
+                                {/* Lista de clientes asignados */}
+                                {(terapeutaForm.clientesAsignados || []).length > 0 ? (
+                                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                                    <h4 className="text-sm font-medium text-green-800 mb-2">
+                                      Clientes asignados ({terapeutaForm.clientesAsignados.length})
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      {terapeutaForm.clientesAsignados.map(clienteId => {
+                                        const cliente = clientes.find(c => c.id === clienteId);
+                                        return (
+                                          <span
+                                            key={clienteId}
+                                            className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
+                                          >
+                                            {cliente?.nombre || 'Cliente no encontrado'}
+                                            <button
+                                              onClick={() => {
+                                                setTerapeutaForm({
+                                                  ...terapeutaForm,
+                                                  clientesAsignados: terapeutaForm.clientesAsignados.filter(id => id !== clienteId)
+                                                });
+                                              }}
+                                              className="ml-1 text-green-600 hover:text-green-800"
+                                            >
+                                              <X size={14} />
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                    <p className="text-sm text-blue-800">
+                                      No hay clientes asignados directamente. Los clientes de asignaciones de servicio y contratos ya están disponibles automáticamente.
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Selector para agregar clientes */}
+                                <div className="border-t pt-4">
+                                  <h4 className="text-md font-medium text-gray-700 mb-3">Agregar Cliente</h4>
+                                  <div className="flex gap-2">
+                                    <select
+                                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                      onChange={(e) => {
+                                        const clienteId = e.target.value;
+                                        if (clienteId && !(terapeutaForm.clientesAsignados || []).includes(clienteId)) {
+                                          setTerapeutaForm({
+                                            ...terapeutaForm,
+                                            clientesAsignados: [...(terapeutaForm.clientesAsignados || []), clienteId]
+                                          });
+                                        }
+                                        e.target.value = '';
+                                      }}
+                                      defaultValue=""
+                                    >
+                                      <option value="">Seleccionar cliente para agregar...</option>
+                                      {clientes
+                                        .filter(c => !(terapeutaForm.clientesAsignados || []).includes(c.id))
+                                        .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                                        .map(cliente => (
+                                          <option key={cliente.id} value={cliente.id}>
+                                            {cliente.nombre}
+                                          </option>
+                                        ))
+                                      }
+                                    </select>
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-2">
+                                    Los clientes agregados aquí podrán ser seleccionados por la terapeuta al crear citas desde su portal.
+                                  </p>
                                 </div>
                               </div>
                             )}

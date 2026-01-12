@@ -14,9 +14,10 @@ import {
   UserX,
   AlertCircle,
   Shield,
-  UserCog
+  UserCog,
+  Edit2
 } from 'lucide-react';
-import { crearUsuarioSistemaCloud } from '../../api/cloudFunctions';
+import { crearUsuarioSistemaCloud, actualizarRolUsuarioCloud } from '../../api/cloudFunctions';
 
 /**
  * Componente de Gestión de Usuarios del Portal y Sistema
@@ -26,6 +27,7 @@ const GestionUsuarios = ({
   clientes,
   usuarios = [],
   usuariosSistema = [],
+  organizationId,
   onCrearUsuario,
   onActivarDesactivar,
   onResetPassword,
@@ -61,6 +63,11 @@ const GestionUsuarios = ({
   const [mostrarPasswordSistema, setMostrarPasswordSistema] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState('');
+
+  // Modal para editar rol de usuario del sistema
+  const [mostrarModalEditarRol, setMostrarModalEditarRol] = useState(false);
+  const [usuarioEditando, setUsuarioEditando] = useState(null);
+  const [nuevoRolSeleccionado, setNuevoRolSeleccionado] = useState('');
 
   // Cargar usuarios existentes
   useEffect(() => {
@@ -255,7 +262,8 @@ const GestionUsuarios = ({
         email: nuevoUsuarioSistema.email,
         password: nuevoUsuarioSistema.password,
         nombre: nuevoUsuarioSistema.nombre,
-        rol: nuevoUsuarioSistema.rol
+        rol: nuevoUsuarioSistema.rol,
+        organizationId: organizationId
       });
 
       if (resultado.success) {
@@ -300,6 +308,60 @@ const GestionUsuarios = ({
       terapeuta: 'bg-green-100 text-green-800'
     };
     return colores[rol] || 'bg-gray-100 text-gray-800';
+  };
+
+  // ========== FUNCIONES PARA EDITAR ROL ==========
+
+  const handleAbrirModalEditarRol = (usuario) => {
+    setUsuarioEditando(usuario);
+    setNuevoRolSeleccionado(usuario.rol);
+    setError('');
+    setExito('');
+    setMostrarModalEditarRol(true);
+  };
+
+  const handleCerrarModalEditarRol = () => {
+    setMostrarModalEditarRol(false);
+    setUsuarioEditando(null);
+    setNuevoRolSeleccionado('');
+  };
+
+  const handleGuardarRol = async () => {
+    if (!usuarioEditando || !nuevoRolSeleccionado) return;
+
+    if (nuevoRolSeleccionado === usuarioEditando.rol) {
+      setError('Selecciona un rol diferente al actual');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      const resultado = await actualizarRolUsuarioCloud(usuarioEditando.id, nuevoRolSeleccionado);
+
+      if (resultado.success) {
+        setExito(`Rol de ${usuarioEditando.nombre} actualizado a ${getRolLabel(nuevoRolSeleccionado)}`);
+
+        // Recargar usuarios
+        if (onRecargarUsuarios) {
+          await onRecargarUsuarios();
+        }
+
+        // Cerrar modal después de un momento
+        setTimeout(() => {
+          handleCerrarModalEditarRol();
+          setExito('');
+        }, 1500);
+      } else {
+        setError(resultado.error || 'Error al actualizar rol');
+      }
+    } catch (err) {
+      console.error('Error actualizando rol:', err);
+      setError(err.message || 'Error al actualizar rol');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -763,6 +825,13 @@ const GestionUsuarios = ({
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <div className="flex items-center justify-center gap-2">
                             <button
+                              onClick={() => handleAbrirModalEditarRol(usuario)}
+                              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                              title="Cambiar rol"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                            <button
                               onClick={() => onActivarDesactivar(usuario.id, usuario.activo === false)}
                               className={`p-2 rounded-lg transition-colors ${
                                 usuario.activo !== false
@@ -789,6 +858,99 @@ const GestionUsuarios = ({
               </table>
             </div>
           </div>
+
+          {/* Modal de Editar Rol */}
+          {mostrarModalEditarRol && usuarioEditando && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl p-8 w-full max-w-md">
+                <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <Edit2 size={24} />
+                  Cambiar Rol de Usuario
+                </h3>
+
+                {/* Mensajes */}
+                {error && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                    <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-800">{error}</p>
+                  </div>
+                )}
+
+                {exito && (
+                  <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+                    <CheckCircle size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-green-800">{exito}</p>
+                  </div>
+                )}
+
+                {/* Info del usuario */}
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600">Usuario:</p>
+                  <p className="font-semibold text-gray-900">{usuarioEditando.nombre}</p>
+                  <p className="text-sm text-gray-500">{usuarioEditando.email}</p>
+                  <div className="mt-2">
+                    <span className="text-sm text-gray-600">Rol actual: </span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getRolColor(usuarioEditando.rol)}`}>
+                      {getRolLabel(usuarioEditando.rol)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Selector de nuevo rol */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nuevo Rol
+                  </label>
+                  <select
+                    value={nuevoRolSeleccionado}
+                    onChange={(e) => setNuevoRolSeleccionado(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="asistente">Asistente Administrativo</option>
+                    <option value="admin">Administrador</option>
+                    <option value="terapeuta">Terapeuta</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {nuevoRolSeleccionado === 'asistente' && 'Acceso a todo el sistema excepto Dashboard y datos de utilidad/márgenes'}
+                    {nuevoRolSeleccionado === 'admin' && 'Acceso completo a todo el sistema'}
+                    {nuevoRolSeleccionado === 'terapeuta' && 'Acceso limitado a horas, citas y reportes'}
+                  </p>
+                </div>
+
+                {/* Botones */}
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={handleCerrarModalEditarRol}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                    disabled={loading}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleGuardarRol}
+                    disabled={loading || nuevoRolSeleccionado === usuarioEditando.rol}
+                    className={`px-4 py-2 rounded-lg text-white flex items-center gap-2 ${
+                      loading || nuevoRolSeleccionado === usuarioEditando.rol
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-purple-600 hover:bg-purple-700'
+                    }`}
+                  >
+                    {loading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Guardando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={18} />
+                        Guardar Cambio
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Modal de Crear Usuario del Sistema */}
           {mostrarModalSistema && (

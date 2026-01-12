@@ -20,6 +20,9 @@ const PortalTerapeuta = ({
   terapeutas = [],
   citas,
   clientes,
+  servicios = [],
+  asignaciones = [],
+  contratos = [],
   onActualizarCita,
   onCrearCita,
   onImportarWord,
@@ -78,6 +81,66 @@ const PortalTerapeuta = ({
     if (!terapeuta?.id || !terapeutas?.length) return [];
     return terapeutas.filter(t => t.id !== terapeuta.id && t.activo !== false);
   }, [terapeutas, terapeuta]);
+
+  // ========================================
+  // FILTRAR CLIENTES ASIGNADOS A ESTA TERAPEUTA
+  // ========================================
+  const clientesFiltrados = useMemo(() => {
+    if (!terapeuta?.id) return clientes;
+
+    console.log('🔍 Filtrando clientes para terapeuta:', terapeuta.nombre, terapeuta.id);
+    console.log('📋 Asignaciones recibidas:', asignaciones?.length || 0);
+    console.log('📄 Contratos recibidos:', contratos?.length || 0);
+    console.log('👥 Clientes asignados manualmente:', terapeuta.clientesAsignados);
+
+    const clienteIdsAsignados = new Set();
+
+    // 1. ASIGNACIONES DE SERVICIO
+    asignaciones
+      ?.filter(asig => asig.activo !== false)
+      .forEach(asig => {
+        const esTerapeutaPrincipal = asig.terapeutaId === terapeuta.id;
+        const esTerapeutaAdicional = asig.terapeutasAdicionales?.some(
+          ta => ta.terapeutaId === terapeuta.id
+        );
+
+        if (esTerapeutaPrincipal || esTerapeutaAdicional) {
+          if (asig.clienteId && asig.clienteId !== 'todos') {
+            clienteIdsAsignados.add(asig.clienteId);
+          }
+        }
+      });
+
+    // 2. CONTRATOS MENSUALES
+    contratos
+      ?.filter(c => c.activo !== false)
+      .forEach(contrato => {
+        const esTerapeutaEnContrato = contrato.terapeutas?.some(
+          t => t.id === terapeuta.id
+        );
+
+        if (esTerapeutaEnContrato && contrato.clienteId) {
+          clienteIdsAsignados.add(contrato.clienteId);
+        }
+      });
+
+    // 3. ASIGNACIÓN MANUAL DIRECTA (campo clientesAsignados en terapeuta)
+    if (terapeuta.clientesAsignados?.length > 0) {
+      terapeuta.clientesAsignados.forEach(id => clienteIdsAsignados.add(id));
+    }
+
+    // NOTA: Las asignaciones globales (clienteId === 'todos') se ignoran
+    // para el filtrado de clientes. Solo cuentan las asignaciones específicas.
+
+    // Si no hay ninguna asignación específica, mostrar todos (fallback para compatibilidad)
+    if (clienteIdsAsignados.size === 0) {
+      console.log('⚠️ No se encontraron asignaciones para esta terapeuta, mostrando todos los clientes (fallback)');
+      return clientes;
+    }
+
+    console.log('✅ Clientes filtrados:', clienteIdsAsignados.size, Array.from(clienteIdsAsignados));
+    return clientes.filter(c => clienteIdsAsignados.has(c.id));
+  }, [clientes, asignaciones, contratos, terapeuta]);
 
   // ========================================
   // FILTRAR CITAS DE ESTA TERAPEUTA
@@ -992,19 +1055,76 @@ const PortalTerapeuta = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
                 <select value={nuevaCita.clienteId} onChange={(e) => setNuevaCita({ ...nuevaCita, clienteId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
                   <option value="">Seleccionar cliente...</option>
-                  {clientes.map(cliente => <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>)}
+                  {clientesFiltrados
+                    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                    .map(cliente => <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>)}
                 </select>
+                {clientesFiltrados.length < clientes.length && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Mostrando {clientesFiltrados.length} cliente(s) asignado(s)
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Terapia</label>
                 <select value={nuevaCita.tipoTerapia} onChange={(e) => setNuevaCita({ ...nuevaCita, tipoTerapia: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                  <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
-                  <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
-                  <option value="Terapia Ocupacional">Terapia Ocupacional</option>
-                  <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
-                  <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
-                  <option value="Servicios de Sombra">Servicios de Sombra</option>
+                  {servicios.length > 0 ? (
+                    servicios
+                      .filter(s => s.activo !== false)
+                      .filter(s => {
+                        // Si no hay niveles definidos en el servicio, todos pueden darlo
+                        if (!s.nivelesPermitidos || s.nivelesPermitidos.length === 0) return true;
+                        // Compatibilidad: si existe 'nivel' (string antiguo), convertir a array
+                        let nivelesTerapeuta = terapeuta?.niveles || [];
+                        if (!nivelesTerapeuta.length && terapeuta?.nivel) {
+                          nivelesTerapeuta = [terapeuta.nivel];
+                        }
+                        // Si no hay niveles en la terapeuta, mostrar todos
+                        if (!nivelesTerapeuta.length) return true;
+                        // Verificar si ALGUNO de los niveles de la terapeuta está en los permitidos
+                        return nivelesTerapeuta.some(nivel => s.nivelesPermitidos.includes(nivel));
+                      })
+                      .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                      .map(servicio => (
+                        <option key={servicio.id} value={servicio.nombre}>
+                          {servicio.nombre}
+                        </option>
+                      ))
+                  ) : (
+                    <>
+                      <option value="Sesión de ABA estándar">Sesión de ABA estándar</option>
+                      <option value="Sesión de ABA precio especial">Sesión de ABA precio especial</option>
+                      <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                      <option value="Servicios de Apoyo y Entrenamiento">Servicios de Apoyo y Entrenamiento</option>
+                      <option value="Servicios Administrativos y Reportes">Servicios Administrativos y Reportes</option>
+                      <option value="Servicios de Sombra">Servicios de Sombra</option>
+                    </>
+                  )}
                 </select>
+                {(() => {
+                  // Compatibilidad: si existe 'nivel' (string antiguo), convertir a array
+                  let nivelesTerapeuta = terapeuta?.niveles || [];
+                  if (!nivelesTerapeuta.length && terapeuta?.nivel) {
+                    nivelesTerapeuta = [terapeuta.nivel];
+                  }
+                  if (nivelesTerapeuta.length > 0) {
+                    const nivelesLabels = {
+                      'terapeuta_ocupacional': 'T. Ocupacional',
+                      'junior': 'Junior',
+                      'senior': 'Senior',
+                      'coordinadora': 'Coordinadora',
+                      'supervisora': 'Supervisora',
+                      'recursos_humanos': 'RRHH'
+                    };
+                    const labelsActivos = nivelesTerapeuta.map(n => nivelesLabels[n] || n).join(', ');
+                    return (
+                      <p className="text-xs text-blue-600 mt-1">
+                        Servicios para: {labelsActivos}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Notas (opcional)</label><textarea value={nuevaCita.notas} onChange={(e) => setNuevaCita({ ...nuevaCita, notas: e.target.value })} placeholder="Notas adicionales..." rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none" /></div>
             </div>

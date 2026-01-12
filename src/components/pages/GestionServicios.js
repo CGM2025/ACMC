@@ -33,13 +33,24 @@ const GestionServicios = ({
   const [guardando, setGuardando] = useState(false);
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(null);
   
+  // Niveles disponibles para terapeutas
+  const NIVELES_TERAPEUTA = [
+    { value: 'terapeuta_ocupacional', label: 'Terapeuta Ocupacional' },
+    { value: 'junior', label: 'Terapeuta Junior' },
+    { value: 'senior', label: 'Terapeuta Senior' },
+    { value: 'coordinadora', label: 'Coordinadora' },
+    { value: 'supervisora', label: 'Supervisora' },
+    { value: 'recursos_humanos', label: 'Recursos Humanos' }
+  ];
+
   // Formulario
   const [form, setForm] = useState({
     nombre: '',
     precio: '',
     orden: '',
     descripcion: '',
-    activo: true
+    activo: true,
+    nivelesPermitidos: [] // Niveles de terapeuta que pueden dar este servicio
   });
 
   /**
@@ -51,7 +62,8 @@ const GestionServicios = ({
       precio: '',
       orden: '',
       descripcion: '',
-      activo: true
+      activo: true,
+      nivelesPermitidos: []
     });
     setEditando(null);
     setMostrarFormulario(false);
@@ -79,7 +91,8 @@ const GestionServicios = ({
       precio: servicio.precio.toString(),
       orden: servicio.orden?.toString() || '99',
       descripcion: servicio.descripcion || '',
-      activo: servicio.activo !== false
+      activo: servicio.activo !== false,
+      nivelesPermitidos: servicio.nivelesPermitidos || []
     });
     setMostrarFormulario(true);
   };
@@ -106,7 +119,8 @@ const GestionServicios = ({
         precio: parseFloat(form.precio),
         orden: parseInt(form.orden) || 99,
         descripcion: form.descripcion.trim(),
-        activo: form.activo
+        activo: form.activo,
+        nivelesPermitidos: form.nivelesPermitidos || []
       };
 
       if (editando) {
@@ -243,6 +257,20 @@ const GestionServicios = ({
                     <div className="font-medium text-gray-900">{servicio.nombre}</div>
                     {servicio.descripcion && (
                       <div className="text-xs text-gray-500 mt-0.5">{servicio.descripcion}</div>
+                    )}
+                    {servicio.nivelesPermitidos && servicio.nivelesPermitidos.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {servicio.nivelesPermitidos.map(nivel => (
+                          <span key={nivel} className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                            {nivel === 'terapeuta_ocupacional' && 'T.O.'}
+                            {nivel === 'junior' && 'Jr'}
+                            {nivel === 'senior' && 'Sr'}
+                            {nivel === 'coordinadora' && 'Coord'}
+                            {nivel === 'supervisora' && 'Sup'}
+                            {nivel === 'recursos_humanos' && 'RRHH'}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -391,6 +419,35 @@ const GestionServicios = ({
                   placeholder="Descripción del servicio..."
                   rows={2}
                 />
+              </div>
+
+              {/* Niveles Permitidos */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Niveles de Terapeuta Permitidos
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Selecciona qué niveles de terapeuta pueden dar este servicio. Si no seleccionas ninguno, todos podrán darlo.
+                </p>
+                <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 rounded-lg">
+                  {NIVELES_TERAPEUTA.map((nivel) => (
+                    <label key={nivel.value} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.nivelesPermitidos.includes(nivel.value)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setForm({ ...form, nivelesPermitidos: [...form.nivelesPermitidos, nivel.value] });
+                          } else {
+                            setForm({ ...form, nivelesPermitidos: form.nivelesPermitidos.filter(n => n !== nivel.value) });
+                          }
+                        }}
+                        className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                      />
+                      <span className="text-sm text-gray-700">{nivel.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
               {/* Activo */}

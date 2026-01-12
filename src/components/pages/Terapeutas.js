@@ -76,7 +76,33 @@ const Terapeutas = ({
                   {/* Información del Terapeuta */}
                   <div>
                     <p className="font-medium">{terapeuta.nombre}</p>
-                    <p className="text-sm text-gray-600">{terapeuta.especialidad}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm text-gray-600">{terapeuta.especialidad}</p>
+                      {/* Mostrar múltiples niveles o nivel único (compatibilidad) */}
+                      {(() => {
+                        const nivelesLabels = {
+                          'terapeuta_ocupacional': 'T. Ocupacional',
+                          'junior': 'Junior',
+                          'senior': 'Senior',
+                          'coordinadora': 'Coordinadora',
+                          'supervisora': 'Supervisora',
+                          'recursos_humanos': 'RRHH'
+                        };
+                        // Compatibilidad: si existe 'nivel' (string antiguo), convertir a array
+                        let niveles = terapeuta.niveles || [];
+                        if (!niveles.length && terapeuta.nivel) {
+                          niveles = [terapeuta.nivel];
+                        }
+                        return niveles.map(nivel => (
+                          <span
+                            key={nivel}
+                            className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full"
+                          >
+                            {nivelesLabels[nivel] || nivel}
+                          </span>
+                        ));
+                      })()}
+                    </div>
                   </div>
 
                   {/* Acciones */}

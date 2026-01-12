@@ -90,9 +90,10 @@ export const enviarResetPasswordCloud = async (email) => {
  * @param {string} datos.nombre - Nombre del usuario
  * @param {string} datos.rol - Rol: 'admin' | 'asistente' | 'terapeuta'
  * @param {string} [datos.terapeutaId] - ID del terapeuta (solo si rol es 'terapeuta')
+ * @param {string} [datos.organizationId] - ID de la organización
  * @returns {Promise<Object>} Resultado de la creación
  */
-export const crearUsuarioSistemaCloud = async ({ email, password, nombre, rol, terapeutaId }) => {
+export const crearUsuarioSistemaCloud = async ({ email, password, nombre, rol, terapeutaId, organizationId }) => {
   try {
     if (!auth.currentUser) {
       return {
@@ -109,6 +110,7 @@ export const crearUsuarioSistemaCloud = async ({ email, password, nombre, rol, t
       nombre,
       rol,
       terapeutaId: terapeutaId || null,
+      organizationId: organizationId || 'org_acmc_001', // Default organization
       idToken
     };
 
@@ -135,5 +137,38 @@ export const crearUsuarioSistemaCloud = async ({ email, password, nombre, rol, t
     }
 
     return { success: false, error: errorMessage };
+  }
+};
+
+/**
+ * Actualizar el rol de un usuario del sistema
+ * @param {string} userId - ID del usuario en Firestore
+ * @param {string} nuevoRol - Nuevo rol: 'admin' | 'asistente' | 'terapeuta'
+ * @returns {Promise<Object>} Resultado de la actualización
+ */
+export const actualizarRolUsuarioCloud = async (userId, nuevoRol) => {
+  try {
+    if (!auth.currentUser) {
+      return {
+        success: false,
+        error: 'No hay usuario autenticado. Por favor, inicia sesión de nuevo.'
+      };
+    }
+
+    // Importar Firestore dinámicamente para actualizar el rol
+    const { doc, updateDoc, getFirestore } = await import('firebase/firestore');
+    const db = getFirestore(auth.app);
+
+    const userRef = doc(db, 'usuarios', userId);
+    await updateDoc(userRef, {
+      rol: nuevoRol,
+      updatedAt: new Date().toISOString()
+    });
+
+    console.log(`Rol actualizado: ${userId} -> ${nuevoRol}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Error actualizando rol:', error);
+    return { success: false, error: error.message || 'Error al actualizar rol' };
   }
 };

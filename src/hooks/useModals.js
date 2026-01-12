@@ -36,10 +36,12 @@ export const useModals = () => {
     especialidad: '',
     telefono: '',
     email: '',
+    niveles: [],               // Niveles de terapeuta para filtrar servicios (puede tener varios)
     tipoPago: 'variable',      // 'variable' o 'fijo'
     salarioMensual: '',        // Solo aplica si tipoPago es 'fijo'
     costosPorServicio: {},
-    costosPorCliente: {}
+    costosPorCliente: {},
+    clientesAsignados: []      // IDs de clientes asignados manualmente (sin necesidad de asignación/contrato)
   });
 
   const [clienteForm, setClienteForm] = useState({
@@ -118,15 +120,22 @@ export const useModals = () => {
           });
           break;
         case 'terapeuta':
+          // Compatibilidad: si existe 'nivel' (string antiguo), convertir a array
+          let nivelesArray = item.niveles || [];
+          if (!nivelesArray.length && item.nivel) {
+            nivelesArray = [item.nivel];
+          }
           setTerapeutaForm({
             nombre: item.nombre || '',
             especialidad: item.especialidad || '',
             telefono: item.telefono || '',
             email: item.email || '',
+            niveles: nivelesArray,
             tipoPago: item.tipoPago || 'variable',
             salarioMensual: item.salarioMensual || '',
             costosPorServicio: item.costosPorServicio || {},
-            costosPorCliente: item.costosPorCliente || {}
+            costosPorCliente: item.costosPorCliente || {},
+            clientesAsignados: item.clientesAsignados || []
           });
           break;
         case 'cliente':
@@ -195,10 +204,12 @@ export const useModals = () => {
       especialidad: '',
       telefono: '',
       email: '',
+      niveles: [],
       tipoPago: 'variable',
       salarioMensual: '',
       costosPorServicio: {},
-      costosPorCliente: {}
+      costosPorCliente: {},
+      clientesAsignados: []
     });
     
     setClienteForm({
