@@ -328,7 +328,10 @@ const RecibosGemini = ({
         const terapeutaIds = contrato.terapeutas?.map(t => t.id) || [];
         const terapeutaNombres = contrato.terapeutas?.map(t => t.nombre) || [];
 
-        // Filtrar TODAS las citas del mes para este cliente y terapeutas del contrato
+        // Obtener el servicio del contrato para filtrar citas
+        const servicioContrato = (contrato.servicio || '').toLowerCase();
+
+        // Filtrar citas del mes para este cliente, terapeutas del contrato Y servicio del contrato
         const citasDelContrato = citas.filter(cita => {
           const [citaYear, citaMonth] = cita.fecha.split('-');
           if (citaYear !== year || citaMonth !== month) return false;
@@ -343,8 +346,15 @@ const RecibosGemini = ({
                                         terapeutaNombres.some(nombre =>
                                           cita.terapeuta?.toLowerCase().includes(nombre.toLowerCase().split(' ')[0])
                                         );
+          if (!esDeTerapeutaContrato) return false;
 
-          return esDeTerapeutaContrato;
+          // Verificar que sea del servicio del contrato
+          const tipoCita = (cita.tipoTerapia || cita.servicio || '').toLowerCase();
+          const esDelServicioContrato = tipoCita === servicioContrato ||
+                                        tipoCita.includes(servicioContrato) ||
+                                        servicioContrato.includes(tipoCita);
+
+          return esDelServicioContrato;
         });
 
         // Separar por estado
@@ -777,6 +787,7 @@ const RecibosGemini = ({
           contratosDesglosadosParaRecibo.push({
             contratoId: info.contratoId,
             servicio: info.contrato.servicio,
+            descripcionRecibo: info.contrato.descripcionRecibo || null,
             terapeutas: info.contrato.terapeutas?.map(t => t.nombre || t).join(', '),
             montoBase: info.montoBase,
             citasProgramadas: info.citasProgramadas,

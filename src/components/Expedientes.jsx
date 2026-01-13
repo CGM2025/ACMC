@@ -35,7 +35,8 @@ import {
   AlertCircle,
   Image,
   X,
-  Printer
+  Printer,
+  Trash2
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -56,7 +57,8 @@ const Expedientes = ({
   onCrearAsignacion,
   onEditarContrato,
   onCrearContrato,
-  onVerRecibos
+  onVerRecibos,
+  onEliminarRecibo
 }) => {
   // Estado del cliente seleccionado
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
@@ -311,11 +313,20 @@ const Expedientes = ({
   const formatearPeriodo = (mes) => {
     if (!mes) return 'N/A';
     try {
-      const [year, month] = mes.split('-');
-      const date = new Date(parseInt(year), parseInt(month) - 1);
-      return date.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
-    } catch {
+      // Si es formato YYYY-MM
+      if (typeof mes === 'string' && mes.includes('-')) {
+        const [year, month] = mes.split('-');
+        if (year && month) {
+          const date = new Date(parseInt(year), parseInt(month) - 1);
+          if (!isNaN(date.getTime())) {
+            return date.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+          }
+        }
+      }
+      // Si ya es un nombre de mes o formato diferente
       return mes;
+    } catch {
+      return mes || 'N/A';
     }
   };
 
@@ -409,23 +420,135 @@ const Expedientes = ({
     // Tabla de servicios/citas
     yPos += 15;
 
+    // Verificar si tiene contrato desglosado
+    const tieneDesglosado = recibo.tieneContratoDesglosado && recibo.contratosDesglosados?.length > 0;
+
+    // Si tiene contrato desglosado, mostrar primero el resumen del contrato
+    if (tieneDesglosado) {
+      const contrato = recibo.contratosDesglosados[0];
+
+      // Título de sección
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(180, 83, 9); // amber-700
+      doc.text('CONTRATO DESGLOSADO', 14, yPos);
+      doc.setTextColor(0, 0, 0);
+      yPos += 8;
+
+      // Info del contrato
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${contrato.servicio} - ${contrato.terapeutas}`, 14, yPos);
+      yPos += 10;
+
+      // Tabla resumen del contrato
+      autoTable(doc, {
+        startY: yPos,
+        body: [
+          ['Citas Programadas:', `${contrato.citasProgramadas}`],
+          ['Citas Completadas:', `${contrato.citasCompletadas}`],
+          ['Citas Canceladas:', `${contrato.citasCanceladas}`],
+          ['Monto Base Mensual:', `$${parseFloat(contrato.montoBase || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`],
+          ['Descuento por cancelaciones:', `-$${parseFloat(contrato.descuento || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`],
+          ['Subtotal Contrato:', `$${parseFloat(contrato.montoFinal || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]
+        ],
+        theme: 'plain',
+        styles: {
+          fontSize: 10,
+          cellPadding: 2
+        },
+        columnStyles: {
+          0: { cellWidth: 100 },
+          1: { cellWidth: 60, halign: 'right', fontStyle: 'bold' }
+        },
+        didParseCell: function(data) {
+          // Resaltar canceladas en rojo
+          if (data.row.index === 2 && data.column.index === 1) {
+            data.cell.styles.textColor = [220, 38, 38]; // red-600
+          }
+          // Resaltar descuento en rojo
+          if (data.row.index === 4) {
+            data.cell.styles.textColor = [220, 38, 38]; // red-600
+          }
+          // Resaltar subtotal en verde
+          if (data.row.index === 5) {
+            data.cell.styles.textColor = [22, 163, 74]; // green-600
+            data.cell.styles.fontSize = 11;
+          }
+        }
+      });
+
+      yPos = doc.lastAutoTable.finalY + 15;
+
+      // Título para desglose de citas
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text('DESGLOSE DE CITAS (para referencia)', 14, yPos);
+      yPos += 8;
+    }
+
     // Si el recibo tiene citas detalladas
     if (recibo.citas && recibo.citas.length > 0) {
-      const citasData = recibo.citas.map(cita => [
-        cita.fecha ? new Date(cita.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : 'N/A',
-        cita.terapeuta || 'N/A',
-        cita.tipoTerapia || cita.servicio || 'Sesi\u00f3n',
-        `${cita.duracion || cita.horas || 1} hr`,
-        `$${parseFloat(cita.precio || 0).toFixed(2)}`
-      ]);
+      // Para contratos desglosados:
+      // El precio por cita = Monto Base / Citas Programadas
+      // Así la suma de citas completadas = Monto Base - Descuento por cancelaciones
+      let precioPorCitaContrato = 0;
+      let servicioContrato = null;
+
+      // Descripción para recibo del contrato (si existe)
+      let descripcionRecibo = null;
+
+      if (tieneDesglosado) {
+        const contrato = recibo.contratosDesglosados[0];
+        const montoBase = parseFloat(contrato.montoBase || 0);
+        const citasProgramadas = parseInt(contrato.citasProgramadas || 0);
+        servicioContrato = contrato.servicio?.toLowerCase() || '';
+        // Usar descripción para recibo si existe
+        descripcionRecibo = recibo.contratosDesglosados[0]?.descripcionRecibo || null;
+
+        // Precio por cita = Monto Base / Citas Programadas
+        if (citasProgramadas > 0) {
+          precioPorCitaContrato = montoBase / citasProgramadas;
+        }
+      }
+
+      // Función para verificar si una cita corresponde al servicio del contrato
+      const citaEsDelContrato = (cita) => {
+        if (!servicioContrato) return false;
+        const tipoCita = (cita.tipoTerapia || cita.servicio || '').toLowerCase();
+        return tipoCita === servicioContrato ||
+               tipoCita.includes(servicioContrato) ||
+               servicioContrato.includes(tipoCita);
+      };
+
+      const citasData = recibo.citas.map(cita => {
+        const precioOriginal = parseFloat(cita.precio || 0);
+        // Para citas del contrato desglosado, usar el precio calculado del contrato
+        // Para otras citas, usar el precio original
+        const esDelContrato = tieneDesglosado && citaEsDelContrato(cita);
+        const precioFinal = esDelContrato ? precioPorCitaContrato : precioOriginal;
+        const duracion = parseFloat(cita.duracion || cita.horas || 1);
+        // Para el servicio: usar descripción del contrato si la cita es del contrato y existe descripción
+        const servicioMostrar = (esDelContrato && descripcionRecibo)
+          ? descripcionRecibo
+          : (cita.tipoTerapia || cita.servicio || 'Sesión');
+        return [
+          cita.fecha ? new Date(cita.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : 'N/A',
+          cita.terapeuta || 'N/A',
+          servicioMostrar,
+          `${duracion.toFixed(2)} hr`,
+          `$${precioFinal.toFixed(2)}`
+        ];
+      });
 
       autoTable(doc, {
         startY: yPos,
-        head: [['Fecha', 'Terapeuta', 'Servicio', 'Duraci\u00f3n', 'Precio']],
+        head: [['Fecha', 'Terapeuta', 'Servicio', 'Duración', 'Precio']],
         body: citasData,
         theme: 'striped',
         headStyles: {
-          fillColor: [37, 99, 235],
+          fillColor: tieneDesglosado ? [180, 83, 9] : [37, 99, 235], // amber si desglosado, azul si no
           fontSize: 10,
           fontStyle: 'bold'
         },
@@ -443,13 +566,13 @@ const Expedientes = ({
       });
 
       yPos = doc.lastAutoTable.finalY + 10;
-    } else {
-      // Sin citas detalladas, mostrar resumen
+    } else if (!tieneDesglosado) {
+      // Sin citas detalladas y sin contrato desglosado, mostrar resumen
       autoTable(doc, {
         startY: yPos,
         head: [['Concepto', 'Cantidad', 'Precio']],
         body: [
-          ['Servicios del per\u00edodo', `${recibo.totalCitas || 1} sesi\u00f3n(es)`, `$${parseFloat(recibo.totalPrecio || recibo.total || 0).toFixed(2)}`]
+          ['Servicios del período', `${recibo.totalCitas || 1} sesión(es)`, `$${parseFloat(recibo.totalPrecio || recibo.total || 0).toFixed(2)}`]
         ],
         theme: 'striped',
         headStyles: {
@@ -463,17 +586,26 @@ const Expedientes = ({
       yPos = doc.lastAutoTable.finalY + 10;
     }
 
-    // Totales
-    const subtotal = parseFloat(recibo.totalPrecio || recibo.total || 0);
-    const iva = parseFloat(recibo.totalIva || 0);
-    const total = parseFloat(recibo.totalGeneral || recibo.total || subtotal);
+    // Totales - usar valores del contrato desglosado si aplica
+    let subtotal, iva, total;
+
+    if (tieneDesglosado) {
+      // Usar totales del contrato desglosado
+      subtotal = parseFloat(recibo.subtotalDesglosado || recibo.contratosDesglosados[0]?.montoFinal || 0);
+      iva = subtotal * 0.16;
+      total = subtotal + iva;
+    } else {
+      subtotal = parseFloat(recibo.totalPrecio || recibo.total || 0);
+      iva = parseFloat(recibo.totalIva || 0);
+      total = parseFloat(recibo.totalGeneral || recibo.total || subtotal);
+    }
 
     autoTable(doc, {
       startY: yPos,
       body: [
-        ['Subtotal:', `$${subtotal.toFixed(2)}`],
-        ['IVA (16%):', `$${iva.toFixed(2)}`],
-        ['TOTAL:', `$${total.toFixed(2)}`]
+        ['Subtotal:', `$${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`],
+        ['IVA (16%):', `$${iva.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`],
+        ['TOTAL:', `$${total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]
       ],
       theme: 'plain',
       styles: {
@@ -746,7 +878,57 @@ const Expedientes = ({
                 {/* Tabla de Servicios */}
                 <div className="mb-6">
                   <h4 className="text-sm font-bold text-gray-500 uppercase mb-2">Detalle de Servicios</h4>
-                  {reciboVistaPrevia.citas && reciboVistaPrevia.citas.length > 0 ? (
+
+                  {/* Mostrar contratos desglosados si existen */}
+                  {reciboVistaPrevia.tieneContratoDesglosado && reciboVistaPrevia.contratosDesglosados?.length > 0 ? (
+                    <div className="space-y-4">
+                      {reciboVistaPrevia.contratosDesglosados.map((contrato, idx) => (
+                        <div key={idx} className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <p className="font-semibold text-amber-900">{contrato.servicio}</p>
+                              <p className="text-sm text-amber-700">{contrato.terapeutas}</p>
+                            </div>
+                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
+                              Contrato Desglosado
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-3 mb-3 text-sm">
+                            <div className="bg-white rounded p-2 text-center">
+                              <p className="text-gray-500">Programadas</p>
+                              <p className="font-bold text-gray-800">{contrato.citasProgramadas}</p>
+                            </div>
+                            <div className="bg-white rounded p-2 text-center">
+                              <p className="text-green-600">Completadas</p>
+                              <p className="font-bold text-green-700">{contrato.citasCompletadas}</p>
+                            </div>
+                            <div className="bg-white rounded p-2 text-center">
+                              <p className="text-red-600">Canceladas</p>
+                              <p className="font-bold text-red-700">{contrato.citasCanceladas}</p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1 text-sm border-t border-amber-200 pt-3">
+                            <div className="flex justify-between">
+                              <span className="text-amber-700">Monto base mensual:</span>
+                              <span className="font-medium">${contrato.montoBase?.toLocaleString('es-MX')}</span>
+                            </div>
+                            {contrato.citasCanceladas > 0 && (
+                              <div className="flex justify-between text-red-600">
+                                <span>Descuento ({contrato.citasCanceladas} canceladas):</span>
+                                <span className="font-medium">-${contrato.descuento?.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between font-bold text-amber-900 pt-1 border-t border-amber-200">
+                              <span>Subtotal contrato:</span>
+                              <span>${contrato.montoFinal?.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : reciboVistaPrevia.citas && reciboVistaPrevia.citas.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-blue-50">
@@ -785,18 +967,34 @@ const Expedientes = ({
                 {/* Totales */}
                 <div className="border-t pt-4">
                   <div className="flex justify-end">
-                    <div className="w-64 space-y-2">
-                      <div className="flex justify-between text-gray-600">
-                        <span>Subtotal:</span>
-                        <span>${parseFloat(reciboVistaPrevia.totalPrecio || reciboVistaPrevia.total || 0).toFixed(2)}</span>
-                      </div>
+                    <div className="w-72 space-y-2">
+                      {/* Si tiene contrato desglosado, mostrar subtotal del contrato */}
+                      {reciboVistaPrevia.tieneContratoDesglosado && reciboVistaPrevia.subtotalDesglosado > 0 ? (
+                        <>
+                          <div className="flex justify-between text-amber-700">
+                            <span>Subtotal Contrato:</span>
+                            <span>${parseFloat(reciboVistaPrevia.subtotalDesglosado || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                          </div>
+                          {reciboVistaPrevia.subtotalSombra > 0 && (
+                            <div className="flex justify-between text-purple-700">
+                              <span>Cargos de Sombra:</span>
+                              <span>${parseFloat(reciboVistaPrevia.subtotalSombra || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex justify-between text-gray-600">
+                          <span>Subtotal:</span>
+                          <span>${parseFloat(reciboVistaPrevia.totalPrecio || reciboVistaPrevia.total || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-gray-600">
                         <span>IVA (16%):</span>
-                        <span>${parseFloat(reciboVistaPrevia.totalIva || 0).toFixed(2)}</span>
+                        <span>${parseFloat(reciboVistaPrevia.totalIva || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className="flex justify-between text-xl font-bold text-gray-800 border-t pt-2">
                         <span>TOTAL:</span>
-                        <span>${parseFloat(reciboVistaPrevia.totalGeneral || reciboVistaPrevia.total || 0).toFixed(2)}</span>
+                        <span>${parseFloat(reciboVistaPrevia.totalGeneral || reciboVistaPrevia.total || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   </div>
@@ -824,9 +1022,31 @@ const Expedientes = ({
 
               {/* Footer del Modal */}
               <div className="bg-gray-50 px-6 py-4 flex justify-between items-center border-t">
-                <p className="text-xs text-gray-500">
-                  Generado el {new Date().toLocaleDateString('es-MX')}
-                </p>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-gray-500">
+                    Generado el {new Date().toLocaleDateString('es-MX')}
+                  </p>
+                  {onEliminarRecibo && (
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('¿Estás seguro de eliminar este recibo? Esta acción no se puede deshacer.')) {
+                          try {
+                            await onEliminarRecibo(reciboVistaPrevia.id);
+                            setReciboVistaPrevia(null);
+                            alert('✅ Recibo eliminado correctamente');
+                          } catch (error) {
+                            console.error('Error eliminando recibo:', error);
+                            alert('❌ Error al eliminar el recibo: ' + error.message);
+                          }
+                        }
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm"
+                    >
+                      <Trash2 size={14} />
+                      Eliminar
+                    </button>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => {

@@ -1383,6 +1383,17 @@ const SistemaGestion = () => {
                             onVerRecibos={(cliente) => {
                               setActiveTab('recibos-gemini');
                             }}
+                            onEliminarRecibo={async (reciboId) => {
+                              try {
+                                const { eliminarRecibo } = await import('./api/recibos');
+                                await eliminarRecibo(reciboId);
+                                // Recargar recibos
+                                await cargarRecibos();
+                              } catch (error) {
+                                console.error('Error eliminando recibo:', error);
+                                throw error;
+                              }
+                            }}
                           />
                         )}
 

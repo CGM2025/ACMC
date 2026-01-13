@@ -74,7 +74,7 @@ const ContratosMensuales = ({
     clienteId: '',
     clienteNombre: '',
     tipoContrato: 'mensual_fijo',
-    servicio: 'Sombra - Asistencia Escolar',
+    servicio: '',
     terapeutas: [], // Ahora cada terapeuta tiene: { id, nombre, pagoTipo, pagoMonto }
     terapeutaSeleccionada: '',
     terapeutaPagoTipo: 'por_hora', // Tipo de pago para nueva terapeuta
@@ -118,7 +118,7 @@ const ContratosMensuales = ({
       clienteId: '',
       clienteNombre: '',
       tipoContrato: 'mensual_fijo',
-      servicio: 'Sombra - Asistencia Escolar',
+      servicio: '',
       terapeutas: [],
       terapeutaSeleccionada: '',
       terapeutaPagoTipo: 'por_hora',
@@ -147,7 +147,7 @@ const ContratosMensuales = ({
       clienteId: contrato.clienteId || '',
       clienteNombre: contrato.clienteNombre || '',
       tipoContrato: contrato.tipoContrato || 'mensual_fijo',
-      servicio: contrato.servicio || 'Sombra - Asistencia Escolar',
+      servicio: contrato.servicio || '',
       terapeutas: (contrato.terapeutas || []).map(t => ({
         id: t.id,
         nombre: t.nombre,
@@ -808,18 +808,21 @@ const ContratosMensuales = ({
               {/* Servicio */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Servicio
+                  Servicio (del Catálogo)
                 </label>
                 <select
                   value={formulario.servicio}
                   onChange={(e) => setFormulario(prev => ({ ...prev, servicio: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="Sombra - Asistencia Escolar">Sombra - Asistencia Escolar</option>
-                  <option value="Paquete de Terapia">Paquete de Terapia</option>
-                  <option value="Servicios de ABA">Servicios de ABA</option>
-                  <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                  <option value="">Seleccionar servicio...</option>
+                  {servicios && servicios.filter(s => s.activo !== false).map(s => (
+                    <option key={s.id} value={s.nombre}>{s.nombre}</option>
+                  ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Selecciona el servicio del catálogo para que coincida con las citas
+                </p>
               </div>
 
               {/* Terapeutas */}
