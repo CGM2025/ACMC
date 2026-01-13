@@ -43,10 +43,10 @@ const TIPOS_CONTRATO = [
     descripcion: 'Paquete de horas con precio fijo mensual',
     ejemplo: 'Matías'
   },
-  { 
-    value: 'desglosado', 
-    label: 'Desglosado', 
-    descripcion: 'Cobro por hora (para aseguradoras)',
+  {
+    value: 'desglosado',
+    label: 'Desglosado',
+    descripcion: 'Monto fijo con descuento por cancelaciones (para aseguradoras)',
     ejemplo: 'Daniel'
   }
 ];
@@ -82,6 +82,7 @@ const ContratosMensuales = ({
     cobroClienteTipo: 'mensual',
     cobroClienteMensual: '',
     cobroClientePorHora: '',
+    montoMensualBase: '', // Para contratos desglosados: monto fijo antes de descuentos
     horasEstimadas: '',
     descripcionRecibo: '',
     notas: '',
@@ -125,6 +126,7 @@ const ContratosMensuales = ({
       cobroClienteTipo: 'mensual',
       cobroClienteMensual: '',
       cobroClientePorHora: '',
+      montoMensualBase: '',
       horasEstimadas: '',
       descripcionRecibo: '',
       notas: '',
@@ -160,6 +162,7 @@ const ContratosMensuales = ({
       cobroClienteTipo: contrato.cobroCliente?.tipo || 'mensual',
       cobroClienteMensual: contrato.cobroCliente?.montoMensual?.toString() || '',
       cobroClientePorHora: contrato.cobroCliente?.montoPorHora?.toString() || '',
+      montoMensualBase: contrato.montoMensualBase?.toString() || '',
       horasEstimadas: contrato.horasEstimadas?.toString() || '',
       descripcionRecibo: contrato.descripcionRecibo || '',
       notas: contrato.notas || ''
@@ -402,13 +405,17 @@ const ContratosMensuales = ({
         terapeutas: formulario.terapeutas, // Ahora incluye pagoTipo y pagoMonto por cada una
         cobroCliente: {
           tipo: formulario.cobroClienteTipo,
-          montoMensual: formulario.cobroClienteTipo === 'mensual' 
-            ? parseFloat(formulario.cobroClienteMensual) || 0 
+          montoMensual: formulario.cobroClienteTipo === 'mensual'
+            ? parseFloat(formulario.cobroClienteMensual) || 0
             : null,
-          montoPorHora: formulario.cobroClienteTipo === 'por_hora' 
-            ? parseFloat(formulario.cobroClientePorHora) || 0 
+          montoPorHora: formulario.cobroClienteTipo === 'por_hora'
+            ? parseFloat(formulario.cobroClientePorHora) || 0
             : null
         },
+        // Para contratos desglosados: monto fijo base antes de descuentos por cancelaciones
+        montoMensualBase: formulario.tipoContrato === 'desglosado'
+          ? parseFloat(formulario.montoMensualBase) || 0
+          : null,
         horasEstimadas: parseFloat(formulario.horasEstimadas) || 0,
         descripcionRecibo: formulario.descripcionRecibo,
         notas: formulario.notas
@@ -679,7 +686,14 @@ const ContratosMensuales = ({
                     <div>
                       <div className="text-xs text-gray-500 uppercase mb-1">Cobro Cliente</div>
                       <div className="font-semibold text-gray-800">
-                        {contrato.cobroCliente?.tipo === 'mensual' ? (
+                        {contrato.tipoContrato === 'desglosado' && contrato.montoMensualBase ? (
+                          <div>
+                            <div>${contrato.montoMensualBase?.toLocaleString()}/mes</div>
+                            <div className="text-xs text-gray-500 font-normal">
+                              (${contrato.cobroCliente?.montoPorHora?.toLocaleString()}/hr para desglose)
+                            </div>
+                          </div>
+                        ) : contrato.cobroCliente?.tipo === 'mensual' ? (
                           <>${contrato.cobroCliente.montoMensual?.toLocaleString()}/mes</>
                         ) : (
                           <>${contrato.cobroCliente?.montoPorHora?.toLocaleString()}/hr</>
@@ -925,7 +939,42 @@ const ContratosMensuales = ({
                   <DollarSign size={18} />
                   Cobro al Cliente
                 </h4>
-                {formulario.cobroClienteTipo === 'mensual' ? (
+                {formulario.tipoContrato === 'desglosado' ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-blue-700 mb-1">Monto Mensual Base (antes de descuentos)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                        <input
+                          type="number"
+                          value={formulario.montoMensualBase}
+                          onChange={(e) => setFormulario(prev => ({ ...prev, montoMensualBase: e.target.value }))}
+                          placeholder="21000"
+                          className="w-full pl-8 pr-4 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <p className="text-xs text-blue-600 mt-1">
+                        Este es el monto fijo mensual. Se descontarán las citas canceladas automáticamente.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-blue-700 mb-1">Precio por Hora (para desglose en recibo)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                        <input
+                          type="number"
+                          value={formulario.cobroClientePorHora}
+                          onChange={(e) => setFormulario(prev => ({ ...prev, cobroClientePorHora: e.target.value }))}
+                          placeholder="139"
+                          className="w-full pl-8 pr-4 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <p className="text-xs text-blue-600 mt-1">
+                        Este precio se usa para mostrar el desglose por hora a la aseguradora.
+                      </p>
+                    </div>
+                  </div>
+                ) : formulario.cobroClienteTipo === 'mensual' ? (
                   <div>
                     <label className="block text-sm text-blue-700 mb-1">Monto Mensual</label>
                     <div className="relative">

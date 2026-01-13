@@ -21,7 +21,8 @@
       "Bash(firebase firestore:rules:get:*)",
       "Bash(firebase firestore:rules:*)",
       "Bash(cat:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(xargs:*)"
     ],
     "deny": [],
     "ask": []

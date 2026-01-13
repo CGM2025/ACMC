@@ -313,6 +313,79 @@ const RecibosGemini = ({
   }, [contratosClienteActivos, cargosSombraCliente]);
 
   /**
+   * Calcula información de contratos desglosados con descuentos por cancelaciones
+   * Solo aplica para contratos tipo 'desglosado' con montoMensualBase
+   */
+  const contratosDesglosadosInfo = useMemo(() => {
+    if (!clienteSeleccionado || contratosClienteActivos.length === 0) return [];
+
+    const [year, month] = mesSeleccionado.split('-');
+
+    return contratosClienteActivos
+      .filter(c => c.tipoContrato === 'desglosado' && c.montoMensualBase > 0)
+      .map(contrato => {
+        // Obtener IDs de terapeutas del contrato
+        const terapeutaIds = contrato.terapeutas?.map(t => t.id) || [];
+        const terapeutaNombres = contrato.terapeutas?.map(t => t.nombre) || [];
+
+        // Filtrar TODAS las citas del mes para este cliente y terapeutas del contrato
+        const citasDelContrato = citas.filter(cita => {
+          const [citaYear, citaMonth] = cita.fecha.split('-');
+          if (citaYear !== year || citaMonth !== month) return false;
+
+          // Verificar que sea del cliente
+          const esDelCliente = cita.cliente === clienteSeleccionado.nombre ||
+                               cita.clienteId === clienteSeleccionado.clienteId;
+          if (!esDelCliente) return false;
+
+          // Verificar que sea de una terapeuta del contrato
+          const esDeTerapeutaContrato = terapeutaIds.includes(cita.terapeutaId) ||
+                                        terapeutaNombres.some(nombre =>
+                                          cita.terapeuta?.toLowerCase().includes(nombre.toLowerCase().split(' ')[0])
+                                        );
+
+          return esDeTerapeutaContrato;
+        });
+
+        // Separar por estado
+        const citasCompletadas = citasDelContrato.filter(c => c.estado === 'completada');
+        const citasCanceladas = citasDelContrato.filter(c => c.estado === 'cancelada');
+        const citasProgramadas = citasDelContrato.length; // Total de citas que se agendaron
+
+        // Calcular valores
+        const montoBase = contrato.montoMensualBase || 0;
+        const precioPorCita = citasProgramadas > 0 ? montoBase / citasProgramadas : 0;
+        const descuento = citasCanceladas.length * precioPorCita;
+        const montoFinal = montoBase - descuento;
+
+        // Calcular horas para el desglose
+        const horasCompletadas = citasCompletadas.reduce((sum, c) => {
+          const [h1, m1] = c.horaInicio.split(':').map(Number);
+          const [h2, m2] = c.horaFin.split(':').map(Number);
+          return sum + ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60;
+        }, 0);
+
+        const precioPorHora = contrato.cobroCliente?.montoPorHora || 0;
+
+        return {
+          contratoId: contrato.id,
+          contrato,
+          montoBase,
+          citasProgramadas,
+          citasCompletadas: citasCompletadas.length,
+          citasCanceladas: citasCanceladas.length,
+          citasCanceladasDetalle: citasCanceladas,
+          precioPorCita,
+          descuento,
+          montoFinal,
+          horasCompletadas,
+          precioPorHora,
+          terapeutas: contrato.terapeutas
+        };
+      });
+  }, [clienteSeleccionado, contratosClienteActivos, citas, mesSeleccionado]);
+
+  /**
    * Agrega automáticamente un cargo de sombra basado en un contrato mensual
    */
   const agregarCargoDesdeContrato = async (contrato) => {
@@ -1099,8 +1172,98 @@ const RecibosGemini = ({
                 </div>
               </div>
 
-              {/* Banner de Contratos Mensuales sin Cargo */}
-              {contratosSinCargo.length > 0 && (
+              {/* Banner de Contratos Desglosados con Descuentos */}
+              {contratosDesglosadosInfo.length > 0 && (
+                <div className="mt-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="bg-amber-100 p-1.5 rounded-lg">
+                      <FileText size={18} className="text-amber-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-amber-900">
+                        Contrato Desglosado (para Aseguradora)
+                      </h3>
+                      <p className="text-xs text-amber-600">
+                        Monto fijo con descuento automático por citas canceladas
+                      </p>
+                    </div>
+                  </div>
+                  {contratosDesglosadosInfo.map(info => (
+                    <div key={info.contratoId} className="bg-white rounded-lg p-4 border border-amber-100">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <p className="font-medium text-gray-900">{info.contrato.servicio}</p>
+                          <p className="text-sm text-gray-500">
+                            {info.contrato.terapeutas?.map(t => t.nombre || t).join(', ')}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500">Monto Base</p>
+                          <p className="font-semibold text-gray-800">
+                            ${info.montoBase.toLocaleString('es-MX')}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Resumen de citas */}
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div className="bg-blue-50 rounded-lg p-2 text-center">
+                          <p className="text-xs text-blue-600">Programadas</p>
+                          <p className="font-bold text-blue-800">{info.citasProgramadas}</p>
+                        </div>
+                        <div className="bg-green-50 rounded-lg p-2 text-center">
+                          <p className="text-xs text-green-600">Completadas</p>
+                          <p className="font-bold text-green-800">{info.citasCompletadas}</p>
+                        </div>
+                        <div className="bg-red-50 rounded-lg p-2 text-center">
+                          <p className="text-xs text-red-600">Canceladas</p>
+                          <p className="font-bold text-red-800">{info.citasCanceladas}</p>
+                        </div>
+                      </div>
+
+                      {/* Cálculo del descuento */}
+                      {info.citasCanceladas > 0 && (
+                        <div className="bg-red-50 border border-red-100 rounded-lg p-3 mb-3">
+                          <p className="text-sm text-red-700">
+                            <span className="font-medium">Descuento por cancelaciones:</span>
+                            {' '}{info.citasCanceladas} citas × ${info.precioPorCita.toLocaleString('es-MX', { maximumFractionDigits: 2 })}/cita
+                            {' '}= <span className="font-bold">-${info.descuento.toLocaleString('es-MX', { maximumFractionDigits: 2 })}</span>
+                          </p>
+                          {info.citasCanceladasDetalle.length > 0 && (
+                            <div className="mt-2 text-xs text-red-600">
+                              <p className="font-medium mb-1">Citas canceladas:</p>
+                              {info.citasCanceladasDetalle.map((cita, idx) => (
+                                <p key={idx}>• {cita.fecha} - {cita.horaInicio} a {cita.horaFin}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Total a cobrar */}
+                      <div className="flex justify-between items-center pt-3 border-t">
+                        <div>
+                          <p className="text-sm text-gray-500">Total a cobrar (sin IVA)</p>
+                          <p className="text-xs text-gray-400">
+                            {info.horasCompletadas.toFixed(1)} hrs × ${info.precioPorHora}/hr para desglose
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-amber-700">
+                            ${info.montoFinal.toLocaleString('es-MX', { maximumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            +IVA: ${(info.montoFinal * 0.16).toLocaleString('es-MX', { maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Banner de Contratos Mensuales sin Cargo (excepto desglosados con monto base) */}
+              {contratosSinCargo.filter(c => c.tipoContrato !== 'desglosado' || !c.montoMensualBase).length > 0 && (
                 <div className="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -1120,8 +1283,8 @@ const RecibosGemini = ({
                     </div>
                   </div>
                   <div className="space-y-2">
-                    {contratosSinCargo.map(contrato => (
-                      <div 
+                    {contratosSinCargo.filter(c => c.tipoContrato !== 'desglosado' || !c.montoMensualBase).map(contrato => (
+                      <div
                         key={contrato.id}
                         className="flex items-center justify-between bg-white rounded-lg p-3 border border-blue-100"
                       >
