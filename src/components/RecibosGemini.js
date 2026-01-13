@@ -765,9 +765,47 @@ const RecibosGemini = ({
       const subtotalSombra = totalCargosSombra.montoCliente;
       const ivaSombra = totalCargosSombra.iva;
 
-      // Totales generales (citas + sombra)
-      const totalPrecio = subtotalCitas + subtotalSombra;
-      const totalIva = ivaCitas + ivaSombra;
+      // Calcular totales de contratos desglosados (con descuentos por cancelaciones)
+      let subtotalDesglosado = 0;
+      let ivaDesglosado = 0;
+      let contratosDesglosadosParaRecibo = [];
+
+      if (contratosDesglosadosInfo.length > 0) {
+        contratosDesglosadosInfo.forEach(info => {
+          subtotalDesglosado += info.montoFinal;
+          ivaDesglosado += info.montoFinal * 0.16;
+          contratosDesglosadosParaRecibo.push({
+            contratoId: info.contratoId,
+            servicio: info.contrato.servicio,
+            terapeutas: info.contrato.terapeutas?.map(t => t.nombre || t).join(', '),
+            montoBase: info.montoBase,
+            citasProgramadas: info.citasProgramadas,
+            citasCompletadas: info.citasCompletadas,
+            citasCanceladas: info.citasCanceladas,
+            precioPorCita: info.precioPorCita,
+            descuento: info.descuento,
+            montoFinal: info.montoFinal,
+            horasCompletadas: info.horasCompletadas,
+            precioPorHora: info.precioPorHora,
+            citasCanceladasDetalle: info.citasCanceladasDetalle.map(c => ({
+              fecha: c.fecha,
+              horaInicio: c.horaInicio,
+              horaFin: c.horaFin
+            }))
+          });
+        });
+      }
+
+      // Totales generales (citas + sombra + desglosados)
+      // NOTA: Si hay contrato desglosado, las citas individuales ya están incluidas en el cálculo del contrato
+      // Por lo tanto, usamos el monto del contrato desglosado EN LUGAR de las citas individuales
+      const tieneContratoDesglosado = contratosDesglosadosParaRecibo.length > 0;
+      const totalPrecio = tieneContratoDesglosado
+        ? subtotalDesglosado + subtotalSombra  // Usar monto del contrato (ya incluye las citas)
+        : subtotalCitas + subtotalSombra;       // Usar citas individuales
+      const totalIva = tieneContratoDesglosado
+        ? ivaDesglosado + ivaSombra
+        : ivaCitas + ivaSombra;
       const totalGeneral = totalPrecio + totalIva;
 
       // Preparar datos del recibo
@@ -799,12 +837,18 @@ const RecibosGemini = ({
         })),
         subtotalSombra,
         ivaSombra,
-        
+
+        // Contratos desglosados (con descuentos por cancelaciones)
+        contratosDesglosados: contratosDesglosadosParaRecibo,
+        subtotalDesglosado,
+        ivaDesglosado,
+        tieneContratoDesglosado,
+
         // Totales generales
         totalPrecio,
         totalIva,
         totalGeneral,
-        
+
         // Info adicional
         esReciboPartial: citasSeleccionadas.size > 0,
         tieneCargosSombra: cargosSombraCliente.length > 0,
@@ -1913,26 +1957,91 @@ const RecibosGemini = ({
               <div className="border border-gray-200 rounded-lg p-4 space-y-2">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-gray-900">Resumen del Recibo</h4>
-                  {citasSeleccionadas.size > 0 && (
+                  {contratosDesglosadosInfo.length > 0 && (
+                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
+                      Contrato Desglosado
+                    </span>
+                  )}
+                  {citasSeleccionadas.size > 0 && contratosDesglosadosInfo.length === 0 && (
                     <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
                       Selección parcial
                     </span>
                   )}
                 </div>
-                
+
                 {/* Usar totales de selección si hay, si no usar todos */}
                 {(() => {
                   const datos = citasSeleccionadas.size > 0 && totalesSeleccionados
                     ? totalesSeleccionados
                     : clienteSeleccionado;
-                  
-                  // Calcular totales incluyendo cargos de sombra
-                  const subtotalCitas = datos.totalPrecio;
+
+                  // Si hay contrato desglosado, usar esos totales
+                  const tieneDesglosado = contratosDesglosadosInfo.length > 0;
+                  const infoDesglosado = tieneDesglosado ? contratosDesglosadosInfo[0] : null;
+
+                  // Calcular totales
                   const subtotalSombra = totalCargosSombra.montoCliente;
+
+                  if (tieneDesglosado && infoDesglosado) {
+                    // Mostrar info del contrato desglosado
+                    const subtotalDesglosado = infoDesglosado.montoFinal;
+                    const ivaDesglosado = subtotalDesglosado * 0.16;
+                    const subtotalGeneral = subtotalDesglosado + subtotalSombra;
+                    const ivaTotal = ivaDesglosado + totalCargosSombra.iva;
+                    const granTotal = subtotalGeneral + ivaTotal;
+
+                    return (
+                      <>
+                        <div className="bg-amber-50 -mx-4 px-4 py-2 mb-2 rounded">
+                          <p className="text-xs text-amber-700 font-medium mb-1">Contrato: {infoDesglosado.contrato.servicio}</p>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-amber-700">Monto base:</span>
+                            <span className="font-medium text-amber-800">${infoDesglosado.montoBase.toLocaleString('es-MX')}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-amber-700">Citas: {infoDesglosado.citasCompletadas}/{infoDesglosado.citasProgramadas}</span>
+                            <span className="font-medium text-amber-800">{infoDesglosado.horasCompletadas.toFixed(1)}h</span>
+                          </div>
+                          {infoDesglosado.citasCanceladas > 0 && (
+                            <div className="flex justify-between text-sm text-red-600">
+                              <span>Descuento ({infoDesglosado.citasCanceladas} canceladas):</span>
+                              <span className="font-medium">-${infoDesglosado.descuento.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-sm pt-1 border-t border-amber-200 mt-1">
+                            <span className="text-amber-800 font-medium">Subtotal contrato:</span>
+                            <span className="font-bold text-amber-800">${subtotalDesglosado.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                          </div>
+                        </div>
+
+                        {/* Mostrar cargos de sombra si hay */}
+                        {cargosSombraCliente.length > 0 && (
+                          <div className="flex justify-between text-sm text-purple-700 bg-purple-50 -mx-4 px-4 py-1">
+                            <span>Cargos de Sombra ({cargosSombraCliente.length}):</span>
+                            <span className="font-medium">${subtotalSombra.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">IVA (16%):</span>
+                          <span className="font-medium">${ivaTotal.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
+                        </div>
+                        <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
+                          <span className="font-semibold text-gray-900">Total:</span>
+                          <span className="font-bold text-green-600 text-lg">
+                            ${granTotal.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  }
+
+                  // Sin contrato desglosado - mostrar citas normales
+                  const subtotalCitas = datos.totalPrecio;
                   const subtotalGeneral = subtotalCitas + subtotalSombra;
                   const ivaTotal = datos.totalIva + totalCargosSombra.iva;
                   const granTotal = datos.totalGeneral + totalCargosSombra.total;
-                  
+
                   return (
                     <>
                       <div className="flex justify-between text-sm">
@@ -1947,7 +2056,7 @@ const RecibosGemini = ({
                         <span className="text-gray-600">Subtotal citas:</span>
                         <span className="font-medium">${subtotalCitas.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
                       </div>
-                      
+
                       {/* Mostrar cargos de sombra si hay */}
                       {cargosSombraCliente.length > 0 && (
                         <>
@@ -1961,7 +2070,7 @@ const RecibosGemini = ({
                           </div>
                         </>
                       )}
-                      
+
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">IVA (16%):</span>
                         <span className="font-medium">${ivaTotal.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</span>
