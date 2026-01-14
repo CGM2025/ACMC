@@ -420,11 +420,52 @@ const Expedientes = ({
     // Tabla de servicios/citas
     yPos += 15;
 
-    // Verificar si tiene contrato desglosado
+    // Verificar tipo de contrato
     const tieneDesglosado = recibo.tieneContratoDesglosado && recibo.contratosDesglosados?.length > 0;
+    const tieneMensualFijo = recibo.tieneContratoMensualFijo && recibo.contratosMensualesFijos?.length > 0;
 
-    // Si tiene contrato desglosado, mostrar primero el resumen del contrato
-    if (tieneDesglosado) {
+    // Si tiene contrato mensual fijo, mostrar solo la línea del contrato (sin citas)
+    if (tieneMensualFijo) {
+      const contrato = recibo.contratosMensualesFijos[0];
+
+      // Título de sección
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(37, 99, 235); // blue-600
+      doc.text('CONTRATO MENSUAL', 14, yPos);
+      doc.setTextColor(0, 0, 0);
+      yPos += 10;
+
+      // Tabla simple con el contrato
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Descripción', 'Terapeuta(s)', 'Monto']],
+        body: [[
+          contrato.descripcionRecibo || contrato.servicio || 'Servicio mensual',
+          contrato.terapeutas || 'N/A',
+          `$${parseFloat(contrato.montoMensual || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        ]],
+        theme: 'striped',
+        headStyles: {
+          fillColor: [37, 99, 235],
+          fontSize: 10,
+          fontStyle: 'bold'
+        },
+        styles: {
+          fontSize: 10,
+          cellPadding: 4
+        },
+        columnStyles: {
+          0: { cellWidth: 80 },
+          1: { cellWidth: 60 },
+          2: { cellWidth: 40, halign: 'right', fontStyle: 'bold' }
+        }
+      });
+
+      yPos = doc.lastAutoTable.finalY + 10;
+
+    // Si tiene contrato desglosado, mostrar el resumen del contrato
+    } else if (tieneDesglosado) {
       const contrato = recibo.contratosDesglosados[0];
 
       // Título de sección
@@ -488,8 +529,8 @@ const Expedientes = ({
       yPos += 8;
     }
 
-    // Si el recibo tiene citas detalladas
-    if (recibo.citas && recibo.citas.length > 0) {
+    // Si el recibo tiene citas detalladas (no mostrar para mensual_fijo)
+    if (recibo.citas && recibo.citas.length > 0 && !tieneMensualFijo) {
       // Para contratos desglosados:
       // El precio por cita = Monto Base / Citas Programadas
       // Así la suma de citas completadas = Monto Base - Descuento por cancelaciones
@@ -566,8 +607,8 @@ const Expedientes = ({
       });
 
       yPos = doc.lastAutoTable.finalY + 10;
-    } else if (!tieneDesglosado) {
-      // Sin citas detalladas y sin contrato desglosado, mostrar resumen
+    } else if (!tieneDesglosado && !tieneMensualFijo) {
+      // Sin citas detalladas y sin contratos especiales, mostrar resumen
       autoTable(doc, {
         startY: yPos,
         head: [['Concepto', 'Cantidad', 'Precio']],
@@ -586,10 +627,15 @@ const Expedientes = ({
       yPos = doc.lastAutoTable.finalY + 10;
     }
 
-    // Totales - usar valores del contrato desglosado si aplica
+    // Totales - usar valores según tipo de contrato
     let subtotal, iva, total;
 
-    if (tieneDesglosado) {
+    if (tieneMensualFijo) {
+      // Usar totales del contrato mensual fijo
+      subtotal = parseFloat(recibo.subtotalMensualFijo || recibo.contratosMensualesFijos[0]?.montoMensual || 0);
+      iva = subtotal * 0.16;
+      total = subtotal + iva;
+    } else if (tieneDesglosado) {
       // Usar totales del contrato desglosado
       subtotal = parseFloat(recibo.subtotalDesglosado || recibo.contratosDesglosados[0]?.montoFinal || 0);
       iva = subtotal * 0.16;

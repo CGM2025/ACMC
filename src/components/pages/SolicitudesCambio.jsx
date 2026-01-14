@@ -1,20 +1,23 @@
 // src/components/pages/SolicitudesCambio.jsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-  Send, 
-  CheckCircle2, 
-  XCircle, 
-  AlertCircle, 
-  CalendarClock, 
+import {
+  Send,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  CalendarClock,
   ArrowRightLeft,
   Clock,
   User,
+  UserPlus,
   MessageSquare,
   Filter,
   RefreshCw,
   Calendar,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Ban,
+  X
 } from 'lucide-react';
 import { 
   obtenerSolicitudes, 
@@ -26,10 +29,12 @@ import {
  * Página de Gestión de Solicitudes de Cambio
  * Para que el admin apruebe o rechace solicitudes de terapeutas
  */
-const SolicitudesCambio = ({ 
+const SolicitudesCambio = ({
   currentUser,
   terapeutas = [],
+  clientes = [],
   onActualizarCita,
+  onCrearCita,
   configuracion
 }) => {
   const [solicitudes, setSolicitudes] = useState([]);
@@ -39,6 +44,9 @@ const SolicitudesCambio = ({
   const [procesando, setProcesando] = useState(null);
   const [mostrarModalRechazo, setMostrarModalRechazo] = useState(null);
   const [motivoRechazo, setMotivoRechazo] = useState('');
+  // Para solicitudes tipo "cliente_otro"
+  const [mostrarModalClienteOtro, setMostrarModalClienteOtro] = useState(null);
+  const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState('');
   console.log('🎯 SolicitudesCambio renderizado, currentUser:', currentUser);
 
   // Cargar solicitudes
@@ -132,6 +140,13 @@ const SolicitudesCambio = ({
 
   // APROBAR solicitud y aplicar cambios
   const handleAprobar = async (solicitud) => {
+    // Si es cliente_otro, abrir modal para seleccionar cliente
+    if (solicitud.tipo === 'cliente_otro') {
+      setMostrarModalClienteOtro(solicitud);
+      setClienteSeleccionadoId('');
+      return;
+    }
+
     if (!window.confirm('¿Aprobar esta solicitud y aplicar los cambios automáticamente?')) {
       return;
     }
@@ -152,7 +167,7 @@ const SolicitudesCambio = ({
       } else if (solicitud.tipo === 'transferencia') {
         // Transferencia a otro terapeuta
         const nuevoTerapeuta = getTerapeutaDestino(solicitud.datosPropuestos.terapeutaId);
-        
+
         if (!nuevoTerapeuta) {
           throw new Error('Terapeuta destino no encontrado');
         }
@@ -169,17 +184,25 @@ const SolicitudesCambio = ({
           terapeutaId: nuevoTerapeuta.id,
           costoTerapeutaTotal: nuevoCostoTerapeuta
         };
+      } else if (solicitud.tipo === 'cancelacion') {
+        // Cancelación de cita
+        datosActualizacion = {
+          estado: 'cancelada',
+          motivoCancelacion: solicitud.motivo
+        };
       }
 
       // Aplicar cambios a la cita
-      await onActualizarCita(solicitud.citaId, datosActualizacion);
+      if (solicitud.citaId) {
+        await onActualizarCita(solicitud.citaId, datosActualizacion);
+      }
 
       // Marcar solicitud como aprobada
       await aprobarSolicitud(
-        solicitud.id, 
-        { 
+        solicitud.id,
+        {
           adminId: currentUser?.id || currentUser?.uid,
-          adminNombre: currentUser?.nombre || currentUser?.email 
+          adminNombre: currentUser?.nombre || currentUser?.email
         },
         'Solicitud aprobada y cambios aplicados'
       );
@@ -192,6 +215,80 @@ const SolicitudesCambio = ({
     } catch (error) {
       console.error('Error al aprobar:', error);
       alert('❌ Error al aprobar la solicitud: ' + error.message);
+    } finally {
+      setProcesando(null);
+    }
+  };
+
+  // APROBAR solicitud de "cliente_otro" - crear cita con cliente seleccionado
+  const handleAprobarClienteOtro = async () => {
+    if (!mostrarModalClienteOtro || !clienteSeleccionadoId) {
+      alert('Por favor selecciona un cliente');
+      return;
+    }
+
+    const solicitud = mostrarModalClienteOtro;
+    const clienteSeleccionado = clientes.find(c => c.id === clienteSeleccionadoId);
+
+    if (!clienteSeleccionado) {
+      alert('Cliente no encontrado');
+      return;
+    }
+
+    setProcesando(solicitud.id);
+
+    try {
+      const terapeuta = terapeutas.find(t => t.id === solicitud.terapeutaId);
+      const citaPropuesta = solicitud.citaPropuesta;
+
+      // Calcular costos
+      const precioCliente = clienteSeleccionado.preciosPersonalizados?.[citaPropuesta.tipoTerapia];
+      const costoPorHora = precioCliente || 450;
+      const costoTotal = costoPorHora * citaPropuesta.duracionHoras;
+
+      const tarifaTerapeuta = terapeuta?.tarifaPorHora || 200;
+      const costoTerapeutaTotal = tarifaTerapeuta * citaPropuesta.duracionHoras;
+
+      // Crear la cita con el cliente correcto
+      const citaData = {
+        fecha: citaPropuesta.fecha,
+        horaInicio: citaPropuesta.horaInicio,
+        horaFin: citaPropuesta.horaFin,
+        terapeuta: solicitud.terapeutaNombre,
+        terapeutaId: solicitud.terapeutaId,
+        cliente: clienteSeleccionado.nombre,
+        clienteId: clienteSeleccionado.id,
+        tipoTerapia: citaPropuesta.tipoTerapia,
+        estado: 'pendiente',
+        notas: citaPropuesta.notas ? `${citaPropuesta.notas} | Originalmente registrado como: ${solicitud.clienteOtroNombre}` : `Originalmente registrado como: ${solicitud.clienteOtroNombre}`,
+        costoTotal: costoTotal,
+        costoTerapeutaTotal: costoTerapeutaTotal,
+        duracionHoras: citaPropuesta.duracionHoras
+      };
+
+      await onCrearCita(citaData);
+
+      // Marcar solicitud como aprobada
+      await aprobarSolicitud(
+        solicitud.id,
+        {
+          adminId: currentUser?.id || currentUser?.uid,
+          adminNombre: currentUser?.nombre || currentUser?.email
+        },
+        `Cliente asignado: ${clienteSeleccionado.nombre}`
+      );
+
+      // Recargar solicitudes
+      await cargarSolicitudes();
+
+      setMostrarModalClienteOtro(null);
+      setClienteSeleccionadoId('');
+
+      alert(`✅ Cita creada correctamente para ${clienteSeleccionado.nombre}`);
+
+    } catch (error) {
+      console.error('Error al aprobar:', error);
+      alert('❌ Error al crear la cita: ' + error.message);
     } finally {
       setProcesando(null);
     }
@@ -349,15 +446,31 @@ const SolicitudesCambio = ({
                         <div className="p-2 bg-blue-100 rounded-lg">
                           <CalendarClock size={20} className="text-blue-600" />
                         </div>
-                      ) : (
+                      ) : solicitud.tipo === 'transferencia' ? (
                         <div className="p-2 bg-purple-100 rounded-lg">
                           <ArrowRightLeft size={20} className="text-purple-600" />
                         </div>
+                      ) : solicitud.tipo === 'cancelacion' ? (
+                        <div className="p-2 bg-red-100 rounded-lg">
+                          <Ban size={20} className="text-red-600" />
+                        </div>
+                      ) : solicitud.tipo === 'cliente_otro' ? (
+                        <div className="p-2 bg-amber-100 rounded-lg">
+                          <UserPlus size={20} className="text-amber-600" />
+                        </div>
+                      ) : (
+                        <div className="p-2 bg-gray-100 rounded-lg">
+                          <AlertCircle size={20} className="text-gray-600" />
+                        </div>
                       )}
-                      
+
                       <div>
                         <h3 className="font-semibold text-gray-800">
-                          {solicitud.tipo === 'cambio_horario' ? 'Cambio de Horario' : 'Transferencia'}
+                          {solicitud.tipo === 'cambio_horario' ? 'Cambio de Horario' :
+                           solicitud.tipo === 'transferencia' ? 'Transferencia' :
+                           solicitud.tipo === 'cancelacion' ? 'Solicitud de Cancelación' :
+                           solicitud.tipo === 'cliente_otro' ? 'Cliente No Asignado' :
+                           'Solicitud'}
                         </h3>
                         <p className="text-sm text-gray-500">
                           Solicitado por <span className="font-medium">{solicitud.terapeutaNombre}</span>
@@ -369,11 +482,15 @@ const SolicitudesCambio = ({
                     <div className="flex flex-wrap gap-4 text-sm text-gray-600">
                       <span className="flex items-center gap-1">
                         <User size={14} />
-                        {solicitud.clienteNombre}
+                        {solicitud.tipo === 'cliente_otro'
+                          ? `"${solicitud.clienteOtroNombre}"`
+                          : solicitud.clienteNombre}
                       </span>
                       <span className="flex items-center gap-1">
                         <Calendar size={14} />
-                        {solicitud.citaActual?.fecha}
+                        {solicitud.tipo === 'cliente_otro'
+                          ? solicitud.citaPropuesta?.fecha
+                          : solicitud.citaActual?.fecha}
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock size={14} />
@@ -403,39 +520,89 @@ const SolicitudesCambio = ({
               {/* Contenido expandido */}
               {solicitudExpandida === solicitud.id && (
                 <div className="px-4 pb-4 border-t bg-gray-50">
-                  <div className="grid md:grid-cols-2 gap-4 py-4">
-                    {/* Datos actuales */}
-                    <div className="bg-white rounded-lg p-4 border">
-                      <h4 className="text-sm font-medium text-gray-500 mb-2">Cita Actual</h4>
-                      <div className="space-y-1 text-sm">
-                        <p><strong>Fecha:</strong> {solicitud.citaActual?.fecha}</p>
-                        <p><strong>Horario:</strong> {solicitud.citaActual?.horaInicio} - {solicitud.citaActual?.horaFin}</p>
-                        <p><strong>Terapeuta:</strong> {solicitud.citaActual?.terapeuta}</p>
-                        <p><strong>Tipo:</strong> {solicitud.citaActual?.tipoTerapia}</p>
-                      </div>
-                    </div>
-
-                    {/* Datos propuestos */}
-                    <div className={`rounded-lg p-4 border ${
-                      solicitud.tipo === 'cambio_horario' ? 'bg-blue-50 border-blue-200' : 'bg-purple-50 border-purple-200'
-                    }`}>
-                      <h4 className="text-sm font-medium text-gray-500 mb-2">
-                        {solicitud.tipo === 'cambio_horario' ? 'Nuevo Horario Propuesto' : 'Transferir a'}
-                      </h4>
-                      <div className="space-y-1 text-sm">
-                        {solicitud.tipo === 'cambio_horario' ? (
-                          <>
-                            <p><strong>Nueva Fecha:</strong> {solicitud.datosPropuestos?.fecha}</p>
-                            <p><strong>Nuevo Horario:</strong> {solicitud.datosPropuestos?.horaInicio} - {solicitud.datosPropuestos?.horaFin}</p>
-                          </>
-                        ) : (
-                          <p className="text-lg font-semibold text-purple-700">
-                            {solicitud.datosPropuestos?.terapeutaNombre}
-                          </p>
+                  {/* Contenido específico por tipo de solicitud */}
+                  {solicitud.tipo === 'cliente_otro' ? (
+                    /* Solicitud de cliente no asignado */
+                    <div className="py-4">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                        <h4 className="text-sm font-medium text-amber-800 mb-3 flex items-center gap-2">
+                          <UserPlus size={16} />
+                          Cita propuesta para cliente no encontrado
+                        </h4>
+                        <div className="grid md:grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p><strong>Cliente escrito:</strong> "{solicitud.clienteOtroNombre}"</p>
+                            <p><strong>Terapeuta:</strong> {solicitud.terapeutaNombre}</p>
+                            <p><strong>Tipo terapia:</strong> {solicitud.citaPropuesta?.tipoTerapia}</p>
+                          </div>
+                          <div>
+                            <p><strong>Fecha:</strong> {solicitud.citaPropuesta?.fecha}</p>
+                            <p><strong>Horario:</strong> {solicitud.citaPropuesta?.horaInicio} - {solicitud.citaPropuesta?.horaFin}</p>
+                            <p><strong>Duración:</strong> {solicitud.citaPropuesta?.duracionHoras} hrs</p>
+                          </div>
+                        </div>
+                        {solicitud.citaPropuesta?.notas && (
+                          <p className="mt-2 text-sm"><strong>Notas:</strong> {solicitud.citaPropuesta.notas}</p>
                         )}
                       </div>
                     </div>
-                  </div>
+                  ) : solicitud.tipo === 'cancelacion' ? (
+                    /* Solicitud de cancelación */
+                    <div className="py-4">
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-red-800 mb-3 flex items-center gap-2">
+                          <Ban size={16} />
+                          Solicitud de cancelación de cita
+                        </h4>
+                        <div className="grid md:grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p><strong>Cliente:</strong> {solicitud.clienteNombre}</p>
+                            <p><strong>Terapeuta:</strong> {solicitud.terapeutaNombre}</p>
+                            <p><strong>Tipo:</strong> {solicitud.citaActual?.tipoTerapia}</p>
+                          </div>
+                          <div>
+                            <p><strong>Fecha:</strong> {solicitud.citaActual?.fecha}</p>
+                            <p><strong>Horario:</strong> {solicitud.citaActual?.horaInicio} - {solicitud.citaActual?.horaFin}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Cambio de horario o Transferencia */
+                    <div className="grid md:grid-cols-2 gap-4 py-4">
+                      {/* Datos actuales */}
+                      <div className="bg-white rounded-lg p-4 border">
+                        <h4 className="text-sm font-medium text-gray-500 mb-2">Cita Actual</h4>
+                        <div className="space-y-1 text-sm">
+                          <p><strong>Fecha:</strong> {solicitud.citaActual?.fecha}</p>
+                          <p><strong>Horario:</strong> {solicitud.citaActual?.horaInicio} - {solicitud.citaActual?.horaFin}</p>
+                          <p><strong>Terapeuta:</strong> {solicitud.citaActual?.terapeuta}</p>
+                          <p><strong>Tipo:</strong> {solicitud.citaActual?.tipoTerapia}</p>
+                        </div>
+                      </div>
+
+                      {/* Datos propuestos */}
+                      <div className={`rounded-lg p-4 border ${
+                        solicitud.tipo === 'cambio_horario' ? 'bg-blue-50 border-blue-200' : 'bg-purple-50 border-purple-200'
+                      }`}>
+                        <h4 className="text-sm font-medium text-gray-500 mb-2">
+                          {solicitud.tipo === 'cambio_horario' ? 'Nuevo Horario Propuesto' : 'Transferir a'}
+                        </h4>
+                        <div className="space-y-1 text-sm">
+                          {solicitud.tipo === 'cambio_horario' ? (
+                            <>
+                              <p><strong>Nueva Fecha:</strong> {solicitud.datosPropuestos?.fecha}</p>
+                              <p><strong>Nuevo Horario:</strong> {solicitud.datosPropuestos?.horaInicio} - {solicitud.datosPropuestos?.horaFin}</p>
+                            </>
+                          ) : (
+                            <p className="text-lg font-semibold text-purple-700">
+                              {solicitud.datosPropuestos?.terapeutaNombre}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Motivo */}
                   <div className="bg-white rounded-lg p-4 border mb-4">
@@ -495,6 +662,77 @@ const SolicitudesCambio = ({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal de Asignación de Cliente (para solicitudes cliente_otro) */}
+      {mostrarModalClienteOtro && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <UserPlus className="text-amber-500" size={24} />
+                Asignar Cliente Correcto
+              </h2>
+            </div>
+
+            <div className="p-6">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-amber-800">
+                  <strong>La terapeuta escribió:</strong><br />
+                  "{mostrarModalClienteOtro.clienteOtroNombre}"
+                </p>
+                <p className="text-xs text-amber-600 mt-2">
+                  Fecha: {mostrarModalClienteOtro.citaPropuesta?.fecha} |
+                  Horario: {mostrarModalClienteOtro.citaPropuesta?.horaInicio} - {mostrarModalClienteOtro.citaPropuesta?.horaFin}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selecciona el cliente correcto *
+                </label>
+                <select
+                  value={clienteSeleccionadoId}
+                  onChange={(e) => setClienteSeleccionadoId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                >
+                  <option value="">-- Seleccionar cliente --</option>
+                  {clientes
+                    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                    .map(cliente => (
+                      <option key={cliente.id} value={cliente.id}>
+                        {cliente.nombre}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Se creará la cita asignada al cliente seleccionado
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-6 border-t bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => {
+                  setMostrarModalClienteOtro(null);
+                  setClienteSeleccionadoId('');
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAprobarClienteOtro}
+                disabled={procesando || !clienteSeleccionadoId}
+                className={`flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 ${
+                  procesando || !clienteSeleccionadoId ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {procesando ? 'Creando cita...' : 'Aprobar y Crear Cita'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

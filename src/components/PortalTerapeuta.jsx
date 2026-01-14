@@ -40,6 +40,7 @@ const PortalTerapeuta = ({
     horaInicio: '09:00',
     horaFin: '11:00',
     clienteId: '',
+    clienteOtroNombre: '', // Para cuando seleccionan "Otro"
     tipoTerapia: 'Sesión de ABA estándar',
     notas: ''
   });
@@ -242,6 +243,65 @@ const PortalTerapeuta = ({
       return;
     }
 
+    // Si es "Otro", validar que haya nombre y crear solicitud
+    if (nuevaCita.clienteId === '__otro__') {
+      if (!nuevaCita.clienteOtroNombre.trim()) {
+        alert('Por favor escribe el nombre del cliente');
+        return;
+      }
+
+      const [h1, m1] = nuevaCita.horaInicio.split(':').map(Number);
+      const [h2, m2] = nuevaCita.horaFin.split(':').map(Number);
+      const duracionHoras = ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60;
+
+      if (duracionHoras <= 0) {
+        alert('La hora de fin debe ser posterior a la hora de inicio');
+        return;
+      }
+
+      // Crear solicitud de tipo "cliente_otro"
+      try {
+        await crearSolicitudCambio({
+          tipo: 'cliente_otro',
+          terapeutaId: terapeuta.id,
+          terapeutaNombre: terapeuta.nombre,
+          // Datos de la cita propuesta
+          citaPropuesta: {
+            fecha: nuevaCita.fecha,
+            horaInicio: nuevaCita.horaInicio,
+            horaFin: nuevaCita.horaFin,
+            tipoTerapia: nuevaCita.tipoTerapia,
+            duracionHoras: duracionHoras,
+            notas: nuevaCita.notas
+          },
+          clienteOtroNombre: nuevaCita.clienteOtroNombre.trim(),
+          motivo: `Cliente no está en mi lista: ${nuevaCita.clienteOtroNombre.trim()}`,
+          estado: 'pendiente',
+          organizationId: currentUser?.organizationId
+        });
+
+        alert('✅ Solicitud enviada. El administrador asignará el cliente correcto y creará la cita.');
+        setMostrarFormularioCita(false);
+        setNuevaCita({
+          fecha: '',
+          horaInicio: '09:00',
+          horaFin: '11:00',
+          clienteId: '',
+          clienteOtroNombre: '',
+          tipoTerapia: 'Sesión de ABA estándar',
+          notas: ''
+        });
+        // Recargar solicitudes
+        const solicitudes = await obtenerSolicitudesTerapeuta(terapeuta.id);
+        setMisSolicitudes(solicitudes);
+      } catch (error) {
+        console.error('Error al crear solicitud:', error);
+        alert('❌ Error al enviar la solicitud: ' + error.message);
+      }
+      return;
+    }
+
+    // Flujo normal: cliente seleccionado del sistema
     const clienteSeleccionado = clientes.find(c => c.id === nuevaCita.clienteId);
     if (!clienteSeleccionado) {
       alert('Cliente no encontrado');
@@ -289,6 +349,7 @@ const PortalTerapeuta = ({
         horaInicio: '09:00',
         horaFin: '11:00',
         clienteId: '',
+        clienteOtroNombre: '',
         tipoTerapia: 'Sesión de ABA estándar',
         notas: ''
       });
@@ -296,7 +357,7 @@ const PortalTerapeuta = ({
       console.error('Error al crear cita:', error);
       alert('❌ Error al crear la cita: ' + error.message);
     }
-  }, [nuevaCita, clientes, terapeuta, onCrearCita]);
+  }, [nuevaCita, clientes, terapeuta, onCrearCita, currentUser, obtenerSolicitudesTerapeuta]);
 
   // ========================================
   // CAMBIAR ESTADO DE CITA
@@ -1095,16 +1156,36 @@ const PortalTerapeuta = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-                <select value={nuevaCita.clienteId} onChange={(e) => setNuevaCita({ ...nuevaCita, clienteId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <select
+                  value={nuevaCita.clienteId}
+                  onChange={(e) => setNuevaCita({ ...nuevaCita, clienteId: e.target.value, clienteOtroNombre: '' })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                >
                   <option value="">Seleccionar cliente...</option>
                   {clientesFiltrados
                     .sort((a, b) => a.nombre.localeCompare(b.nombre))
                     .map(cliente => <option key={cliente.id} value={cliente.id}>{cliente.nombre}</option>)}
+                  <option value="__otro__">── Otro (no está en la lista) ──</option>
                 </select>
-                {clientesFiltrados.length < clientes.length && (
+                {clientesFiltrados.length < clientes.length && nuevaCita.clienteId !== '__otro__' && (
                   <p className="text-xs text-blue-600 mt-1">
                     Mostrando {clientesFiltrados.length} cliente(s) asignado(s)
                   </p>
+                )}
+                {/* Campo para nombre del cliente cuando seleccionan "Otro" */}
+                {nuevaCita.clienteId === '__otro__' && (
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      value={nuevaCita.clienteOtroNombre}
+                      onChange={(e) => setNuevaCita({ ...nuevaCita, clienteOtroNombre: e.target.value })}
+                      placeholder="Escribe el nombre del cliente..."
+                      className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50 focus:ring-2 focus:ring-amber-500"
+                    />
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠️ Esta cita se enviará como solicitud para que el admin asigne el cliente correcto
+                    </p>
+                  </div>
                 )}
               </div>
               <div>

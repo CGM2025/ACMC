@@ -313,6 +313,31 @@ const RecibosGemini = ({
   }, [contratosClienteActivos, cargosSombraCliente]);
 
   /**
+   * Calcula información de contratos mensuales fijos
+   * Para estos contratos, solo se muestra la línea del contrato sin detallar citas
+   */
+  const contratosMensualesFijosInfo = useMemo(() => {
+    if (!clienteSeleccionado || contratosClienteActivos.length === 0) return [];
+
+    return contratosClienteActivos
+      .filter(c => c.tipoContrato === 'mensual_fijo')
+      .map(contrato => {
+        const montoMensual = contrato.cobroCliente?.montoMensual || 0;
+        const terapeutaNombres = contrato.terapeutas?.map(t => t.nombre || t).join(', ') || '';
+
+        return {
+          contratoId: contrato.id,
+          contrato,
+          servicio: contrato.servicio,
+          descripcionRecibo: contrato.descripcionRecibo || contrato.servicio,
+          terapeutas: terapeutaNombres,
+          montoMensual,
+          tipoContrato: 'mensual_fijo'
+        };
+      });
+  }, [clienteSeleccionado, contratosClienteActivos]);
+
+  /**
    * Calcula información de contratos desglosados con descuentos por cancelaciones
    * Solo aplica para contratos tipo 'desglosado' con montoMensualBase
    */
@@ -807,16 +832,50 @@ const RecibosGemini = ({
         });
       }
 
-      // Totales generales (citas + sombra + desglosados)
-      // NOTA: Si hay contrato desglosado, las citas individuales ya están incluidas en el cálculo del contrato
-      // Por lo tanto, usamos el monto del contrato desglosado EN LUGAR de las citas individuales
+      // Calcular totales de contratos mensuales fijos
+      let subtotalMensualFijo = 0;
+      let ivaMensualFijo = 0;
+      let contratosMensualesFijosParaRecibo = [];
+
+      if (contratosMensualesFijosInfo.length > 0) {
+        contratosMensualesFijosInfo.forEach(info => {
+          subtotalMensualFijo += info.montoMensual;
+          ivaMensualFijo += info.montoMensual * 0.16;
+          contratosMensualesFijosParaRecibo.push({
+            contratoId: info.contratoId,
+            servicio: info.servicio,
+            descripcionRecibo: info.descripcionRecibo,
+            terapeutas: info.terapeutas,
+            montoMensual: info.montoMensual,
+            tipoContrato: 'mensual_fijo'
+          });
+        });
+      }
+
+      // Totales generales (citas + sombra + desglosados + mensuales fijos)
+      // NOTA: Si hay contrato desglosado o mensual_fijo, las citas individuales ya están incluidas
+      // Por lo tanto, usamos el monto del contrato EN LUGAR de las citas individuales
       const tieneContratoDesglosado = contratosDesglosadosParaRecibo.length > 0;
-      const totalPrecio = tieneContratoDesglosado
-        ? subtotalDesglosado + subtotalSombra  // Usar monto del contrato (ya incluye las citas)
-        : subtotalCitas + subtotalSombra;       // Usar citas individuales
-      const totalIva = tieneContratoDesglosado
-        ? ivaDesglosado + ivaSombra
-        : ivaCitas + ivaSombra;
+      const tieneContratoMensualFijo = contratosMensualesFijosParaRecibo.length > 0;
+
+      // Calcular total precio según tipo de contrato
+      let totalPrecio;
+      let totalIva;
+
+      if (tieneContratoMensualFijo) {
+        // Mensual fijo: solo el monto del contrato (sin citas individuales, sin sombra)
+        totalPrecio = subtotalMensualFijo;
+        totalIva = ivaMensualFijo;
+      } else if (tieneContratoDesglosado) {
+        // Desglosado: monto del contrato + sombra
+        totalPrecio = subtotalDesglosado + subtotalSombra;
+        totalIva = ivaDesglosado + ivaSombra;
+      } else {
+        // Sin contrato especial: citas individuales + sombra
+        totalPrecio = subtotalCitas + subtotalSombra;
+        totalIva = ivaCitas + ivaSombra;
+      }
+
       const totalGeneral = totalPrecio + totalIva;
 
       // Preparar datos del recibo
@@ -855,6 +914,12 @@ const RecibosGemini = ({
         ivaDesglosado,
         tieneContratoDesglosado,
 
+        // Contratos mensuales fijos (sin desglose de citas)
+        contratosMensualesFijos: contratosMensualesFijosParaRecibo,
+        subtotalMensualFijo,
+        ivaMensualFijo,
+        tieneContratoMensualFijo,
+
         // Totales generales
         totalPrecio,
         totalIva,
@@ -863,9 +928,9 @@ const RecibosGemini = ({
         // Info adicional
         esReciboPartial: citasSeleccionadas.size > 0,
         tieneCargosSombra: cargosSombraCliente.length > 0,
-        
-        // Citas incluidas
-        citas: citasParaRecibo.map(c => ({
+
+        // Citas incluidas (vacío si es mensual_fijo)
+        citas: tieneContratoMensualFijo ? [] : citasParaRecibo.map(c => ({
           id: c.id,
           fecha: c.fecha,
           horaInicio: c.horaInicio,
@@ -892,10 +957,15 @@ const RecibosGemini = ({
       
       setMostrarModalRecibo(false);
       
-      // Mensaje de éxito con info de sombra si aplica
-      let mensaje = `✅ Recibo ${reciboId} generado con ${totalCitasCount} citas`;
-      if (cargosSombraCliente.length > 0) {
-        mensaje += ` y ${cargosSombraCliente.length} cargo(s) de sombra`;
+      // Mensaje de éxito
+      let mensaje = `✅ Recibo ${reciboId} generado`;
+      if (tieneContratoMensualFijo) {
+        mensaje += ` (Contrato Mensual Fijo)`;
+      } else {
+        mensaje += ` con ${totalCitasCount} citas`;
+        if (cargosSombraCliente.length > 0) {
+          mensaje += ` y ${cargosSombraCliente.length} cargo(s) de sombra`;
+        }
       }
       alert(mensaje);
       

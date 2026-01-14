@@ -5,17 +5,19 @@
 //
 
 import { db } from '../firebase';
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  updateDoc,
+  deleteDoc,
   doc,
   query,
   where,
   serverTimestamp
 } from 'firebase/firestore';
+import { registrarCambio, TIPOS_ENTIDAD, TIPOS_ACCION } from './historialCambios';
 
 const COLLECTION_NAME = 'contratosMensuales';
 
@@ -104,8 +106,11 @@ export const buscarContrato = async (clienteNombre, terapeutaNombre, organizatio
 
 /**
  * Crea un nuevo contrato mensual
+ * @param {Object} contratoData - Datos del contrato
+ * @param {string} organizationId - ID de la organización
+ * @param {Object} usuario - Usuario que realiza la acción (opcional, para historial)
  */
-export const crearContrato = async (contratoData, organizationId) => {
+export const crearContrato = async (contratoData, organizationId, usuario = null) => {
   try {
     if (!organizationId) {
       throw new Error('organizationId es requerido');
@@ -118,7 +123,19 @@ export const crearContrato = async (contratoData, organizationId) => {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
-    
+
+    // Registrar en historial
+    await registrarCambio({
+      tipoEntidad: TIPOS_ENTIDAD.CONTRATO,
+      entidadId: docRef.id,
+      accion: TIPOS_ACCION.CREAR,
+      datosAnteriores: null,
+      datosNuevos: { ...contratoData, id: docRef.id },
+      usuario,
+      organizationId,
+      descripcion: `Nuevo contrato: ${contratoData.clienteNombre} - ${contratoData.servicio || 'Sin servicio'}`
+    });
+
     console.log('✅ Contrato creado:', docRef.id);
     return docRef.id;
   } catch (error) {
@@ -129,16 +146,38 @@ export const crearContrato = async (contratoData, organizationId) => {
 
 /**
  * Actualiza un contrato existente
+ * @param {string} contratoId - ID del contrato
+ * @param {Object} contratoData - Nuevos datos
+ * @param {Object} usuario - Usuario que realiza la acción (opcional, para historial)
  */
-export const actualizarContrato = async (contratoId, contratoData) => {
+export const actualizarContrato = async (contratoId, contratoData, usuario = null) => {
   try {
     const { organizationId, createdAt, ...datosActualizar } = contratoData;
-    
-    await updateDoc(doc(db, COLLECTION_NAME, contratoId), {
+
+    // Obtener datos anteriores para el historial
+    const docRef = doc(db, COLLECTION_NAME, contratoId);
+    const docSnap = await getDoc(docRef);
+    const datosAnteriores = docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+
+    await updateDoc(docRef, {
       ...datosActualizar,
       updatedAt: serverTimestamp()
     });
-    
+
+    // Registrar en historial si hay datos anteriores
+    if (datosAnteriores) {
+      await registrarCambio({
+        tipoEntidad: TIPOS_ENTIDAD.CONTRATO,
+        entidadId: contratoId,
+        accion: TIPOS_ACCION.ACTUALIZAR,
+        datosAnteriores,
+        datosNuevos: { ...datosAnteriores, ...datosActualizar },
+        usuario,
+        organizationId: datosAnteriores.organizationId,
+        descripcion: `Contrato actualizado: ${datosAnteriores.clienteNombre || 'N/A'}`
+      });
+    }
+
     console.log('✅ Contrato actualizado:', contratoId);
   } catch (error) {
     console.error('Error al actualizar contrato:', error);
@@ -148,14 +187,35 @@ export const actualizarContrato = async (contratoId, contratoData) => {
 
 /**
  * Elimina (desactiva) un contrato
+ * @param {string} contratoId - ID del contrato
+ * @param {Object} usuario - Usuario que realiza la acción (opcional, para historial)
  */
-export const eliminarContrato = async (contratoId) => {
+export const eliminarContrato = async (contratoId, usuario = null) => {
   try {
-    await updateDoc(doc(db, COLLECTION_NAME, contratoId), {
+    // Obtener datos anteriores para el historial
+    const docRef = doc(db, COLLECTION_NAME, contratoId);
+    const docSnap = await getDoc(docRef);
+    const datosAnteriores = docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+
+    await updateDoc(docRef, {
       activo: false,
       updatedAt: serverTimestamp()
     });
-    
+
+    // Registrar en historial
+    if (datosAnteriores) {
+      await registrarCambio({
+        tipoEntidad: TIPOS_ENTIDAD.CONTRATO,
+        entidadId: contratoId,
+        accion: TIPOS_ACCION.DESACTIVAR,
+        datosAnteriores,
+        datosNuevos: { ...datosAnteriores, activo: false },
+        usuario,
+        organizationId: datosAnteriores.organizationId,
+        descripcion: `Contrato desactivado: ${datosAnteriores.clienteNombre || 'N/A'}`
+      });
+    }
+
     console.log('✅ Contrato desactivado:', contratoId);
   } catch (error) {
     console.error('Error al eliminar contrato:', error);

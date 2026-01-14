@@ -409,10 +409,11 @@ export const useData = (currentUser, isLoggedIn) => {
 
   const guardarAsignacion = async (datos, editingId = null) => {
     try {
+      // Pasar currentUser para registrar en historial
       if (editingId) {
-        await actualizarAsignacionAPI(editingId, datos);
+        await actualizarAsignacionAPI(editingId, datos, currentUser);
       } else {
-        await crearAsignacionAPI(datos, organizationId);
+        await crearAsignacionAPI(datos, organizationId, currentUser);
       }
       return { success: true };
     } catch (error) {
@@ -423,7 +424,8 @@ export const useData = (currentUser, isLoggedIn) => {
 
   const eliminarAsignacionFn = async (asignacionId) => {
     try {
-      await eliminarAsignacionAPI(asignacionId);
+      // Pasar currentUser para registrar en historial
+      await eliminarAsignacionAPI(asignacionId, currentUser);
       return { success: true };
     } catch (error) {
       console.error('Error al eliminar asignación:', error);
@@ -433,10 +435,11 @@ export const useData = (currentUser, isLoggedIn) => {
 
   const guardarContrato = async (datos, editingId = null) => {
     try {
+      // Pasar currentUser para registrar en historial
       if (editingId) {
-        await actualizarContratoAPI(editingId, datos);
+        await actualizarContratoAPI(editingId, datos, currentUser);
       } else {
-        await crearContratoAPI(datos, organizationId);
+        await crearContratoAPI(datos, organizationId, currentUser);
       }
       return { success: true };
     } catch (error) {
@@ -447,7 +450,8 @@ export const useData = (currentUser, isLoggedIn) => {
 
   const eliminarContratoFn = async (contratoId) => {
     try {
-      await eliminarContratoAPI(contratoId);
+      // Pasar currentUser para registrar en historial
+      await eliminarContratoAPI(contratoId, currentUser);
       return { success: true };
     } catch (error) {
       console.error('Error al eliminar contrato:', error);

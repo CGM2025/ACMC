@@ -73,6 +73,7 @@ import Expedientes from './components/Expedientes';
 
 // En los imports de componentes
 import HorariosRecurrentes from './components/configuracion/HorariosRecurrentes';
+import HistorialCambios from './components/configuracion/HistorialCambios';
 
 // En los imports de API
 import {
@@ -1661,6 +1662,16 @@ const SistemaGestion = () => {
                               >
                                 Horarios Recurrentes
                               </button>
+                              <button
+                                onClick={() => setConfigTab('historial')}
+                                className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                                  configTab === 'historial'
+                                    ? 'border-indigo-600 text-indigo-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                                }`}
+                              >
+                                Historial
+                              </button>
                             </div>
 
                             {/* Contenido según sub-tab */}
@@ -1732,6 +1743,13 @@ const SistemaGestion = () => {
                                 onGenerarCitas={async (citas) => {
                                   await generarCitasDesdeHorarios(citas);
                                 }}
+                              />
+                            )}
+
+                            {configTab === 'historial' && (
+                              <HistorialCambios
+                                organizationId={currentUser?.organizationId}
+                                currentUser={currentUser}
                               />
                             )}
                           </div>
@@ -1924,7 +1942,13 @@ const SistemaGestion = () => {
                           <SolicitudesCambio
                             currentUser={currentUser}
                             terapeutas={terapeutas}
+                            clientes={clientes}
                             onActualizarCita={actualizarCitaDirecta}
+                            onCrearCita={async (citaData) => {
+                              const orgId = currentUser?.organizationId || 'org_acmc_001';
+                              await crearCita(citaData, orgId);
+                              await cargarCitas();
+                            }}
                           />
                         )}
                       </main>
@@ -2778,6 +2802,34 @@ const SistemaGestion = () => {
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                                     value={clienteForm.empresa}
                                     onChange={(e) => setClienteForm({ ...clienteForm, empresa: e.target.value })} />
+                                </div>
+
+                                {/* Toggle de Estado Activo/Inactivo */}
+                                <div className="border-t pt-4 mt-4">
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Estado del Cliente
+                                  </label>
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => setClienteForm({ ...clienteForm, activo: !clienteForm.activo })}
+                                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                        clienteForm.activo ? 'bg-green-500' : 'bg-gray-300'
+                                      }`}
+                                    >
+                                      <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                          clienteForm.activo ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                      />
+                                    </button>
+                                    <span className={`text-sm font-medium ${clienteForm.activo ? 'text-green-600' : 'text-gray-500'}`}>
+                                      {clienteForm.activo ? 'Activo' : 'Inactivo'}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    Los clientes inactivos no aparecerán en las listas de selección ni en las asignaciones activas
+                                  </p>
                                 </div>
                               </div>
                             )}

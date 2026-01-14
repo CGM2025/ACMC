@@ -5,13 +5,13 @@
 //
 
 import React, { useState, useMemo, useRef } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Edit2, 
-  Trash2, 
-  Save, 
-  X, 
+import {
+  Plus,
+  Search,
+  Edit2,
+  Trash2,
+  Save,
+  X,
   Upload,
   Download,
   Users,
@@ -22,7 +22,8 @@ import {
   Check,
   Filter,
   FileSpreadsheet,
-  Loader
+  Loader,
+  Calendar
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -57,6 +58,7 @@ const AsignacionesServicio = ({
   const [busqueda, setBusqueda] = useState('');
   const [filtroCliente, setFiltroCliente] = useState('');
   const [filtroTerapeuta, setFiltroTerapeuta] = useState('');
+  const [filtroEstadoCliente, setFiltroEstadoCliente] = useState('activos'); // 'activos', 'inactivos', 'todos'
   const [mostrarModal, setMostrarModal] = useState(false);
   const [mostrarModalImportar, setMostrarModalImportar] = useState(false);
   const [mostrarModalAplicar, setMostrarModalAplicar] = useState(false);
@@ -73,6 +75,17 @@ const AsignacionesServicio = ({
   const [resultadoAplicacion, setResultadoAplicacion] = useState(null);
   const fileInputRef = useRef(null);
   
+  // Días de la semana
+  const DIAS_SEMANA = [
+    { value: 0, label: 'Domingo' },
+    { value: 1, label: 'Lunes' },
+    { value: 2, label: 'Martes' },
+    { value: 3, label: 'Miércoles' },
+    { value: 4, label: 'Jueves' },
+    { value: 5, label: 'Viernes' },
+    { value: 6, label: 'Sábado' }
+  ];
+
   // Formulario
   const [formulario, setFormulario] = useState({
     clienteId: '',
@@ -88,6 +101,7 @@ const AsignacionesServicio = ({
     condicionTipo: 'siempre',
     horaInicio: '',
     horaFin: '',
+    diaSemana: '', // Nuevo campo para día de la semana
     ubicacion: '',
     notas: ''
   });
@@ -97,20 +111,56 @@ const AsignacionesServicio = ({
     return asignaciones.filter(a => a.activo !== false);
   }, [asignaciones]);
 
+  // Crear un mapa de clientes por nombre para verificar su estado activo
+  const clientesMapPorNombre = useMemo(() => {
+    const mapa = {};
+    clientes.forEach(c => {
+      if (c.nombre) {
+        mapa[c.nombre.toLowerCase().trim()] = c;
+      }
+    });
+    return mapa;
+  }, [clientes]);
+
   // Asignaciones filtradas
   const asignacionesFiltradas = useMemo(() => {
     return asignacionesActivas.filter(asig => {
-      const matchBusqueda = !busqueda || 
+      const matchBusqueda = !busqueda ||
         asig.clienteNombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
         asig.terapeutaNombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
         asig.servicioNombre?.toLowerCase().includes(busqueda.toLowerCase());
-      
+
       const matchCliente = !filtroCliente || asig.clienteNombre === filtroCliente;
       const matchTerapeuta = !filtroTerapeuta || asig.terapeutaNombre === filtroTerapeuta;
-      
-      return matchBusqueda && matchCliente && matchTerapeuta;
+
+      // Filtrar por estado del cliente (activo/inactivo)
+      let matchEstadoCliente = true;
+      if (filtroEstadoCliente !== 'todos') {
+        // "Todos los clientes" siempre se muestra
+        if (asig.clienteId === 'todos' || asig.clienteNombre === 'Todos los clientes') {
+          matchEstadoCliente = true;
+        } else {
+          // Buscar el cliente por nombre
+          const nombreNormalizado = (asig.clienteNombre || '').toLowerCase().trim();
+          const clienteEncontrado = clientesMapPorNombre[nombreNormalizado];
+
+          if (clienteEncontrado) {
+            const esActivo = clienteEncontrado.activo !== false;
+            if (filtroEstadoCliente === 'activos') {
+              matchEstadoCliente = esActivo;
+            } else if (filtroEstadoCliente === 'inactivos') {
+              matchEstadoCliente = !esActivo;
+            }
+          } else {
+            // Si no encontramos el cliente, asumir activo
+            matchEstadoCliente = filtroEstadoCliente === 'activos';
+          }
+        }
+      }
+
+      return matchBusqueda && matchCliente && matchTerapeuta && matchEstadoCliente;
     });
-  }, [asignacionesActivas, busqueda, filtroCliente, filtroTerapeuta]);
+  }, [asignacionesActivas, busqueda, filtroCliente, filtroTerapeuta, filtroEstadoCliente, clientesMapPorNombre]);
 
   // Agrupar por cliente para mejor visualización
   const asignacionesPorCliente = useMemo(() => {
@@ -157,6 +207,7 @@ const AsignacionesServicio = ({
       condicionTipo: 'siempre',
       horaInicio: '',
       horaFin: '',
+      diaSemana: '',
       ubicacion: '',
       notas: ''
     });
@@ -190,6 +241,7 @@ const AsignacionesServicio = ({
       condicionTipo: asig.condicion?.tipo || 'siempre',
       horaInicio: asig.condicion?.horaInicio || '',
       horaFin: asig.condicion?.horaFin || '',
+      diaSemana: asig.condicion?.diaSemana !== undefined ? asig.condicion.diaSemana.toString() : '',
       ubicacion: asig.condicion?.ubicacion || '',
       notas: asig.notas || ''
     });
@@ -322,6 +374,7 @@ const AsignacionesServicio = ({
           tipo: formulario.condicionTipo,
           horaInicio: formulario.horaInicio || null,
           horaFin: formulario.horaFin || null,
+          diaSemana: formulario.diaSemana !== '' ? parseInt(formulario.diaSemana) : null,
           ubicacion: formulario.ubicacion || null
         },
         notas: formulario.notas
@@ -513,6 +566,55 @@ const AsignacionesServicio = ({
       return false;
     };
 
+    // Comparar servicios de forma flexible
+    const serviciosCoinciden = (servicio1, servicio2) => {
+      const s1 = normalizar(servicio1);
+      const s2 = normalizar(servicio2);
+      if (!s1 || !s2) return false;
+
+      // Comparación exacta
+      if (s1 === s2) return true;
+
+      // Uno contiene al otro
+      if (s1.includes(s2) || s2.includes(s1)) return true;
+
+      return false;
+    };
+
+    // Obtener día de la semana de la cita (0 = Domingo, 1 = Lunes, etc.)
+    const obtenerDiaSemana = (fechaStr) => {
+      if (!fechaStr) return null;
+      const fecha = new Date(fechaStr + 'T12:00:00'); // Evitar problemas de zona horaria
+      return fecha.getDay();
+    };
+
+    const diaCita = obtenerDiaSemana(cita.fecha);
+    const servicioCita = cita.tipoTerapia || cita.servicio || cita.tipoServicio || '';
+
+    // Función para verificar si una asignación coincide con las condiciones de la cita
+    const coincideCondicion = (asig) => {
+      if (!asig.condicion?.tipo || asig.condicion.tipo === 'siempre') return true;
+
+      // Verificar por día de semana
+      if (asig.condicion.tipo === 'diaSemana' && asig.condicion.diaSemana !== null) {
+        return diaCita === asig.condicion.diaSemana;
+      }
+
+      // Verificar por horario
+      if (asig.condicion.tipo === 'horario' && asig.condicion.horaInicio && asig.condicion.horaFin) {
+        const horaInicioCita = cita.horaInicio || cita.hora;
+        if (!horaInicioCita) return false;
+
+        const horaNum = parseInt(horaInicioCita.split(':')[0]);
+        const inicioNum = parseInt(asig.condicion.horaInicio.split(':')[0]);
+        const finNum = parseInt(asig.condicion.horaFin.split(':')[0]);
+
+        return horaNum >= inicioNum && horaNum < finNum;
+      }
+
+      return false;
+    };
+
     // Buscar asignaciones específicas (cliente + terapeuta)
     const asignacionesEspecificas = asignacionesActivas.filter(asig => {
       if (asig.clienteId === 'todos') return false; // Ignorar las globales primero
@@ -523,27 +625,40 @@ const AsignacionesServicio = ({
 
     // Si encontramos asignaciones específicas, usarlas
     if (asignacionesEspecificas.length > 0) {
-      if (asignacionesEspecificas.length === 1) return asignacionesEspecificas[0];
-
-      // Si hay múltiples específicas, intentar filtrar por horario
-      const horaInicioCita = cita.horaInicio || cita.hora;
-      if (horaInicioCita) {
-        const horaNum = parseInt(horaInicioCita.split(':')[0]);
-
-        for (const asig of asignacionesEspecificas) {
-          if (asig.condicion?.tipo === 'horario' && asig.condicion.horaInicio && asig.condicion.horaFin) {
-            const inicioNum = parseInt(asig.condicion.horaInicio.split(':')[0]);
-            const finNum = parseInt(asig.condicion.horaFin.split(':')[0]);
-
-            if (horaNum >= inicioNum && horaNum < finNum) {
-              return asig;
-            }
-          }
-        }
+      // PRIORIDAD 1: Buscar asignación que coincida con el servicio de la cita
+      if (servicioCita) {
+        const asigPorServicio = asignacionesEspecificas.find(asig =>
+          serviciosCoinciden(asig.servicioNombre, servicioCita)
+        );
+        if (asigPorServicio) return asigPorServicio;
       }
 
-      return asignacionesEspecificas.find(a => !a.condicion?.tipo || a.condicion.tipo === 'siempre')
-        || asignacionesEspecificas[0];
+      // Si solo hay una asignación y no hay servicio en la cita, usarla
+      if (asignacionesEspecificas.length === 1 && !servicioCita) {
+        return asignacionesEspecificas[0];
+      }
+
+      // PRIORIDAD 2: Por día de semana (solo si no encontramos por servicio)
+      const asigPorDia = asignacionesEspecificas.find(asig =>
+        asig.condicion?.tipo === 'diaSemana' && coincideCondicion(asig)
+      );
+      if (asigPorDia) return asigPorDia;
+
+      // PRIORIDAD 3: Por horario
+      const asigPorHorario = asignacionesEspecificas.find(asig =>
+        asig.condicion?.tipo === 'horario' && coincideCondicion(asig)
+      );
+      if (asigPorHorario) return asigPorHorario;
+
+      // PRIORIDAD 4: Si no hay servicio en la cita, retornar la que tenga condición "siempre"
+      if (!servicioCita) {
+        return asignacionesEspecificas.find(a => !a.condicion?.tipo || a.condicion.tipo === 'siempre')
+          || asignacionesEspecificas[0];
+      }
+
+      // Si hay servicio en la cita pero no encontramos coincidencia, NO retornar nada
+      // para evitar sobreescribir el servicio existente
+      return null;
     }
 
     // Si no hay asignaciones específicas, buscar en las globales (Todos los clientes)
@@ -554,28 +669,39 @@ const AsignacionesServicio = ({
     });
 
     if (asignacionesGlobales.length === 0) return null;
-    if (asignacionesGlobales.length === 1) return asignacionesGlobales[0];
 
-    // Si hay múltiples globales, intentar filtrar por horario o servicio
-    const horaInicioCita = cita.horaInicio || cita.hora;
-    if (horaInicioCita) {
-      const horaNum = parseInt(horaInicioCita.split(':')[0]);
-
-      for (const asig of asignacionesGlobales) {
-        if (asig.condicion?.tipo === 'horario' && asig.condicion.horaInicio && asig.condicion.horaFin) {
-          const inicioNum = parseInt(asig.condicion.horaInicio.split(':')[0]);
-          const finNum = parseInt(asig.condicion.horaFin.split(':')[0]);
-
-          if (horaNum >= inicioNum && horaNum < finNum) {
-            return asig;
-          }
-        }
-      }
+    // PRIORIDAD 1: Buscar asignación que coincida con el servicio de la cita
+    if (servicioCita) {
+      const asigPorServicio = asignacionesGlobales.find(asig =>
+        serviciosCoinciden(asig.servicioNombre, servicioCita)
+      );
+      if (asigPorServicio) return asigPorServicio;
     }
 
-    // Retornar la primera que tenga condición "siempre" o la primera disponible
-    return asignacionesGlobales.find(a => !a.condicion?.tipo || a.condicion.tipo === 'siempre')
-      || asignacionesGlobales[0];
+    if (asignacionesGlobales.length === 1 && !servicioCita) {
+      return asignacionesGlobales[0];
+    }
+
+    // PRIORIDAD 2: Por día de semana
+    const asigPorDia = asignacionesGlobales.find(asig =>
+      asig.condicion?.tipo === 'diaSemana' && coincideCondicion(asig)
+    );
+    if (asigPorDia) return asigPorDia;
+
+    // PRIORIDAD 3: Por horario
+    const asigPorHorario = asignacionesGlobales.find(asig =>
+      asig.condicion?.tipo === 'horario' && coincideCondicion(asig)
+    );
+    if (asigPorHorario) return asigPorHorario;
+
+    // PRIORIDAD 4: Si no hay servicio en la cita, retornar la que tenga condición "siempre"
+    if (!servicioCita) {
+      return asignacionesGlobales.find(a => !a.condicion?.tipo || a.condicion.tipo === 'siempre')
+        || asignacionesGlobales[0];
+    }
+
+    // Si hay servicio en la cita pero no encontramos coincidencia, NO retornar nada
+    return null;
   };
 
   // Buscar citas del período seleccionado y compararlas con asignaciones
@@ -605,20 +731,32 @@ const AsignacionesServicio = ({
       
       if (asignacion) {
         // Verificar si hay diferencias
-        const servicioActual = cita.servicio || cita.tipoServicio || '';
+        const servicioActual = cita.tipoTerapia || cita.servicio || cita.tipoServicio || '';
         const precioActual = parseFloat(cita.precioHora || cita.precio || 0);
         const pagoActual = parseFloat(cita.costoTerapeuta || cita.pagoTerapeuta || 0);
 
-        const servicioCambia = servicioActual !== asignacion.servicioNombre;
+        // Comparar servicios de forma flexible (no solo igualdad estricta)
+        const serviciosIguales = (s1, s2) => {
+          const n1 = (s1 || '').toLowerCase().trim();
+          const n2 = (s2 || '').toLowerCase().trim();
+          if (!n1 || !n2) return !n1 && !n2; // Ambos vacíos = iguales
+          return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+        };
+
+        const servicioCambia = !serviciosIguales(servicioActual, asignacion.servicioNombre);
         const precioCambia = precioActual !== asignacion.precioCliente;
         const pagoCambia = pagoActual !== asignacion.pagoTerapeuta;
 
-        if (servicioCambia || precioCambia || pagoCambia) {
+        // Solo mostrar cambio de servicio si realmente es diferente y la cita no tiene servicio
+        // Si la cita YA tiene servicio, no proponer cambio de servicio (solo precios)
+        const mostrarCambioServicio = servicioCambia && !servicioActual;
+
+        if (mostrarCambioServicio || precioCambia || pagoCambia) {
           citasConCambios.push({
             cita,
             asignacion,
             cambios: {
-              servicio: servicioCambia ? { de: servicioActual, a: asignacion.servicioNombre } : null,
+              servicio: mostrarCambioServicio ? { de: servicioActual || 'Sin servicio', a: asignacion.servicioNombre } : null,
               precio: precioCambia ? { de: precioActual, a: asignacion.precioCliente } : null,
               pago: pagoCambia ? { de: pagoActual, a: asignacion.pagoTerapeuta } : null
             },
@@ -808,7 +946,7 @@ const AsignacionesServicio = ({
 
       {/* Filtros */}
       <div className="bg-white rounded-xl shadow-sm p-4">
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-wrap gap-4 items-center">
           {/* Búsqueda */}
           <div className="flex-1 min-w-[200px]">
             <div className="relative">
@@ -822,7 +960,41 @@ const AsignacionesServicio = ({
               />
             </div>
           </div>
-          
+
+          {/* Filtro por estado de cliente (activo/inactivo) */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setFiltroEstadoCliente('activos')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                filtroEstadoCliente === 'activos'
+                  ? 'bg-green-500 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Activos
+            </button>
+            <button
+              onClick={() => setFiltroEstadoCliente('inactivos')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                filtroEstadoCliente === 'inactivos'
+                  ? 'bg-gray-500 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Inactivos
+            </button>
+            <button
+              onClick={() => setFiltroEstadoCliente('todos')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                filtroEstadoCliente === 'todos'
+                  ? 'bg-blue-500 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Todos
+            </button>
+          </div>
+
           {/* Filtro por cliente */}
           <div className="w-48">
             <select
@@ -838,7 +1010,7 @@ const AsignacionesServicio = ({
               ))}
             </select>
           </div>
-          
+
           {/* Filtro por terapeuta */}
           <div className="w-48">
             <select
@@ -969,6 +1141,11 @@ const AsignacionesServicio = ({
                               <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs">
                                 <Clock size={12} />
                                 {asig.condicion.horaInicio}-{asig.condicion.horaFin}
+                              </span>
+                            ) : asig.condicion?.tipo === 'diaSemana' && asig.condicion?.diaSemana !== null ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
+                                <Calendar size={12} />
+                                {DIAS_SEMANA.find(d => d.value === asig.condicion.diaSemana)?.label || `Día ${asig.condicion.diaSemana}`}
                               </span>
                             ) : asig.condicion?.ubicacion ? (
                               <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
@@ -1274,14 +1451,14 @@ const AsignacionesServicio = ({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Condición de aplicación
                 </label>
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
                       name="condicion"
                       value="siempre"
                       checked={formulario.condicionTipo === 'siempre'}
-                      onChange={(e) => setFormulario(prev => ({ ...prev, condicionTipo: e.target.value }))}
+                      onChange={(e) => setFormulario(prev => ({ ...prev, condicionTipo: e.target.value, diaSemana: '', horaInicio: '', horaFin: '' }))}
                       className="text-blue-600"
                     />
                     <span className="text-sm">Siempre</span>
@@ -1292,13 +1469,25 @@ const AsignacionesServicio = ({
                       name="condicion"
                       value="horario"
                       checked={formulario.condicionTipo === 'horario'}
-                      onChange={(e) => setFormulario(prev => ({ ...prev, condicionTipo: e.target.value }))}
+                      onChange={(e) => setFormulario(prev => ({ ...prev, condicionTipo: e.target.value, diaSemana: '' }))}
                       className="text-blue-600"
                     />
                     <span className="text-sm">Por horario</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="condicion"
+                      value="diaSemana"
+                      checked={formulario.condicionTipo === 'diaSemana'}
+                      onChange={(e) => setFormulario(prev => ({ ...prev, condicionTipo: e.target.value, horaInicio: '', horaFin: '' }))}
+                      className="text-blue-600"
+                    />
+                    <span className="text-sm">Por día de semana</span>
+                  </label>
                 </div>
-                
+
+                {/* Campos para horario */}
                 {formulario.condicionTipo === 'horario' && (
                   <div className="grid grid-cols-2 gap-4 mt-3">
                     <div>
@@ -1319,6 +1508,26 @@ const AsignacionesServicio = ({
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* Selector de día de semana */}
+                {formulario.condicionTipo === 'diaSemana' && (
+                  <div className="mt-3">
+                    <label className="block text-xs text-gray-500 mb-1">Día de la semana</label>
+                    <select
+                      value={formulario.diaSemana}
+                      onChange={(e) => setFormulario(prev => ({ ...prev, diaSemana: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Seleccionar día...</option>
+                      {DIAS_SEMANA.map(dia => (
+                        <option key={dia.value} value={dia.value}>{dia.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Esta asignación solo aplicará para citas en el día seleccionado
+                    </p>
                   </div>
                 )}
               </div>
@@ -1703,7 +1912,7 @@ const AsignacionesServicio = ({
                                 />
                               </td>
                               <td className="px-3 py-2 font-medium">
-                                {item.cita.fecha ? new Date(item.cita.fecha).toLocaleDateString('es-MX') : '-'}
+                                {item.cita.fecha ? new Date(item.cita.fecha + 'T12:00:00').toLocaleDateString('es-MX') : '-'}
                               </td>
                               <td className="px-3 py-2">{item.cita.terapeuta}</td>
                               <td className="px-3 py-2">

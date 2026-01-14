@@ -50,7 +50,8 @@ export const useModals = () => {
     telefono: '',
     empresa: '',
     codigo: '',
-    preciosPersonalizados: {}
+    preciosPersonalizados: {},
+    activo: true
   });
 
   const [pagoForm, setPagoForm] = useState({
@@ -145,7 +146,8 @@ export const useModals = () => {
             telefono: item.telefono || '',
             empresa: item.empresa || '',
             codigo: item.codigo || '',
-            preciosPersonalizados: item.preciosPersonalizados || {}
+            preciosPersonalizados: item.preciosPersonalizados || {},
+            activo: item.activo !== false // Por defecto true si no está definido
           });
           break;
         case 'pago':
@@ -218,7 +220,8 @@ export const useModals = () => {
       telefono: '',
       empresa: '',
       codigo: '',
-      preciosPersonalizados: {}
+      preciosPersonalizados: {},
+      activo: true
     });
     
     setPagoForm({

@@ -141,6 +141,7 @@ const HorariosRecurrentes = ({
 
     const clienteNombre = clienteActual?.nombre || horario.clienteNombre;
     const terapeutaNombre = terapeutaActual?.nombre || horario.terapeutaNombre;
+    const diaSemanaHorario = horario.diaSemana; // 0-6 para Domingo-Sábado
 
     // Primero intentar búsqueda exacta por IDs
     let asignacion = asignaciones.find(a =>
@@ -163,6 +164,18 @@ const HorariosRecurrentes = ({
     });
 
     if (asignacionesCoincidentes.length > 0) {
+      // Si hay múltiples, intentar filtrar por día de semana primero
+      if (asignacionesCoincidentes.length > 1 && diaSemanaHorario !== undefined) {
+        const asigPorDia = asignacionesCoincidentes.find(asig =>
+          asig.condicion?.tipo === 'diaSemana' &&
+          asig.condicion.diaSemana === diaSemanaHorario
+        );
+        if (asigPorDia) {
+          console.log(`[HorariosRecurrentes] Asignación encontrada por nombre+día para ${clienteNombre} + ${terapeutaNombre}:`, asigPorDia);
+          return asigPorDia;
+        }
+      }
+
       // Si hay múltiples, intentar filtrar por horario
       if (asignacionesCoincidentes.length > 1 && horario.horaInicio) {
         const horaNum = parseInt(horario.horaInicio.split(':')[0]);
